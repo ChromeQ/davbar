@@ -2,8 +2,6 @@
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
 
-foo
-
 uint8_t imageBuffer[IMAGE_SIZE];
 
 void setup()
