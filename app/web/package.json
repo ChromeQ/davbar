@@ -1,0 +1,21 @@
+{
+  "name": "@chromeq/davbar-keg-display",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The upload and preview web-app for the DavBar Keg Display project",
+  "main": "src/index.js",
+  "type": "module",
+  "author": "ChromeQ",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 0",
+    "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:typescript",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

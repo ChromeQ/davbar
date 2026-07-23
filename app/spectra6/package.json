@@ -1,0 +1,33 @@
+{
+  "name": "@chromeq/davbar-spectra6",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Spectra6 display converter for the DavBar Keg Display project",
+  "main": "src/index.js",
+  "type": "module",
+  "author": "ChromeQ",
+  "scripts": {
+    "compile": "tsc --noEmit",
+    "convert": "tsx src/cli.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "test": "vitest",
+    "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
+  },
+  "dependencies": {
+    "sharp": "0.35.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@tsconfig/node26": "26.0.0",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:typescript",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "globals": "17.7.0",
+    "tsx": "4.23.1",
+    "typescript": "catalog:typescript",
+    "typescript-eslint": "catalog:",
+    "vitest": "4.1.10"
+  }
+}

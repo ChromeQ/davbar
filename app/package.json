@@ -1,0 +1,21 @@
+{
+  "name": "davbar-keg-display",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.16.0+sha512.b767e9a98fc87aec0f42daefcd0e84941c2cdb45d73c4e1e68860fb2bdfdbe032ab592105479e5e05c237f740c8a5ffdbbb52385797ddc2296745a1bbb883e8d",
+  "description": "The upload and preview web-app for the DavBar Keg Display project",
+  "main": "index.js",
+  "type": "module",
+  "author": "ChromeQ",
+  "scripts": {
+    "compile": "pnpm -r --parallel --aggregate-output run compile",
+    "lint": "pnpm -r --parallel --aggregate-output run lint",
+    "outdated": "pnpm -r --parallel --aggregate-output run outdated",
+    "test": "pnpm -r --parallel --aggregate-output run test"
+  },
+  "devDependencies": {
+    "jiti": "2.7.0",
+    "typescript": "catalog:typescript",
+    "@typescript/native": "catalog:typescript"
+  }
+}
