@@ -37,6 +37,9 @@
 #define EPD_4IN0E_WIDTH       400
 #define EPD_4IN0E_HEIGHT      600
 
+// Display orientation
+#define EPD_ROTATE_180 1
+
 /**********************************
 Color Index
 **********************************/

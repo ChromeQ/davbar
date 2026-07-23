@@ -275,15 +275,37 @@ parameter:
 void EPD_4IN0E_Display(const UBYTE *Image)
 {
     UWORD Width, Height;
-    Width = (EPD_4IN0E_WIDTH % 2 == 0)? (EPD_4IN0E_WIDTH / 2 ): (EPD_4IN0E_WIDTH / 2 + 1);
+
+    Width = EPD_4IN0E_WIDTH / 2;
     Height = EPD_4IN0E_HEIGHT;
 
     EPD_4IN0E_SendCommand(0x10);
-    for (UWORD j = 0; j < Height; j++) {
-        for (UWORD i = 0; i < Width; i++) {
-            EPD_4IN0E_SendData(Image[i + j * Width]);
+
+#if EPD_ROTATE_180
+    for (int j = Height - 1; j >= 0; j--)
+    {
+        for (int i = Width - 1; i >= 0; i--)
+        {
+            UBYTE data = Image[i + j * Width];
+
+            // swap the two pixels in the byte
+            data = (data >> 4) | (data << 4);
+
+            EPD_4IN0E_SendData(data);
         }
     }
+#else
+    for (UWORD j = 0; j < Height; j++)
+    {
+        for (UWORD i = 0; i < Width; i++)
+        {
+            EPD_4IN0E_SendData(
+                Image[i + j * Width]
+            );
+        }
+    }
+#endif
+
     EPD_4IN0E_TurnOnDisplay();
 }
 
