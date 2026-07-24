@@ -7,15 +7,32 @@
   "type": "module",
   "author": "ChromeQ",
   "scripts": {
+    "build": "tsc && vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "prepreview": "pnpm run build",
+    "preview": "vite preview",
     "test": "echo \"Error: no test specified\" && exit 0",
     "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
+  },
+  "dependencies": {
+    "@chromeq/davbar-spectra6": "workspace:*",
+    "lucide-react": "1.26.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
     "@types/node": "catalog:",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
     "@typescript/native": "catalog:typescript",
+    "@vitejs/plugin-react": "6.0.4",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
-    "typescript-eslint": "catalog:"
+    "globals": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vite": "8.1.5"
   }
 }

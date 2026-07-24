@@ -8,6 +8,7 @@
   "type": "module",
   "author": "ChromeQ",
   "scripts": {
+    "build": "pnpm -r --parallel --aggregate-output run build",
     "compile": "pnpm -r --parallel --aggregate-output run compile",
     "lint": "pnpm -r --parallel --aggregate-output run lint",
     "outdated": "pnpm -r --parallel --aggregate-output run outdated",

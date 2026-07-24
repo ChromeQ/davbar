@@ -24,7 +24,7 @@
     "@typescript/native": "catalog:typescript",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
-    "globals": "17.7.0",
+    "globals": "catalog:",
     "tsx": "4.23.1",
     "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:",
