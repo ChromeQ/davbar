@@ -7,5 +7,9 @@
       "path": "esp32",
     },
   ],
-  "settings": {},
+  "settings": {
+    "chat.tools.terminal.autoApprove": {
+      "printf": true,
+    },
+  },
 }
