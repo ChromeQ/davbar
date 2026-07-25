@@ -71,6 +71,7 @@ label:focus-within {
   margin: 0 0 5px;
   color: #ef2d56;
   font-size: 2.5rem;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
