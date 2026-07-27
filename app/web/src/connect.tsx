@@ -203,7 +203,7 @@ const Connect = () => {
     setConnectionResult(null);
 
     try {
-      const response = await fetch('/connect', {
+      let response = await fetch('/connect', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -213,6 +213,12 @@ const Connect = () => {
           password,
         }),
       });
+
+      while (response.status === 202) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        response = await fetch('/connect');
+      }
+
       const responseBody = await response.text();
 
       if (!responseBody) {

@@ -416,6 +416,11 @@ const App = () => {
     setForgetDialogOpen(true);
   };
 
+  const returnToSettings = () => {
+    setForgetDialogOpen(false);
+    setSettingsOpen(true);
+  };
+
   const forgetWifi = async () => {
     setForgetting(true);
     setForgetResult(null);
@@ -825,7 +830,7 @@ const App = () => {
               {forgetting
                 ? 'Forgetting saved WiFi'
                 : forgetResult?.success
-                  ? 'Saved WiFi forgotten'
+                  ? 'WiFi forgotten'
                   : forgetResult
                     ? 'Unable to forget WiFi'
                     : 'Forget saved WiFi?'}
@@ -852,7 +857,7 @@ const App = () => {
                       className="modal-button"
                       type="button"
                       autoFocus
-                      onClick={() => setForgetDialogOpen(false)}
+                      onClick={returnToSettings}
                     >
                       Cancel
                     </button>

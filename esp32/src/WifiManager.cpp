@@ -14,6 +14,19 @@ static String ssid;
 static String password;
 static unsigned long restartAt = 0;
 
+enum class ConnectionState
+{
+    Idle,
+    Connecting,
+    Success,
+    Failure
+};
+
+static ConnectionState connectionState = ConnectionState::Idle;
+static String pendingSsid;
+static String pendingPassword;
+static unsigned long connectionStartedAt = 0;
+
 static bool loadCredentials()
 {
     if (!LittleFS.exists("/wifi.json"))
@@ -67,43 +80,6 @@ static void saveCredentials(
     serializeJson(doc, file);
 
     file.close();
-}
-
-static bool testWifiConnection(
-    const String& ssid,
-    const String& password
-)
-{
-    Serial.printf("Testing WiFi '%s'\n", ssid.c_str());
-
-    WiFi.mode(WIFI_AP_STA);
-
-    WiFi.begin(
-        ssid.c_str(),
-        password.c_str()
-    );
-
-    unsigned long start = millis();
-
-    while (millis() - start < 10000)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            Serial.println("WiFi test successful");
-
-            WiFi.disconnect(true);
-
-            return true;
-        }
-
-        delay(250);
-    }
-
-    Serial.println("WiFi test failed");
-
-    WiFi.disconnect(true);
-
-    return false;
 }
 
 static void handleRoot(AsyncWebServerRequest* request)
@@ -197,42 +173,91 @@ static void handleScan(AsyncWebServerRequest* request)
 
 static void handleConnect(AsyncWebServerRequest* request)
 {
-    String newSsid =
-        request->arg("ssid");
-
-    String newPassword =
-        request->arg("password");
-
-    if (!testWifiConnection(newSsid, newPassword))
+    if (connectionState == ConnectionState::Connecting)
     {
         request->send(
-            400,
+            409,
             "application/json",
-            R"({
-                "success": false,
-                "message": "Unable to connect to WiFi"
-            })"
+            R"({"success":false,"message":"A WiFi connection is already being tested"})"
         );
 
         return;
     }
 
-    saveCredentials(
-        newSsid,
-        newPassword
+    pendingSsid = request->arg("ssid");
+    pendingPassword = request->arg("password");
+
+    if (pendingSsid.isEmpty())
+    {
+        request->send(
+            400,
+            "application/json",
+            R"({"success":false,"message":"Select a WiFi network"})"
+        );
+
+        return;
+    }
+
+    Serial.printf("Testing WiFi '%s'\n", pendingSsid.c_str());
+
+    WiFi.mode(WIFI_AP_STA);
+    WiFi.begin(
+        pendingSsid.c_str(),
+        pendingPassword.c_str()
     );
+
+    connectionStartedAt = millis();
+    connectionState = ConnectionState::Connecting;
 
     request->send(
-        200,
+        202,
         "application/json",
-        R"({
-            "success": true,
-            "message": "Saved. Rebooting..."
-        })"
+        R"({"connecting":true})"
     );
+}
 
-    Serial.println("Credentials saved. Rebooting...");
-    restartAt = millis() + 1000;
+static void handleConnectStatus(AsyncWebServerRequest* request)
+{
+    if (connectionState == ConnectionState::Connecting)
+    {
+        request->send(
+            202,
+            "application/json",
+            R"({"connecting":true})"
+        );
+
+        return;
+    }
+
+    if (connectionState == ConnectionState::Success)
+    {
+        request->send(
+            200,
+            "application/json",
+            R"({"success":true,"message":"Saved. Rebooting..."})"
+        );
+
+        restartAt = millis() + 1000;
+        return;
+    }
+
+    if (connectionState == ConnectionState::Failure)
+    {
+        connectionState = ConnectionState::Idle;
+        request->send(
+            400,
+            "application/json",
+            R"({"success":false,"message":"Unable to connect. Check the password and try again."})"
+        );
+
+        return;
+    }
+
+    request->send(
+        409,
+        "application/json",
+        R"({"success":false,"message":"No WiFi connection is being tested"})"
+    );
 }
 
 static void handleForgetWifi(AsyncWebServerRequest* request)
@@ -309,6 +334,28 @@ void processWifiManager()
     if (restartAt != 0 && static_cast<long>(millis() - restartAt) >= 0)
     {
         ESP.restart();
+    }
+
+    if (connectionState == ConnectionState::Connecting)
+    {
+        wl_status_t status = WiFi.status();
+
+        if (status == WL_CONNECTED)
+        {
+            Serial.println("WiFi test successful");
+            saveCredentials(pendingSsid, pendingPassword);
+            connectionState = ConnectionState::Success;
+        }
+        else if (
+            status == WL_CONNECT_FAILED ||
+            status == WL_NO_SSID_AVAIL ||
+            millis() - connectionStartedAt >= 10000
+        )
+        {
+            Serial.println("WiFi test failed");
+            WiFi.disconnect(false, true);
+            connectionState = ConnectionState::Failure;
+        }
     }
 
     wifi_mode_t mode = WiFi.getMode();
@@ -390,6 +437,12 @@ void startWebServer()
         "/connect",
         HTTP_POST,
         handleConnect
+    );
+
+    server.on(
+        "/connect",
+        HTTP_GET,
+        handleConnectStatus
     );
 
     server.on(
