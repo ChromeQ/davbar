@@ -70,7 +70,9 @@ static void saveCredentials(
 
 static void handleRoot(AsyncWebServerRequest* request)
 {
-    if (WiFi.getMode() == WIFI_AP)
+    wifi_mode_t mode = WiFi.getMode();
+
+    if (mode == WIFI_AP || mode == WIFI_AP_STA)
     {
         request->send(
             LittleFS,
@@ -86,6 +88,38 @@ static void handleRoot(AsyncWebServerRequest* request)
             "text/html"
         );
     }
+}
+
+static void handleScan(AsyncWebServerRequest* request)
+{
+    Serial.println("Scanning WiFi networks...");
+
+    int count = WiFi.scanNetworks();
+
+    JsonDocument doc;
+
+    JsonArray networks = doc["networks"].to<JsonArray>();
+
+    for (int i = 0; i < count; i++)
+    {
+        JsonObject network = networks.add<JsonObject>();
+
+        network["ssid"] = WiFi.SSID(i);
+        network["rssi"] = WiFi.RSSI(i);
+        network["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    }
+
+    String response;
+
+    serializeJson(doc, response);
+
+    WiFi.scanDelete();
+
+    request->send(
+        200,
+        "application/json",
+        response
+    );
 }
 
 static void handleConnect(AsyncWebServerRequest* request)
@@ -132,7 +166,7 @@ static void startAccessPoint()
 {
     Serial.println("Starting setup AP");
 
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
 
     WiFi.softAP(
         "DavBar Tap 1",
@@ -153,7 +187,9 @@ static void startAccessPoint()
 
 void processDns()
 {
-    if (WiFi.getMode() == WIFI_AP)
+    wifi_mode_t mode = WiFi.getMode();
+
+    if (mode == WIFI_AP || mode == WIFI_AP_STA)
     {
         dnsServer.processNextRequest();
     }
@@ -174,7 +210,8 @@ bool connectWifi()
     dnsServer.stop();
 
     Serial.print("Connecting to ");
-    Serial.println(ssid);
+    Serial.print(ssid);
+    Serial.println("...");
 
     WiFi.begin(
         ssid.c_str(),
@@ -217,6 +254,12 @@ void startWebServer()
         "/",
         HTTP_GET,
         handleRoot
+    );
+
+    server.on(
+        "/scan",
+        HTTP_GET,
+        handleScan
     );
 
     server.on(
