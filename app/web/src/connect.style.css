@@ -1,3 +1,7 @@
+body {
+  overflow-y: hidden;
+}
+
 .connect-shell {
   width: min(100% - 40px, 520px);
   margin: 0 auto;
@@ -117,8 +121,6 @@
   max-height: 230px;
   padding: 4px;
   overflow-y: auto;
-  overscroll-behavior-y: contain;
-  touch-action: pan-y;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: #fff;
