@@ -69,6 +69,43 @@ static void saveCredentials(
     file.close();
 }
 
+static bool testWifiConnection(
+    const String& ssid,
+    const String& password
+)
+{
+    Serial.printf("Testing WiFi '%s'\n", ssid.c_str());
+
+    WiFi.mode(WIFI_AP_STA);
+
+    WiFi.begin(
+        ssid.c_str(),
+        password.c_str()
+    );
+
+    unsigned long start = millis();
+
+    while (millis() - start < 10000)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Serial.println("WiFi test successful");
+
+            WiFi.disconnect(true);
+
+            return true;
+        }
+
+        delay(250);
+    }
+
+    Serial.println("WiFi test failed");
+
+    WiFi.disconnect(true);
+
+    return false;
+}
+
 static void handleRoot(AsyncWebServerRequest* request)
 {
     wifi_mode_t mode = WiFi.getMode();
@@ -219,43 +256,6 @@ void processWifiManager()
     {
         dnsServer.processNextRequest();
     }
-}
-
-static bool testWifiConnection(
-    const String& ssid,
-    const String& password
-)
-{
-    Serial.printf("Testing WiFi '%s'\n", ssid.c_str());
-
-    WiFi.mode(WIFI_AP_STA);
-
-    WiFi.begin(
-        ssid.c_str(),
-        password.c_str()
-    );
-
-    unsigned long start = millis();
-
-    while (millis() - start < 10000)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            Serial.println("WiFi test successful");
-
-            WiFi.disconnect(true);
-
-            return true;
-        }
-
-        delay(250);
-    }
-
-    Serial.println("WiFi test failed");
-
-    WiFi.disconnect(true);
-
-    return false;
 }
 
 bool connectWifi()
