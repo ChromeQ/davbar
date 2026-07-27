@@ -235,6 +235,32 @@ static void handleConnect(AsyncWebServerRequest* request)
     restartAt = millis() + 1000;
 }
 
+static void handleForgetWifi(AsyncWebServerRequest* request)
+{
+    if (LittleFS.exists("/wifi.json") && !LittleFS.remove("/wifi.json"))
+    {
+        request->send(
+            500,
+            "application/json",
+            R"({"success":false,"message":"Unable to remove saved WiFi"})"
+        );
+
+        return;
+    }
+
+    ssid = "";
+    password = "";
+
+    request->send(
+        200,
+        "application/json",
+        R"({"success":true,"message":"Saved WiFi forgotten. Rebooting..."})"
+    );
+
+    Serial.println("WiFi credentials removed. Rebooting...");
+    restartAt = millis() + 1000;
+}
+
 static void handleStatus(AsyncWebServerRequest* request)
 {
     JsonDocument doc;
@@ -364,6 +390,12 @@ void startWebServer()
         "/connect",
         HTTP_POST,
         handleConnect
+    );
+
+    server.on(
+        "/wifi",
+        HTTP_DELETE,
+        handleForgetWifi
     );
 
     server.on(

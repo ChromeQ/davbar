@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CircleAlert, LoaderCircle, Trash2 } from 'lucide-react';
+import { CircleAlert, LoaderCircle, Settings, Trash2, WifiOff } from 'lucide-react';
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
 import './common.style.css';
@@ -24,6 +24,18 @@ type SourceFrame = {
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 type BackgroundMode = 'solid' | 'linear' | 'radial';
 type SourceMode = 'image' | 'text';
+type ApiResult = {
+  success: boolean;
+  message: string;
+};
+
+const isApiResult = (value: unknown): value is ApiResult =>
+  typeof value === 'object' &&
+  value !== null &&
+  'success' in value &&
+  typeof value.success === 'boolean' &&
+  'message' in value &&
+  typeof value.message === 'string';
 
 function getCanvasContext(canvas: HTMLCanvasElement) {
   const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -56,9 +68,14 @@ const App = () => {
   const [uploadState, setUploadState] = useState<UploadState>('idle');
   const [pendingReset, setPendingReset] = useState<SourceMode | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
+  const [forgetting, setForgetting] = useState(false);
+  const [forgetResult, setForgetResult] = useState<ApiResult | null>(null);
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const isUploading = uploadState === 'uploading';
-  const modalOpen = pendingReset !== null || uploadError !== null || isUploading;
+  const appModalOpen = pendingReset !== null || uploadError !== null || isUploading;
+  const modalOpen = appModalOpen || settingsOpen || forgetDialogOpen;
 
   useEffect(() => {
     if (!modalOpen) {
@@ -67,9 +84,11 @@ const App = () => {
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isUploading) {
+      if (event.key === 'Escape' && !isUploading && !forgetting) {
         setPendingReset(null);
         setUploadError(null);
+        setSettingsOpen(false);
+        setForgetDialogOpen(false);
       }
     };
 
@@ -80,7 +99,7 @@ const App = () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isUploading, modalOpen]);
+  }, [forgetting, isUploading, modalOpen]);
 
   useEffect(() => {
     if (mode !== 'text') {
@@ -391,13 +410,66 @@ const App = () => {
     }
   };
 
+  const openForgetDialog = () => {
+    setSettingsOpen(false);
+    setForgetResult(null);
+    setForgetDialogOpen(true);
+  };
+
+  const forgetWifi = async () => {
+    setForgetting(true);
+    setForgetResult(null);
+
+    try {
+      const response = await fetch('/wifi', { method: 'DELETE' });
+      const responseBody = await response.text();
+
+      if (!responseBody) {
+        throw new Error('The device closed the connection without returning a response.');
+      }
+
+      let result: unknown;
+
+      try {
+        result = JSON.parse(responseBody);
+      } catch {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      if (!isApiResult(result)) {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      setForgetResult(result);
+    } catch (forgetError) {
+      setForgetResult({
+        success: false,
+        message:
+          forgetError instanceof Error ? forgetError.message : 'Unable to forget the saved WiFi.',
+      });
+    } finally {
+      setForgetting(false);
+    }
+  };
+
   return (
     <main className="app-shell">
       <header className="app-header">
-        <div>
-          <p className="eyebrow">DavBar</p>
-          <h1>Keg Display Studio</h1>
+        <p className="eyebrow">DavBar</p>
+        <div className="settings-menu">
+          <button
+            className="settings-button"
+            type="button"
+            aria-label="Device settings"
+            aria-expanded={settingsOpen}
+            aria-haspopup="dialog"
+            aria-controls="settings-modal"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings size={20} aria-hidden="true" />
+          </button>
         </div>
+        <h1>Keg Display Studio</h1>
         <div className="display-spec">
           <span className="status-dot" />
           400 × 600 Spectra 6
@@ -603,7 +675,7 @@ const App = () => {
         </article>
       </section>
 
-      {modalOpen && (
+      {appModalOpen && (
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
@@ -675,6 +747,121 @@ const App = () => {
                       onClick={() => pendingReset && resetMode(pendingReset)}
                     >
                       Reset {pendingReset}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setSettingsOpen(false);
+            }
+          }}
+        >
+          <div
+            id="settings-modal"
+            className="app-modal settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-modal-title"
+          >
+            <div className="modal-icon settings-modal-icon" aria-hidden="true">
+              <Settings size={22} strokeWidth={1.8} />
+            </div>
+            <h2 id="settings-modal-title">Device settings</h2>
+            <div className="settings-list">
+              <button type="button" autoFocus onClick={openForgetDialog}>
+                <WifiOff size={19} aria-hidden="true" />
+                <span>
+                  <strong>Forget saved WiFi</strong>
+                  <small>Remove the saved network and return to setup mode</small>
+                </span>
+              </button>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-button" type="button" onClick={() => setSettingsOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {forgetDialogOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !forgetting) {
+              setForgetDialogOpen(false);
+            }
+          }}
+        >
+          <div
+            className="app-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="forget-modal-title"
+            aria-describedby="forget-modal-description"
+            aria-busy={forgetting}
+          >
+            <div
+              className={`modal-icon forget-modal-icon ${forgetResult?.success ? 'success-modal-icon' : ''}`}
+              aria-hidden="true"
+            >
+              {forgetting ? (
+                <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : (
+                <WifiOff size={22} strokeWidth={1.8} />
+              )}
+            </div>
+            <h2 id="forget-modal-title">
+              {forgetting
+                ? 'Forgetting saved WiFi'
+                : forgetResult?.success
+                  ? 'Saved WiFi forgotten'
+                  : forgetResult
+                    ? 'Unable to forget WiFi'
+                    : 'Forget saved WiFi?'}
+            </h2>
+            <p id="forget-modal-description">
+              {forgetResult?.message ??
+                (forgetting
+                  ? 'Removing the saved network from this device.'
+                  : 'The device will remove its saved network and reboot into setup mode.')}
+            </p>
+            {!forgetting && (
+              <div className="modal-actions">
+                {forgetResult ? (
+                  <button
+                    className="modal-button primary-modal-button"
+                    type="button"
+                    onClick={() => setForgetDialogOpen(false)}
+                  >
+                    Close
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="modal-button"
+                      type="button"
+                      autoFocus
+                      onClick={() => setForgetDialogOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="modal-button destructive-button"
+                      type="button"
+                      onClick={() => void forgetWifi()}
+                    >
+                      Forget WiFi
                     </button>
                   </>
                 )}

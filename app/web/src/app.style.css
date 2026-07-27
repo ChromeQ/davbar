@@ -5,17 +5,46 @@
 }
 
 .app-header {
-  display: flex;
-  align-items: end;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 24px;
   min-height: 86px;
   padding: 0 2px 20px;
   border-bottom: 1px solid #b9b6ac;
 }
 
+.app-header h1,
+.app-header .eyebrow {
+  margin: 0;
+}
+
+.settings-menu {
+  justify-self: end;
+}
+
+.settings-button {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  background: var(--paper);
+}
+
+.settings-button:hover,
+.settings-button[aria-expanded='true'] {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
 .display-spec {
   display: flex;
   align-items: center;
+  justify-self: end;
   gap: 9px;
   color: #58574f;
   font-size: 0.78rem;
@@ -490,6 +519,50 @@ h2 {
   line-height: 1.55;
 }
 
+.settings-modal-icon {
+  color: var(--muted);
+  border-color: var(--line);
+  background: transparent;
+}
+
+.settings-list {
+  margin: 22px 0 24px;
+}
+
+.settings-list button {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.settings-list button:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(239, 45, 86, 0.06);
+}
+
+.settings-list span {
+  display: grid;
+  gap: 3px;
+}
+
+.settings-list strong {
+  font-size: 0.82rem;
+}
+
+.settings-list small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -531,6 +604,18 @@ h2 {
   color: var(--accent);
   border-color: rgba(239, 45, 86, 0.25);
   background: rgba(239, 45, 86, 0.08);
+}
+
+.forget-modal-icon {
+  color: var(--accent);
+  border-color: rgba(239, 45, 86, 0.25);
+  background: rgba(239, 45, 86, 0.08);
+}
+
+.success-modal-icon {
+  color: var(--green);
+  border-color: rgba(35, 116, 85, 0.28);
+  background: rgba(35, 116, 85, 0.08);
 }
 
 .upload-spinner {
@@ -577,9 +662,7 @@ h2 {
 
 @media (max-width: 540px) {
   .app-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
+    gap: 8px 14px;
   }
 
   .panel-heading {
