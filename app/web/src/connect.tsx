@@ -11,7 +11,7 @@ const Connect = () => (
       <h1>Configure WiFi</h1>
     </header>
 
-    <form className="connect-form" action="/save" method="post">
+    <form className="connect-form" action="/connect" method="post">
       <label className="connect-field">
         <span>SSID</span>
         <input name="ssid" type="text" required autoComplete="username" />
