@@ -44,6 +44,26 @@ const isConnectionResult = (value: unknown): value is ConnectionResult =>
   'message' in value &&
   typeof value.message === 'string';
 
+const readJson = async (response: Response): Promise<unknown> => {
+  const contentType = response.headers.get('content-type');
+
+  if (!contentType?.includes('application/json')) {
+    throw new Error('The device returned an unexpected response.');
+  }
+
+  const body = await response.text();
+
+  if (!body) {
+    throw new Error('The device returned an empty response.');
+  }
+
+  try {
+    return JSON.parse(body);
+  } catch {
+    throw new Error('The device returned invalid JSON.');
+  }
+};
+
 const Connect = () => {
   const initialScanStarted = useRef(false);
   const networkDropdownRef = useRef<HTMLDivElement>(null);
@@ -68,13 +88,26 @@ const Connect = () => {
     setConnectionResult(null);
 
     try {
-      const response = await fetch('/scan');
+      let response = await fetch('/scan');
 
-      if (!response.ok) {
-        throw new Error(`Scan failed with status ${response.status}.`);
+      while (response.status === 202) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        response = await fetch('/scan');
       }
 
-      const data: unknown = await response.json();
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error('WiFi scan API is unavailable on this host.');
+        }
+
+        throw new Error(`WiFi scan failed with status ${response.status}.`);
+      }
+
+      if (!response.headers.get('content-type')?.includes('application/json')) {
+        throw new Error('WiFi scan API is unavailable on this host.');
+      }
+
+      const data = await readJson(response);
 
       if (
         typeof data !== 'object' ||

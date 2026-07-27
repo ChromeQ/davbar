@@ -130,9 +130,44 @@ static void handleRoot(AsyncWebServerRequest* request)
 
 static void handleScan(AsyncWebServerRequest* request)
 {
-    Serial.println("Scanning WiFi networks...");
+    int count = WiFi.scanComplete();
 
-    int count = WiFi.scanNetworks();
+    if (count == WIFI_SCAN_RUNNING)
+    {
+        request->send(
+            202,
+            "application/json",
+            R"({"scanning":true})"
+        );
+
+        return;
+    }
+
+    if (count == WIFI_SCAN_FAILED)
+    {
+        Serial.println("Starting WiFi network scan...");
+
+        if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED)
+        {
+            request->send(
+                500,
+                "application/json",
+                R"({"error":"Unable to start WiFi scan"})"
+            );
+
+            return;
+        }
+
+        request->send(
+            202,
+            "application/json",
+            R"({"scanning":true})"
+        );
+
+        return;
+    }
+
+    Serial.printf("WiFi scan found %d networks\n", count);
 
     JsonDocument doc;
 
