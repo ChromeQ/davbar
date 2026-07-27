@@ -8,6 +8,8 @@
   "author": "ChromeQ",
   "scripts": {
     "build": "tsc && vite build",
+    "preupload:fs": "pnpm run build",
+    "upload:fs": "rsync -a --delete --exclude='.gitignore' dist/ ../../esp32/data/ && pio run -d ../../esp32 -t uploadfs",
     "dev": "vite",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",

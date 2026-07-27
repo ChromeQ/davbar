@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
+import { createRoot } from 'react-dom/client';
 import { CircleAlert, LoaderCircle, Trash2 } from 'lucide-react';
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import './common.style.css';
+import './app.style.css';
 
 const DISPLAY_WIDTH = 400;
 const DISPLAY_HEIGHT = 600;
@@ -32,7 +35,7 @@ function getCanvasContext(canvas: HTMLCanvasElement) {
   return context;
 }
 
-export const App = () => {
+const App = () => {
   const sourceCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -683,3 +686,15 @@ export const App = () => {
     </main>
   );
 };
+
+const root = document.getElementById('root');
+
+if (!root) {
+  throw new Error('Root element not found');
+}
+
+createRoot(root).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
