@@ -56,5 +56,5 @@ void setup()
 
 void loop()
 {
-    processDns();
+    processWifiManager();
 }

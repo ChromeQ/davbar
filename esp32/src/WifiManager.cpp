@@ -12,6 +12,7 @@ static DNSServer dnsServer;
 
 static String ssid;
 static String password;
+static unsigned long restartAt = 0;
 
 static bool loadCredentials()
 {
@@ -124,22 +125,42 @@ static void handleScan(AsyncWebServerRequest* request)
 
 static void handleConnect(AsyncWebServerRequest* request)
 {
+    String newSsid =
+        request->arg("ssid");
+
+    String newPassword =
+        request->arg("password");
+
+    if (!testWifiConnection(newSsid, newPassword))
+    {
+        request->send(
+            400,
+            "application/json",
+            R"({
+                "success": false,
+                "message": "Unable to connect to WiFi"
+            })"
+        );
+
+        return;
+    }
+
     saveCredentials(
-        request->arg("ssid"),
-        request->arg("password")
+        newSsid,
+        newPassword
     );
 
     request->send(
         200,
-        "text/plain",
-        "Saved. Rebooting..."
+        "application/json",
+        R"({
+            "success": true,
+            "message": "Saved. Rebooting..."
+        })"
     );
 
     Serial.println("Credentials saved. Rebooting...");
-    
-    delay(1000);
-
-    ESP.restart();
+    restartAt = millis() + 1000;
 }
 
 static void handleStatus(AsyncWebServerRequest* request)
@@ -185,14 +206,56 @@ static void startAccessPoint()
     startWebServer();
 }
 
-void processDns()
+void processWifiManager()
 {
+    if (restartAt != 0 && static_cast<long>(millis() - restartAt) >= 0)
+    {
+        ESP.restart();
+    }
+
     wifi_mode_t mode = WiFi.getMode();
 
     if (mode == WIFI_AP || mode == WIFI_AP_STA)
     {
         dnsServer.processNextRequest();
     }
+}
+
+static bool testWifiConnection(
+    const String& ssid,
+    const String& password
+)
+{
+    Serial.printf("Testing WiFi '%s'\n", ssid.c_str());
+
+    WiFi.mode(WIFI_AP_STA);
+
+    WiFi.begin(
+        ssid.c_str(),
+        password.c_str()
+    );
+
+    unsigned long start = millis();
+
+    while (millis() - start < 10000)
+    {
+        if (WiFi.status() == WL_CONNECTED)
+        {
+            Serial.println("WiFi test successful");
+
+            WiFi.disconnect(true);
+
+            return true;
+        }
+
+        delay(250);
+    }
+
+    Serial.println("WiFi test failed");
+
+    WiFi.disconnect(true);
+
+    return false;
 }
 
 bool connectWifi()

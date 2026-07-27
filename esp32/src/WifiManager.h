@@ -2,7 +2,7 @@
 #define WIFI_MANAGER_H
 
 bool connectWifi();
-void processDns();
+void processWifiManager();
 void startWebServer();
 
 #endif
