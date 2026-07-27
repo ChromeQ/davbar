@@ -1,2 +1,6 @@
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+
 # PlatformIO
 .pio
