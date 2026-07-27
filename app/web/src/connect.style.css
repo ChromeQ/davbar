@@ -117,6 +117,8 @@
   max-height: 230px;
   padding: 4px;
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: #fff;
