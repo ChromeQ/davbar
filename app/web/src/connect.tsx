@@ -26,6 +26,29 @@ type ConnectionResult = {
   message: string;
 };
 
+const DEVELOPMENT_NETWORKS: Network[] = [
+  { ssid: 'DavBar Workshop', rssi: -31, secure: true },
+  { ssid: 'The Crown Guest WiFi', rssi: -38, secure: false },
+  { ssid: 'Cellar Access Point', rssi: -42, secure: true },
+  { ssid: 'BREWERY_5G', rssi: -45, secure: true },
+  { ssid: 'Public WiFi', rssi: -49, secure: false },
+  { ssid: 'The Long Network Name Used To Test Truncation', rssi: -52, secure: true },
+  { ssid: 'Kitchen', rssi: -55, secure: true },
+  { ssid: 'Office', rssi: -58, secure: true },
+  { ssid: 'Garden Room', rssi: -61, secure: false },
+  { ssid: 'Warehouse', rssi: -64, secure: true },
+  { ssid: 'Neighbour 01', rssi: -67, secure: true },
+  { ssid: 'Neighbour 02', rssi: -70, secure: true },
+  { ssid: 'Neighbour 03', rssi: -72, secure: false },
+  { ssid: 'Neighbour 04', rssi: -74, secure: true },
+  { ssid: 'Neighbour 05', rssi: -76, secure: true },
+  { ssid: 'Neighbour 06', rssi: -78, secure: true },
+  { ssid: 'Neighbour 07', rssi: -80, secure: false },
+  { ssid: 'Neighbour 08', rssi: -82, secure: true },
+  { ssid: 'Neighbour 09', rssi: -85, secure: true },
+  { ssid: 'Very Weak Network', rssi: -89, secure: true },
+];
+
 const isNetwork = (value: unknown): value is Network =>
   typeof value === 'object' &&
   value !== null &&
@@ -86,6 +109,12 @@ const Connect = () => {
     setPassword('');
     setPasswordVisible(false);
     setConnectionResult(null);
+
+    if (import.meta.env.DEV) {
+      setNetworks(DEVELOPMENT_NETWORKS);
+      setScanning(false);
+      return;
+    }
 
     try {
       let response = await fetch('/scan');
@@ -347,7 +376,6 @@ const Connect = () => {
                       role="option"
                       aria-selected={network.ssid === selectedSsid}
                       onMouseEnter={() => setActiveNetworkIndex(index)}
-                      onMouseDown={(event) => event.preventDefault()}
                       onClick={() => selectNetwork(network.ssid)}
                     >
                       <SecurityIcon size={16} strokeWidth={1.8} aria-hidden="true" />
