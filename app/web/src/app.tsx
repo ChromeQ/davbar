@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   CircleAlert,
   LoaderCircle,
+  Power,
   RefreshCw,
   Settings,
   Trash2,
@@ -80,6 +81,9 @@ const App = () => {
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<ApiResult | null>(null);
+  const [rebootDialogOpen, setRebootDialogOpen] = useState(false);
+  const [rebooting, setRebooting] = useState(false);
+  const [rebootResult, setRebootResult] = useState<ApiResult | null>(null);
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
   const [forgetting, setForgetting] = useState(false);
   const [forgetResult, setForgetResult] = useState<ApiResult | null>(null);
@@ -88,7 +92,8 @@ const App = () => {
   const uploadSucceeded = uploadState === 'success';
   const appModalOpen =
     pendingReset !== null || uploadError !== null || isUploading || uploadSucceeded;
-  const modalOpen = appModalOpen || settingsOpen || refreshDialogOpen || forgetDialogOpen;
+  const modalOpen =
+    appModalOpen || settingsOpen || refreshDialogOpen || rebootDialogOpen || forgetDialogOpen;
 
   useEffect(() => {
     if (!modalOpen) {
@@ -97,11 +102,12 @@ const App = () => {
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isUploading && !refreshing && !forgetting) {
+      if (event.key === 'Escape' && !isUploading && !refreshing && !rebooting && !forgetting) {
         setPendingReset(null);
         setUploadError(null);
         setSettingsOpen(false);
         setRefreshDialogOpen(false);
+        setRebootDialogOpen(false);
         setForgetDialogOpen(false);
       }
     };
@@ -113,7 +119,7 @@ const App = () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [forgetting, isUploading, modalOpen, refreshing]);
+  }, [forgetting, isUploading, modalOpen, rebooting, refreshing]);
 
   useEffect(() => {
     if (mode !== 'text') {
@@ -449,8 +455,15 @@ const App = () => {
     setRefreshDialogOpen(true);
   };
 
+  const openRebootDialog = () => {
+    setSettingsOpen(false);
+    setRebootResult(null);
+    setRebootDialogOpen(true);
+  };
+
   const returnToSettings = () => {
     setRefreshDialogOpen(false);
+    setRebootDialogOpen(false);
     setForgetDialogOpen(false);
     setSettingsOpen(true);
   };
@@ -488,6 +501,42 @@ const App = () => {
       });
     } finally {
       setRefreshing(false);
+    }
+  };
+
+  const rebootDevice = async () => {
+    setRebooting(true);
+    setRebootResult(null);
+
+    try {
+      const response = await fetch('/reboot', { method: 'POST' });
+      const responseBody = await response.text();
+
+      if (!responseBody) {
+        throw new Error('The device closed the connection without returning a response.');
+      }
+
+      let result: unknown;
+
+      try {
+        result = JSON.parse(responseBody);
+      } catch {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      if (!isApiResult(result)) {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      setRebootResult(result);
+    } catch (rebootError) {
+      setRebootResult({
+        success: false,
+        message:
+          rebootError instanceof Error ? rebootError.message : 'Unable to reboot the device.',
+      });
+    } finally {
+      setRebooting(false);
     }
   };
 
@@ -882,6 +931,13 @@ const App = () => {
                   <small>Refresh the display using the currently saved image</small>
                 </span>
               </button>
+              <button type="button" onClick={openRebootDialog}>
+                <Power size={19} aria-hidden="true" />
+                <span>
+                  <strong>Reboot device</strong>
+                  <small>Restart the device without changing its settings</small>
+                </span>
+              </button>
               <button type="button" onClick={openForgetDialog}>
                 <WifiOff size={19} aria-hidden="true" />
                 <span>
@@ -972,6 +1028,88 @@ const App = () => {
                       onClick={() => void refreshDisplay()}
                     >
                       Refresh display
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {rebootDialogOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !rebooting) {
+              setRebootDialogOpen(false);
+            }
+          }}
+        >
+          <div
+            className="app-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reboot-modal-title"
+            aria-describedby="reboot-modal-description"
+            aria-busy={rebooting}
+          >
+            <div
+              className={`modal-icon ${rebootResult?.success ? 'success-modal-icon' : rebootResult ? 'error-modal-icon' : 'settings-modal-icon'}`}
+              aria-hidden="true"
+            >
+              {rebooting ? (
+                <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : rebootResult?.success ? (
+                <CheckCircle2 size={22} strokeWidth={1.8} />
+              ) : rebootResult ? (
+                <CircleAlert size={22} strokeWidth={1.8} />
+              ) : (
+                <Power size={22} strokeWidth={1.8} />
+              )}
+            </div>
+            <h2 id="reboot-modal-title">
+              {rebooting
+                ? 'Requesting device reboot'
+                : rebootResult?.success
+                  ? 'Device reboot requested'
+                  : rebootResult
+                    ? 'Unable to reboot device'
+                    : 'Reboot device?'}
+            </h2>
+            <p id="reboot-modal-description">
+              {rebootResult?.message ??
+                (rebooting
+                  ? 'Asking the device to restart.'
+                  : 'The display service will be briefly unavailable while the device restarts.')}
+            </p>
+            {!rebooting && (
+              <div className="modal-actions">
+                {rebootResult ? (
+                  <button
+                    className="modal-button primary-modal-button"
+                    type="button"
+                    autoFocus
+                    onClick={() => setRebootDialogOpen(false)}
+                  >
+                    Close
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="modal-button"
+                      type="button"
+                      autoFocus
+                      onClick={returnToSettings}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="modal-button primary-modal-button"
+                      type="button"
+                      onClick={() => void rebootDevice()}
+                    >
+                      Reboot device
                     </button>
                   </>
                 )}

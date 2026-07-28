@@ -302,6 +302,18 @@ static void handleRefreshDisplay(AsyncWebServerRequest* request)
     );
 }
 
+static void handleReboot(AsyncWebServerRequest* request)
+{
+    request->send(
+        200,
+        "application/json",
+        R"({"success":true,"message":"Device reboot requested."})"
+    );
+
+    Serial.println("Device reboot requested");
+    restartAt = millis() + 1000;
+}
+
 static void handleImageUpload(
     AsyncWebServerRequest* request,
     uint8_t* data,
@@ -537,6 +549,12 @@ void startWebServer()
         "/refresh",
         HTTP_POST,
         handleRefreshDisplay
+    );
+
+    server.on(
+        "/reboot",
+        HTTP_POST,
+        handleReboot
     );
 
     server.onNotFound(
