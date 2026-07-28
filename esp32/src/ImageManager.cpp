@@ -1,6 +1,7 @@
 #include "ImageManager.h"
 
 #include <LittleFS.h>
+#include <esp_crc.h>
 #include <new>
 
 #include "DEV_Config.h"
@@ -11,6 +12,11 @@ static bool imageUpdatePending = false;
 
 static uint8_t imageBuffer[IMAGE_SIZE];
 
+static const char* displayedImageCrcPath = "/image.displayed.crc";
+static const char* pendingDisplayedImageCrcPath = "/image.displayed.crc.tmp";
+
+static bool displayedImageCrcMatches(uint32_t imageCrc);
+static bool saveDisplayedImageCrc(uint32_t imageCrc);
 static void updateDisplay();
 
 struct ImageUploadState
@@ -196,6 +202,60 @@ void processImageManager()
     updateDisplay();
 }
 
+static bool displayedImageCrcMatches(uint32_t imageCrc)
+{
+    File file = LittleFS.open(displayedImageCrcPath, "r");
+    if (!file || file.size() != sizeof(imageCrc))
+    {
+        return false;
+    }
+
+    uint32_t displayedImageCrc = 0;
+    size_t bytesRead = file.read(
+        reinterpret_cast<uint8_t*>(&displayedImageCrc),
+        sizeof(displayedImageCrc)
+    );
+    file.close();
+
+    return bytesRead == sizeof(displayedImageCrc) &&
+        displayedImageCrc == imageCrc;
+}
+
+static bool saveDisplayedImageCrc(uint32_t imageCrc)
+{
+    LittleFS.remove(pendingDisplayedImageCrcPath);
+
+    File file = LittleFS.open(pendingDisplayedImageCrcPath, "w");
+    if (!file)
+    {
+        return false;
+    }
+
+    size_t bytesWritten = file.write(
+        reinterpret_cast<const uint8_t*>(&imageCrc),
+        sizeof(imageCrc)
+    );
+    file.close();
+
+    if (bytesWritten != sizeof(imageCrc))
+    {
+        LittleFS.remove(pendingDisplayedImageCrcPath);
+        return false;
+    }
+
+    LittleFS.remove(displayedImageCrcPath);
+    if (!LittleFS.rename(
+        pendingDisplayedImageCrcPath,
+        displayedImageCrcPath
+    ))
+    {
+        LittleFS.remove(pendingDisplayedImageCrcPath);
+        return false;
+    }
+
+    return true;
+}
+
 static void updateDisplay()
 {
     Serial.println("Updating display");
@@ -205,6 +265,13 @@ static void updateDisplay()
     if (!loadImage(imageBuffer))
     {
         Serial.println("Failed to load image");
+        return;
+    }
+
+    uint32_t imageCrc = esp_crc32_le(0, imageBuffer, IMAGE_SIZE);
+    if (displayedImageCrcMatches(imageCrc))
+    {
+        Serial.println("Image is already displayed");
         return;
     }
 
@@ -221,6 +288,11 @@ static void updateDisplay()
     EPD_4IN0E_Sleep();
 
     DEV_Module_Exit();
+
+    if (!saveDisplayedImageCrc(imageCrc))
+    {
+        Serial.println("Failed to save displayed image CRC");
+    }
 
     Serial.println("Display update complete");
 }
