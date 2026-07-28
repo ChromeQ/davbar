@@ -455,14 +455,6 @@ h2 {
   color: #a72e1c;
 }
 
-.success-message {
-  width: min(100%, 500px);
-  margin-right: auto;
-  margin-left: auto;
-  color: var(--green);
-  text-align: right;
-}
-
 .visually-hidden {
   position: absolute;
   width: 1px;
