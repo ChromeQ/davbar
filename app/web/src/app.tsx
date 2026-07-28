@@ -1,6 +1,6 @@
 import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CircleAlert, LoaderCircle, Settings, Trash2, WifiOff } from 'lucide-react';
+import { CheckCircle2, CircleAlert, LoaderCircle, Settings, Trash2, WifiOff } from 'lucide-react';
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
 import { deviceConfig } from './device-config';
@@ -74,7 +74,9 @@ const App = () => {
   const [forgetResult, setForgetResult] = useState<ApiResult | null>(null);
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const isUploading = uploadState === 'uploading';
-  const appModalOpen = pendingReset !== null || uploadError !== null || isUploading;
+  const uploadSucceeded = uploadState === 'success';
+  const appModalOpen =
+    pendingReset !== null || uploadError !== null || isUploading || uploadSucceeded;
   const modalOpen = appModalOpen || settingsOpen || forgetDialogOpen;
 
   useEffect(() => {
@@ -675,7 +677,6 @@ const App = () => {
               {uploadState === 'uploading' ? 'Uploading…' : 'Upload to display'}
             </button>
           </div>
-          {uploadState === 'success' && <p className="message success-message">Upload complete.</p>}
         </article>
       </section>
 
@@ -698,11 +699,13 @@ const App = () => {
             aria-busy={isUploading}
           >
             <div
-              className={`modal-icon ${uploadError ? 'error-modal-icon' : ''} ${isUploading ? 'uploading-modal-icon' : ''}`}
+              className={`modal-icon ${uploadError ? 'error-modal-icon' : ''} ${isUploading ? 'uploading-modal-icon' : ''} ${uploadSucceeded ? 'success-modal-icon' : ''}`}
               aria-hidden="true"
             >
               {isUploading ? (
                 <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : uploadSucceeded ? (
+                <CheckCircle2 size={22} strokeWidth={1.8} />
               ) : uploadError ? (
                 <CircleAlert size={22} strokeWidth={1.8} />
               ) : (
@@ -712,21 +715,34 @@ const App = () => {
             <h2 id="modal-title">
               {isUploading
                 ? 'Uploading to display'
-                : uploadError
-                  ? 'Upload failed'
-                  : `Reset ${pendingReset}?`}
+                : uploadSucceeded
+                  ? 'Upload complete'
+                  : uploadError
+                    ? 'Upload failed'
+                    : `Reset ${pendingReset}?`}
             </h2>
             <p id="modal-description">
               {isUploading
                 ? `Sending the display image to ${deviceConfig.uploadHost}. This may take a moment.`
-                : (uploadError ??
-                  (pendingReset === 'image'
-                    ? 'This removes the uploaded image and its preview. Your text composition will be kept.'
-                    : 'This restores the default text and appearance. Your uploaded image will be kept.'))}
+                : uploadSucceeded
+                  ? 'The display image was uploaded successfully.'
+                  : (uploadError ??
+                    (pendingReset === 'image'
+                      ? 'This removes the uploaded image and its preview. Your text composition will be kept.'
+                      : 'This restores the default text and appearance. Your uploaded image will be kept.'))}
             </p>
             {!isUploading && (
               <div className="modal-actions">
-                {uploadError ? (
+                {uploadSucceeded ? (
+                  <button
+                    className="modal-button primary-modal-button"
+                    type="button"
+                    autoFocus
+                    onClick={() => window.location.reload()}
+                  >
+                    Close
+                  </button>
+                ) : uploadError ? (
                   <button
                     className="modal-button primary-modal-button"
                     type="button"
