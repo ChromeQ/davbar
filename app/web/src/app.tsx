@@ -1,6 +1,7 @@
 import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
+  Activity,
   CheckCircle2,
   CircleAlert,
   LoaderCircle,
@@ -37,6 +38,19 @@ type ApiResult = {
   success: boolean;
   message: string;
 };
+type DeviceStatus = {
+  hostname: string;
+  ip: string;
+  wifi: {
+    ssid: string;
+    rssi: number;
+  };
+  image: {
+    updated: string | null;
+    size: number;
+  };
+  uptime: number;
+};
 
 const isApiResult = (value: unknown): value is ApiResult =>
   typeof value === 'object' &&
@@ -45,6 +59,54 @@ const isApiResult = (value: unknown): value is ApiResult =>
   typeof value.success === 'boolean' &&
   'message' in value &&
   typeof value.message === 'string';
+
+const isDeviceStatus = (value: unknown): value is DeviceStatus => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const candidate: Partial<DeviceStatus> = value;
+
+  return (
+    typeof candidate.hostname === 'string' &&
+    typeof candidate.ip === 'string' &&
+    typeof candidate.wifi === 'object' &&
+    candidate.wifi !== null &&
+    typeof candidate.wifi.ssid === 'string' &&
+    typeof candidate.wifi.rssi === 'number' &&
+    typeof candidate.image === 'object' &&
+    candidate.image !== null &&
+    (typeof candidate.image.updated === 'string' || candidate.image.updated === null) &&
+    typeof candidate.image.size === 'number' &&
+    typeof candidate.uptime === 'number'
+  );
+};
+
+const formatUptime = (totalSeconds: number) => {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+
+  return [
+    days > 0 ? `${days}d` : null,
+    hours > 0 || days > 0 ? `${hours}h` : null,
+    minutes > 0 || hours > 0 || days > 0 ? `${minutes}m` : null,
+    `${seconds}s`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+};
+
+const formatImageUpdated = (updated: string | null) => {
+  if (!updated) {
+    return 'Not available';
+  }
+
+  const date = new Date(updated);
+
+  return Number.isNaN(date.getTime()) ? updated : date.toLocaleString();
+};
 
 function getCanvasContext(canvas: HTMLCanvasElement) {
   const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -78,6 +140,10 @@ const App = () => {
   const [pendingReset, setPendingReset] = useState<SourceMode | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [status, setStatus] = useState<DeviceStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshResult, setRefreshResult] = useState<ApiResult | null>(null);
@@ -93,7 +159,12 @@ const App = () => {
   const appModalOpen =
     pendingReset !== null || uploadError !== null || isUploading || uploadSucceeded;
   const modalOpen =
-    appModalOpen || settingsOpen || refreshDialogOpen || rebootDialogOpen || forgetDialogOpen;
+    appModalOpen ||
+    settingsOpen ||
+    statusDialogOpen ||
+    refreshDialogOpen ||
+    rebootDialogOpen ||
+    forgetDialogOpen;
 
   useEffect(() => {
     if (!modalOpen) {
@@ -102,10 +173,18 @@ const App = () => {
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isUploading && !refreshing && !rebooting && !forgetting) {
+      if (
+        event.key === 'Escape' &&
+        !isUploading &&
+        !statusLoading &&
+        !refreshing &&
+        !rebooting &&
+        !forgetting
+      ) {
         setPendingReset(null);
         setUploadError(null);
         setSettingsOpen(false);
+        setStatusDialogOpen(false);
         setRefreshDialogOpen(false);
         setRebootDialogOpen(false);
         setForgetDialogOpen(false);
@@ -119,7 +198,7 @@ const App = () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [forgetting, isUploading, modalOpen, rebooting, refreshing]);
+  }, [forgetting, isUploading, modalOpen, rebooting, refreshing, statusLoading]);
 
   useEffect(() => {
     if (mode !== 'text') {
@@ -449,6 +528,47 @@ const App = () => {
     setForgetDialogOpen(true);
   };
 
+  const loadDeviceStatus = async () => {
+    setStatusLoading(true);
+    setStatus(null);
+    setStatusError(null);
+
+    try {
+      const response = await fetch('/status', { cache: 'no-store' });
+      const responseBody = await response.text();
+
+      if (!responseBody) {
+        throw new Error('The device closed the connection without returning a response.');
+      }
+
+      let result: unknown;
+
+      try {
+        result = JSON.parse(responseBody);
+      } catch {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      if (!response.ok || !isDeviceStatus(result)) {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      setStatus(result);
+    } catch (statusFailure) {
+      setStatusError(
+        statusFailure instanceof Error ? statusFailure.message : 'Unable to load device status.'
+      );
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const openStatusDialog = () => {
+    setSettingsOpen(false);
+    setStatusDialogOpen(true);
+    void loadDeviceStatus();
+  };
+
   const openRefreshDialog = () => {
     setSettingsOpen(false);
     setRefreshResult(null);
@@ -462,6 +582,7 @@ const App = () => {
   };
 
   const returnToSettings = () => {
+    setStatusDialogOpen(false);
     setRefreshDialogOpen(false);
     setRebootDialogOpen(false);
     setForgetDialogOpen(false);
@@ -924,7 +1045,14 @@ const App = () => {
             </div>
             <h2 id="settings-modal-title">Device settings</h2>
             <div className="settings-list">
-              <button type="button" autoFocus onClick={openRefreshDialog}>
+              <button type="button" autoFocus onClick={openStatusDialog}>
+                <Activity size={19} aria-hidden="true" />
+                <span>
+                  <strong>Device status</strong>
+                  <small>View network, image, and uptime information</small>
+                </span>
+              </button>
+              <button type="button" onClick={openRefreshDialog}>
                 <RefreshCw size={19} aria-hidden="true" />
                 <span>
                   <strong>Force refresh</strong>
@@ -951,6 +1079,93 @@ const App = () => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {statusDialogOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !statusLoading) {
+              returnToSettings();
+            }
+          }}
+        >
+          <div
+            className="app-modal status-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="status-modal-title"
+            aria-busy={statusLoading}
+          >
+            <div className="modal-icon settings-modal-icon" aria-hidden="true">
+              {statusLoading ? (
+                <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : statusError ? (
+                <CircleAlert size={22} strokeWidth={1.8} />
+              ) : (
+                <Activity size={22} strokeWidth={1.8} />
+              )}
+            </div>
+            <h2 id="status-modal-title">Device status</h2>
+            {statusLoading ? (
+              <p>Loading current device information.</p>
+            ) : statusError ? (
+              <p>{statusError}</p>
+            ) : status ? (
+              <dl className="status-list">
+                <div>
+                  <dt>Hostname</dt>
+                  <dd>{status.hostname}</dd>
+                </div>
+                <div>
+                  <dt>IP address</dt>
+                  <dd>{status.ip}</dd>
+                </div>
+                <div>
+                  <dt>WiFi network</dt>
+                  <dd>{status.wifi.ssid}</dd>
+                </div>
+                <div>
+                  <dt>Signal strength</dt>
+                  <dd>{status.wifi.rssi} dBm</dd>
+                </div>
+                <div>
+                  <dt>Image updated</dt>
+                  <dd>{formatImageUpdated(status.image.updated)}</dd>
+                </div>
+                <div>
+                  <dt>Image size</dt>
+                  <dd>{status.image.size.toLocaleString()} bytes</dd>
+                </div>
+                <div>
+                  <dt>Uptime</dt>
+                  <dd>{formatUptime(status.uptime)}</dd>
+                </div>
+              </dl>
+            ) : null}
+            {!statusLoading && (
+              <div className="modal-actions">
+                {statusError && (
+                  <button
+                    className="modal-button"
+                    type="button"
+                    onClick={() => void loadDeviceStatus()}
+                  >
+                    Retry
+                  </button>
+                )}
+                <button
+                  className="modal-button primary-modal-button"
+                  type="button"
+                  autoFocus
+                  onClick={returnToSettings}
+                >
+                  Close
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

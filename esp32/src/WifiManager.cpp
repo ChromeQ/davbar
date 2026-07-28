@@ -7,6 +7,8 @@
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
+#include <esp_timer.h>
+#include <time.h>
 
 #include "DeviceConfig.h"
 #include "ImageManager.h"
@@ -314,6 +316,65 @@ static void handleReboot(AsyncWebServerRequest* request)
     restartAt = millis() + 1000;
 }
 
+static void handleStatus(AsyncWebServerRequest* request)
+{
+    String hostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
+
+    JsonDocument doc;
+    doc["hostname"] = hostname;
+    doc["ip"] = WiFi.localIP().toString();
+    doc["wifi"]["ssid"] = WiFi.SSID();
+    doc["wifi"]["rssi"] = WiFi.RSSI();
+
+    File image = LittleFS.open("/image.bin", "r");
+    if (image)
+    {
+        doc["image"]["size"] = image.size();
+
+        time_t updatedAt = image.getLastWrite();
+        struct tm updatedAtUtc;
+        char updatedAtText[21];
+
+        if (
+            updatedAt >= 1609459200 &&
+            gmtime_r(&updatedAt, &updatedAtUtc) &&
+            strftime(
+                updatedAtText,
+                sizeof(updatedAtText),
+                "%Y-%m-%dT%H:%M:%SZ",
+                &updatedAtUtc
+            ) > 0
+        )
+        {
+            doc["image"]["updated"] = updatedAtText;
+        }
+        else
+        {
+            doc["image"]["updated"] = nullptr;
+        }
+
+        image.close();
+    }
+    else
+    {
+        doc["image"]["updated"] = nullptr;
+        doc["image"]["size"] = 0;
+    }
+
+    doc["uptime"] = static_cast<uint64_t>(esp_timer_get_time()) / 1000000;
+
+    String payload;
+    serializeJson(doc, payload);
+
+    AsyncWebServerResponse* response = request->beginResponse(
+        200,
+        "application/json",
+        payload
+    );
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
+}
+
 static void handleImageUpload(
     AsyncWebServerRequest* request,
     uint8_t* data,
@@ -471,6 +532,8 @@ bool connectWifi()
             Serial.print("IP address: ");
             Serial.println(WiFi.localIP());
 
+            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
             String mdnsHostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
 
             if (!MDNS.begin(mdnsHostname.c_str()))
@@ -555,6 +618,12 @@ void startWebServer()
         "/reboot",
         HTTP_POST,
         handleReboot
+    );
+
+    server.on(
+        "/status",
+        HTTP_GET,
+        handleStatus
     );
 
     server.onNotFound(
