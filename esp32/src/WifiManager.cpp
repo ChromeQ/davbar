@@ -434,7 +434,7 @@ void startWebServer()
         "/assets/",
         LittleFS,
         "/assets/"
-    );
+    ).setTryGzipFirst(false);
 
     server.on(
         "/",

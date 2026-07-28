@@ -33,7 +33,6 @@
     "eslint-config-prettier": "catalog:",
     "globals": "catalog:",
     "typescript-eslint": "catalog:",
-    "vite": "8.1.5",
-    "vite-plugin-compression": "0.5.1"
+    "vite": "8.1.5"
   }
 }
