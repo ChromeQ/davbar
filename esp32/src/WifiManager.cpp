@@ -288,23 +288,56 @@ static void handleForgetWifi(AsyncWebServerRequest* request)
     restartAt = millis() + 1000;
 }
 
-static void handleStatus(AsyncWebServerRequest* request)
+static void handleImageUpload(
+    AsyncWebServerRequest* request,
+    uint8_t* data,
+    size_t len,
+    size_t index,
+    size_t total
+)
 {
-    JsonDocument doc;
+    static File imageFile;
 
-    doc["device"] = DeviceConfig::DeviceId;
-    doc["wifi"] = true;
-    doc["ssid"] = WiFi.SSID();
-    doc["ip"] = WiFi.localIP().toString();
+    if (index == 0)
+    {
+        Serial.println("Starting upload: image.bin");
 
-    String response;
+        imageFile = LittleFS.open(
+            "/image.bin",
+            "w"
+        );
 
-    serializeJson(doc, response);
+        if (!imageFile)
+        {
+            Serial.println("Failed to open image.bin");
+            return;
+        }
+    }
+
+    if (imageFile)
+    {
+        imageFile.write(data, len);
+    }
+
+    if (index + len == total)
+    {
+        Serial.printf("Upload complete (%u bytes)\n", index + len);
+
+        if (imageFile)
+        {
+            imageFile.close();
+        }
+    }
+}
+
+static void handleImageUploadFinished(AsyncWebServerRequest* request)
+{
+    Serial.println("Image upload complete");
 
     request->send(
         200,
-        "application/json",
-        response
+        "text/plain",
+        "OK"
     );
 }
 
@@ -467,25 +500,12 @@ void startWebServer()
     );
 
     server.on(
-        "/status",
-        HTTP_GET,
-        handleStatus
+        "/image",
+        HTTP_POST,
+        handleImageUploadFinished,
+        nullptr,
+        handleImageUpload
     );
-
-    // server.on(
-    //     "/image",
-    //     HTTP_POST,
-    //     [](AsyncWebServerRequest* request)
-    //     {
-    //         Serial.println("Image POST finished");
-
-    //         request->send(
-    //             200,
-    //             "text/plain",
-    //             "OK"
-    //         );
-    //     }
-    // );
 
     server.onNotFound(
         [](AsyncWebServerRequest *request)

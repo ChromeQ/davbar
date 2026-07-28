@@ -9,6 +9,7 @@ import './app.style.css';
 
 const DISPLAY_WIDTH = 400;
 const DISPLAY_HEIGHT = 600;
+const IMAGE_UPLOAD_URL = '/image';
 const DEFAULT_TEXT = deviceConfig.defaultText;
 const DEFAULT_FONT_FAMILY = 'Roboto';
 const DEFAULT_FONT_SIZE = 64;
@@ -18,7 +19,6 @@ const DEFAULT_GRADIENT_COLOUR = '#ef2d56';
 
 type SourceFrame = {
   pixels: Uint8ClampedArray;
-  name: string;
 };
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
@@ -149,7 +149,7 @@ const App = () => {
 
     const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    setTextFrame({ pixels: imageData.data, name: deviceConfig.outputFileName });
+    setTextFrame({ pixels: imageData.data });
     setError('');
     setUploadState('idle');
   }, [
@@ -274,7 +274,7 @@ const App = () => {
 
       const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-      setImageFrame({ pixels: imageData.data, name: `${file.name.replace(/\.[^.]+$/, '')}.bin` });
+      setImageFrame({ pixels: imageData.data });
       setFileName(file.name);
     } catch {
       setImageFrame(null);
@@ -385,11 +385,10 @@ const App = () => {
 
     try {
       const uploadBytes = new Uint8Array(binary);
-      const response = await fetch(deviceConfig.uploadUrl, {
+      const response = await fetch(IMAGE_UPLOAD_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
-          'X-Filename': sourceFrame.name,
         },
         body: new Blob([uploadBytes.buffer], { type: 'application/octet-stream' }),
       });
