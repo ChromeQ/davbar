@@ -2,6 +2,7 @@
 
 #include <LittleFS.h>
 #include <esp_crc.h>
+#include <esp_sleep.h>
 #include <new>
 
 #include "DEV_Config.h"
@@ -305,4 +306,18 @@ static void updateDisplay(bool force)
     }
 
     Serial.println("Display update complete");
+
+    if (force)
+    {
+        Serial.println("Keeping device awake after forced update");
+        return;
+    }
+
+    Serial.println("Entering deep sleep");
+
+    delay(2000);
+    
+    Serial.flush();
+
+    esp_deep_sleep_start();
 }
