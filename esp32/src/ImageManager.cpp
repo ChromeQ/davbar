@@ -9,6 +9,7 @@
 #include "ImageLoader.h"
 
 static bool imageUpdatePending = false;
+static bool forcedImageUpdatePending = false;
 
 static uint8_t imageBuffer[IMAGE_SIZE];
 
@@ -17,7 +18,7 @@ static const char* pendingDisplayedImageCrcPath = "/image.displayed.crc.tmp";
 
 static bool displayedImageCrcMatches(uint32_t imageCrc);
 static bool saveDisplayedImageCrc(uint32_t imageCrc);
-static void updateDisplay();
+static void updateDisplay(bool force);
 
 struct ImageUploadState
 {
@@ -190,6 +191,12 @@ void requestImageUpdate()
     imageUpdatePending = true;
 }
 
+void requestForcedImageUpdate()
+{
+    forcedImageUpdatePending = true;
+    imageUpdatePending = true;
+}
+
 void processImageManager()
 {
     if (!imageUpdatePending)
@@ -197,9 +204,12 @@ void processImageManager()
         return;
     }
 
+    bool force = forcedImageUpdatePending;
+
+    forcedImageUpdatePending = false;
     imageUpdatePending = false;
 
-    updateDisplay();
+    updateDisplay(force);
 }
 
 static bool displayedImageCrcMatches(uint32_t imageCrc)
@@ -256,7 +266,7 @@ static bool saveDisplayedImageCrc(uint32_t imageCrc)
     return true;
 }
 
-static void updateDisplay()
+static void updateDisplay(bool force)
 {
     Serial.println("Updating display");
 
@@ -269,7 +279,7 @@ static void updateDisplay()
     }
 
     uint32_t imageCrc = esp_crc32_le(0, imageBuffer, IMAGE_SIZE);
-    if (displayedImageCrcMatches(imageCrc))
+    if (!force && displayedImageCrcMatches(imageCrc))
     {
         Serial.println("Image is already displayed");
         return;

@@ -1,6 +1,14 @@
 import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CheckCircle2, CircleAlert, LoaderCircle, Settings, Trash2, WifiOff } from 'lucide-react';
+import {
+  CheckCircle2,
+  CircleAlert,
+  LoaderCircle,
+  RefreshCw,
+  Settings,
+  Trash2,
+  WifiOff,
+} from 'lucide-react';
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
 import { deviceConfig } from './device-config';
@@ -69,6 +77,9 @@ const App = () => {
   const [pendingReset, setPendingReset] = useState<SourceMode | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [refreshDialogOpen, setRefreshDialogOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<ApiResult | null>(null);
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
   const [forgetting, setForgetting] = useState(false);
   const [forgetResult, setForgetResult] = useState<ApiResult | null>(null);
@@ -77,7 +88,7 @@ const App = () => {
   const uploadSucceeded = uploadState === 'success';
   const appModalOpen =
     pendingReset !== null || uploadError !== null || isUploading || uploadSucceeded;
-  const modalOpen = appModalOpen || settingsOpen || forgetDialogOpen;
+  const modalOpen = appModalOpen || settingsOpen || refreshDialogOpen || forgetDialogOpen;
 
   useEffect(() => {
     if (!modalOpen) {
@@ -86,10 +97,11 @@ const App = () => {
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !isUploading && !forgetting) {
+      if (event.key === 'Escape' && !isUploading && !refreshing && !forgetting) {
         setPendingReset(null);
         setUploadError(null);
         setSettingsOpen(false);
+        setRefreshDialogOpen(false);
         setForgetDialogOpen(false);
       }
     };
@@ -101,7 +113,7 @@ const App = () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [forgetting, isUploading, modalOpen]);
+  }, [forgetting, isUploading, modalOpen, refreshing]);
 
   useEffect(() => {
     if (mode !== 'text') {
@@ -431,9 +443,52 @@ const App = () => {
     setForgetDialogOpen(true);
   };
 
+  const openRefreshDialog = () => {
+    setSettingsOpen(false);
+    setRefreshResult(null);
+    setRefreshDialogOpen(true);
+  };
+
   const returnToSettings = () => {
+    setRefreshDialogOpen(false);
     setForgetDialogOpen(false);
     setSettingsOpen(true);
+  };
+
+  const refreshDisplay = async () => {
+    setRefreshing(true);
+    setRefreshResult(null);
+
+    try {
+      const response = await fetch('/refresh', { method: 'POST' });
+      const responseBody = await response.text();
+
+      if (!responseBody) {
+        throw new Error('The device closed the connection without returning a response.');
+      }
+
+      let result: unknown;
+
+      try {
+        result = JSON.parse(responseBody);
+      } catch {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      if (!isApiResult(result)) {
+        throw new Error('The device returned an invalid response.');
+      }
+
+      setRefreshResult(result);
+    } catch (refreshError) {
+      setRefreshResult({
+        success: false,
+        message:
+          refreshError instanceof Error ? refreshError.message : 'Unable to refresh the display.',
+      });
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const forgetWifi = async () => {
@@ -820,7 +875,14 @@ const App = () => {
             </div>
             <h2 id="settings-modal-title">Device settings</h2>
             <div className="settings-list">
-              <button type="button" autoFocus onClick={openForgetDialog}>
+              <button type="button" autoFocus onClick={openRefreshDialog}>
+                <RefreshCw size={19} aria-hidden="true" />
+                <span>
+                  <strong>Force refresh</strong>
+                  <small>Refresh the display using the currently saved image</small>
+                </span>
+              </button>
+              <button type="button" onClick={openForgetDialog}>
                 <WifiOff size={19} aria-hidden="true" />
                 <span>
                   <strong>Forget saved WiFi</strong>
@@ -833,6 +895,88 @@ const App = () => {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {refreshDialogOpen && (
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !refreshing) {
+              setRefreshDialogOpen(false);
+            }
+          }}
+        >
+          <div
+            className="app-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="refresh-modal-title"
+            aria-describedby="refresh-modal-description"
+            aria-busy={refreshing}
+          >
+            <div
+              className={`modal-icon ${refreshResult?.success ? 'success-modal-icon' : refreshResult ? 'error-modal-icon' : 'settings-modal-icon'}`}
+              aria-hidden="true"
+            >
+              {refreshing ? (
+                <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : refreshResult?.success ? (
+                <CheckCircle2 size={22} strokeWidth={1.8} />
+              ) : refreshResult ? (
+                <CircleAlert size={22} strokeWidth={1.8} />
+              ) : (
+                <RefreshCw size={22} strokeWidth={1.8} />
+              )}
+            </div>
+            <h2 id="refresh-modal-title">
+              {refreshing
+                ? 'Requesting display refresh'
+                : refreshResult?.success
+                  ? 'Display refresh requested'
+                  : refreshResult
+                    ? 'Unable to refresh display'
+                    : 'Are you sure you want to refresh display?'}
+            </h2>
+            <p id="refresh-modal-description">
+              {refreshResult?.message ??
+                (refreshing
+                  ? 'Asking the device to refresh its display.'
+                  : 'This forces the display to redraw the currently saved image.')}
+            </p>
+            {!refreshing && (
+              <div className="modal-actions">
+                {refreshResult ? (
+                  <button
+                    className="modal-button primary-modal-button"
+                    type="button"
+                    autoFocus
+                    onClick={() => setRefreshDialogOpen(false)}
+                  >
+                    Close
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="modal-button"
+                      type="button"
+                      autoFocus
+                      onClick={returnToSettings}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="modal-button primary-modal-button"
+                      type="button"
+                      onClick={() => void refreshDisplay()}
+                    >
+                      Refresh display
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

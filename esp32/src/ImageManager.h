@@ -43,4 +43,6 @@ void cancelImageUpload(ImageUploadState* state);
 
 void requestImageUpdate();
 
+void requestForcedImageUpdate();
+
 void processImageManager();

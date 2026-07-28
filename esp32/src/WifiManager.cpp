@@ -291,6 +291,17 @@ static void handleForgetWifi(AsyncWebServerRequest* request)
     restartAt = millis() + 1000;
 }
 
+static void handleRefreshDisplay(AsyncWebServerRequest* request)
+{
+    requestForcedImageUpdate();
+
+    request->send(
+        200,
+        "application/json",
+        R"({"success":true,"message":"Display refresh requested."})"
+    );
+}
+
 static void handleImageUpload(
     AsyncWebServerRequest* request,
     uint8_t* data,
@@ -520,6 +531,12 @@ void startWebServer()
         handleImageUploadFinished,
         nullptr,
         handleImageUpload
+    );
+
+    server.on(
+        "/refresh",
+        HTTP_POST,
+        handleRefreshDisplay
     );
 
     server.onNotFound(
