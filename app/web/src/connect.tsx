@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
+import { deviceConfig } from './device-config';
 import './common.style.css';
 import './connect.style.css';
 
@@ -27,7 +28,7 @@ type ConnectionResult = {
 };
 
 const DEVELOPMENT_NETWORKS: Network[] = [
-  { ssid: 'DavBar Workshop', rssi: -31, secure: true },
+  { ssid: `${deviceConfig.brandName} Workshop`, rssi: -31, secure: true },
   { ssid: 'The Crown Guest WiFi', rssi: -38, secure: false },
   { ssid: 'Cellar Access Point', rssi: -42, secure: true },
   { ssid: 'BREWERY_5G', rssi: -45, secure: true },
@@ -189,7 +190,9 @@ const Connect = () => {
   const dropdownDisabled = scanning || connecting || networks.length === 0;
   const passwordRequired = selectedNetwork?.secure === true;
   const saveDisabled =
-    connecting || !selectedNetwork || (passwordRequired && password.length === 0);
+    connecting ||
+    !selectedNetwork ||
+    (passwordRequired && (password.length < 8 || password.length > 63));
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -306,7 +309,7 @@ const Connect = () => {
   return (
     <main className="connect-shell">
       <header className="connect-header">
-        <p className="eyebrow">DavBar</p>
+        <p className="eyebrow">{deviceConfig.brandName}</p>
         <h1>Configure WiFi</h1>
       </header>
 
@@ -409,6 +412,8 @@ const Connect = () => {
               type={passwordVisible ? 'text' : 'password'}
               value={password}
               required={passwordRequired}
+              minLength={passwordRequired ? 8 : undefined}
+              maxLength={passwordRequired ? 63 : undefined}
               disabled={!passwordRequired || connecting}
               autoComplete="current-password"
               onChange={(event) => {

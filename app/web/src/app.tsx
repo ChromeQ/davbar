@@ -3,13 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { CircleAlert, LoaderCircle, Settings, Trash2, WifiOff } from 'lucide-react';
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import { deviceConfig } from './device-config';
 import './common.style.css';
 import './app.style.css';
 
 const DISPLAY_WIDTH = 400;
 const DISPLAY_HEIGHT = 600;
-const UPLOAD_URL = 'https://davbar.local';
-const DEFAULT_TEXT = 'DavBar';
+const DEFAULT_TEXT = deviceConfig.defaultText;
 const DEFAULT_FONT_FAMILY = 'Roboto';
 const DEFAULT_FONT_SIZE = 64;
 const DEFAULT_TEXT_COLOUR = '#171713';
@@ -149,7 +149,7 @@ const App = () => {
 
     const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
 
-    setTextFrame({ pixels: imageData.data, name: 'davbar-text.bin' });
+    setTextFrame({ pixels: imageData.data, name: deviceConfig.outputFileName });
     setError('');
     setUploadState('idle');
   }, [
@@ -385,7 +385,7 @@ const App = () => {
 
     try {
       const uploadBytes = new Uint8Array(binary);
-      const response = await fetch(UPLOAD_URL, {
+      const response = await fetch(deviceConfig.uploadUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/octet-stream',
@@ -404,7 +404,7 @@ const App = () => {
       const message =
         uploadFailure instanceof Error && uploadFailure.message !== 'Failed to fetch'
           ? uploadFailure.message
-          : 'The display service at davbar.local could not be reached.';
+          : `The display service at ${deviceConfig.uploadHost} could not be reached.`;
 
       setUploadError(`${message} It may not be available yet.`);
     }
@@ -460,7 +460,7 @@ const App = () => {
   return (
     <main className="app-shell">
       <header className="app-header">
-        <p className="eyebrow">DavBar</p>
+        <p className="eyebrow">{deviceConfig.brandName}</p>
         <div className="settings-menu">
           <button
             className="settings-button"
@@ -719,7 +719,7 @@ const App = () => {
             </h2>
             <p id="modal-description">
               {isUploading
-                ? 'Sending the display image to davbar.local. This may take a moment.'
+                ? `Sending the display image to ${deviceConfig.uploadHost}. This may take a moment.`
                 : (uploadError ??
                   (pendingReset === 'image'
                     ? 'This removes the uploaded image and its preview. Your text composition will be kept.'

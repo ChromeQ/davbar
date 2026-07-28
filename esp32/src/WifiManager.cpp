@@ -4,6 +4,7 @@
 #include <LittleFS.h>
 #include <WiFi.h>
 
+#include "DeviceConfig.h"
 #include "WifiManager.h"
 
 static AsyncWebServer server(80);
@@ -290,7 +291,7 @@ static void handleStatus(AsyncWebServerRequest* request)
 {
     JsonDocument doc;
 
-    doc["device"] = "tap1";
+    doc["device"] = DeviceConfig::DeviceId;
     doc["wifi"] = true;
     doc["ssid"] = WiFi.SSID();
     doc["ip"] = WiFi.localIP().toString();
@@ -313,8 +314,8 @@ static void startAccessPoint()
     WiFi.mode(WIFI_AP_STA);
 
     WiFi.softAP(
-        "DavBar Tap 1",
-        "davbar123"
+        DeviceConfig::AccessPointName,
+        DeviceConfig::AccessPointPassword
     );
 
     dnsServer.start(

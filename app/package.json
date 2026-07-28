@@ -8,15 +8,20 @@
   "type": "module",
   "author": "ChromeQ",
   "scripts": {
-    "build": "pnpm -r --parallel --aggregate-output run build",
+    "build": "pnpm --dir web build",
     "compile": "pnpm -r --parallel --aggregate-output run compile",
-    "upload:fs": "pnpm -r --parallel --aggregate-output run upload:fs",
+    "dev": "pnpm --dir web dev",
+    "device:build": "tsx scripts/device.ts build",
+    "device:upload": "tsx scripts/device.ts upload",
+    "device:upload:fs": "tsx scripts/device.ts upload-fs",
     "lint": "pnpm -r --parallel --aggregate-output run lint",
     "outdated": "pnpm -r --parallel --aggregate-output run outdated",
+    "preview": "pnpm --dir web preview",
     "test": "pnpm -r --parallel --aggregate-output run test"
   },
   "devDependencies": {
     "jiti": "2.7.0",
+    "tsx": "catalog:",
     "typescript": "catalog:typescript",
     "@typescript/native": "catalog:typescript"
   }
