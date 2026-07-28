@@ -20,6 +20,7 @@
     "test": "pnpm -r --parallel --aggregate-output run test"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "jiti": "2.7.0",
     "tsx": "catalog:",
     "typescript": "catalog:typescript",
