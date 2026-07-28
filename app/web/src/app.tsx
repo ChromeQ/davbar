@@ -394,20 +394,34 @@ const App = () => {
         },
         body: new Blob([uploadBytes.buffer], { type: 'application/octet-stream' }),
       });
+      const responseBody = await response.text();
+      let result: unknown;
 
-      if (!response.ok) {
-        throw new Error(`Upload failed with status ${response.status}.`);
+      try {
+        result = JSON.parse(responseBody);
+      } catch {
+        throw new Error('The display returned an invalid response.');
+      }
+
+      if (!isApiResult(result)) {
+        throw new Error('The display returned an invalid response.');
+      }
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || `Upload failed with status ${response.status}.`);
       }
 
       setUploadState('success');
     } catch (uploadFailure) {
       setUploadState('error');
       const message =
-        uploadFailure instanceof Error && uploadFailure.message !== 'Failed to fetch'
-          ? uploadFailure.message
-          : `The display service at ${deviceConfig.uploadHost} could not be reached.`;
+        uploadFailure instanceof Error ? uploadFailure.message : 'Unable to upload the image.';
 
-      setUploadError(`${message} It may not be available yet.`);
+      setUploadError(
+        message === 'Failed to fetch'
+          ? `The display service at ${deviceConfig.uploadHost} could not be reached. It may not be available yet.`
+          : message
+      );
     }
   };
 
@@ -743,14 +757,23 @@ const App = () => {
                     Close
                   </button>
                 ) : uploadError ? (
-                  <button
-                    className="modal-button primary-modal-button"
-                    type="button"
-                    autoFocus
-                    onClick={() => setUploadError(null)}
-                  >
-                    Close
-                  </button>
+                  <>
+                    <button
+                      className="modal-button"
+                      type="button"
+                      onClick={() => setUploadError(null)}
+                    >
+                      Close
+                    </button>
+                    <button
+                      className="modal-button primary-modal-button"
+                      type="button"
+                      autoFocus
+                      onClick={() => void uploadBinary()}
+                    >
+                      Retry
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button

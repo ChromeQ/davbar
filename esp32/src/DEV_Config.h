@@ -31,10 +31,6 @@
 #define _DEV_CONFIG_H_
 
 #include <Arduino.h>
-#include <stdint.h>
-#include <stdio.h>
-
-
 
 /**
  * data

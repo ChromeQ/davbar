@@ -1,11 +1,9 @@
+#include <Arduino.h>
 #include <LittleFS.h>
 
 #include "DEV_Config.h"
-#include "EPD_4in0e.h"
-#include "ImageLoader.h"
+#include "ImageManager.h"
 #include "WifiManager.h"
-
-uint8_t imageBuffer[IMAGE_SIZE];
 
 void setup()
 {
@@ -33,23 +31,7 @@ void setup()
     Serial.println("Starting web server...");
     startWebServer();
 
-    Serial.println("Initialising display...");
-    EPD_4IN0E_Init();
-
-    Serial.println("Loading image...");
-    if (loadImage(imageBuffer))
-    {
-        Serial.println("Displaying image...");
-        EPD_4IN0E_Display(imageBuffer);
-    }
-    else
-    {
-        Serial.println("No image found");
-    }
-
-    EPD_4IN0E_Sleep();
-
-    DEV_Module_Exit();
+    requestImageUpdate();
 
     Serial.println("Ready");
 }
@@ -57,4 +39,6 @@ void setup()
 void loop()
 {
     processWifiManager();
+
+    processImageManager();
 }

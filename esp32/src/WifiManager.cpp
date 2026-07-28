@@ -1,3 +1,6 @@
+#include "WifiManager.h"
+
+#include <Arduino.h>
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
@@ -6,7 +9,7 @@
 #include <WiFi.h>
 
 #include "DeviceConfig.h"
-#include "WifiManager.h"
+#include "ImageManager.h"
 
 static AsyncWebServer server(80);
 
@@ -296,48 +299,60 @@ static void handleImageUpload(
     size_t total
 )
 {
-    static File imageFile;
-
     if (index == 0)
     {
         Serial.println("Starting upload: image.bin");
-
-        imageFile = LittleFS.open(
-            "/image.bin",
-            "w"
+        request->_tempObject = beginImageUpload(
+            request->contentType(),
+            total
         );
 
-        if (!imageFile)
-        {
-            Serial.println("Failed to open image.bin");
-            return;
-        }
+        request->onDisconnect(
+            [request]()
+            {
+                cancelImageUpload(
+                    static_cast<ImageUploadState*>(request->_tempObject)
+                );
+                request->_tempObject = nullptr;
+            }
+        );
     }
 
-    if (imageFile)
-    {
-        imageFile.write(data, len);
-    }
-
-    if (index + len == total)
-    {
-        Serial.printf("Upload complete (%u bytes)\n", index + len);
-
-        if (imageFile)
-        {
-            imageFile.close();
-        }
-    }
+    writeImageUploadChunk(
+        static_cast<ImageUploadState*>(request->_tempObject),
+        data,
+        len,
+        index
+    );
 }
 
 static void handleImageUploadFinished(AsyncWebServerRequest* request)
 {
-    Serial.println("Image upload complete");
+    ImageUploadState* state = static_cast<ImageUploadState*>(request->_tempObject);
+    ImageUploadResult result = finishImageUpload(state);
+    request->_tempObject = nullptr;
+
+    Serial.printf(
+        "Image upload %s: %s\n",
+        result.success ? "complete" : "failed",
+        result.message
+    );
+
+    JsonDocument doc;
+    doc["success"] = result.success;
+    doc["message"] = result.message;
+    String response;
+    serializeJson(doc, response);
+
+    bool clientError =
+        result.error == ImageUploadError::InvalidContentType ||
+        result.error == ImageUploadError::InvalidSize ||
+        result.error == ImageUploadError::OutOfOrder;
 
     request->send(
-        200,
-        "text/plain",
-        "OK"
+        result.success ? 200 : clientError ? 400 : 500,
+        "application/json",
+        response
     );
 }
 
