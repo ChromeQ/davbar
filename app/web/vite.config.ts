@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import react from '@vitejs/plugin-react';
+import viteCompression from 'vite-plugin-compression';
 import { defineConfig } from 'vite';
 
 import { loadDeviceConfig, printDeviceConfig } from '../scripts/device-config.ts';
@@ -14,6 +15,10 @@ printDeviceConfig(deviceConfig, configPath);
 export default defineConfig({
   plugins: [
     react(),
+    viteCompression({
+      algorithm: 'gzip',
+      filter: /\.(js|css)$/i,
+    }),
     {
       name: 'device-config-html',
       transformIndexHtml: {

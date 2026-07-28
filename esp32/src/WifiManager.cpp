@@ -1,6 +1,7 @@
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
+#include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
 
@@ -350,7 +351,7 @@ void processWifiManager()
         else if (
             status == WL_CONNECT_FAILED ||
             status == WL_NO_SSID_AVAIL ||
-            millis() - connectionStartedAt >= 10000
+            millis() - connectionStartedAt >= 20000
         )
         {
             Serial.println("WiFi test failed");
@@ -398,6 +399,19 @@ bool connectWifi()
             Serial.println("Connected to WiFi");
             Serial.print("IP address: ");
             Serial.println(WiFi.localIP());
+
+            String mdnsHostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
+
+            if (!MDNS.begin(mdnsHostname.c_str()))
+            {
+                Serial.println("Failed to start mDNS");
+            }
+            else
+            {
+                Serial.println("mDNS started");
+                Serial.printf("Visit: http://%s.local\n", mdnsHostname.c_str());
+            }
+
             return true;
         }
 
