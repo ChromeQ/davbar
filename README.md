@@ -5,6 +5,29 @@ DavBar Keg Display is a system for creating and showing custom 400 x 600 content
 - [App and image tooling](app/README.md)
 - [ESP32 firmware](esp32/README.md)
 
+## How the device works
+
+1. **Wi-Fi setup.** If no Wi-Fi network is saved, or the saved network cannot be
+   joined within about 15 seconds, the device starts a setup access point (`DavBar
+   Tap 1` with the default profile). Connecting to it opens a captive setup page
+   that scans for nearby networks. The device tests the selected network before
+   saving it, then reboots.
+2. **Web app.** Once connected, the device serves the web app at
+   `http://<hostname>-<deviceId>.local` (`http://davbar-tap1.local` with the
+   default profile). Compose text or choose a 400 x 600 image, check the Spectra 6
+   preview, and send it to the device.
+3. **Display and sleep.** After an upload, the device redraws the e-paper display
+   and enters deep sleep. No wake-up source is configured, so it stays asleep until
+   it is reset or power-cycled.
+4. **Startup.** On startup, the device compares the stored image with the image it
+   last drew. If they match, or no image has been uploaded yet, it skips the redraw
+   and stays awake serving the web app until the next upload. Otherwise it draws
+   the stored image and returns to deep sleep.
+
+The web app's device settings menu can show the device status, force a display
+refresh, reboot the device, or forget the saved Wi-Fi network and reboot into
+setup mode. A forced refresh redraws the display but keeps the device awake.
+
 ## Prerequisites
 
 - Node.js 26 and pnpm 11
@@ -54,8 +77,9 @@ fallback profile is `config/default.json`:
 ```
 
 All five properties are required non-empty strings. `hostname` must contain only
-lowercase letters, numbers, and internal hyphens. `accessPointPassword` must be
-between 8 and 63 characters.
+lowercase letters, numbers, and internal hyphens. `deviceId` is not validated, but
+it becomes part of the device's network name, so it should follow the same rule.
+`accessPointPassword` must be between 8 and 63 characters.
 
 The build derives the following values from one profile:
 
@@ -63,12 +87,13 @@ The build derives the following values from one profile:
 | --- | --- |
 | `brandName` | Web branding, page titles, default display text, and output filename |
 | `deviceName` | Human-readable device name and access-point name |
-| `deviceId` | Device identity returned by the firmware status API |
-| `hostname` | The `.local` hostname used when uploading display content |
+| `deviceId` | Suffix of the device's mDNS hostname, so devices sharing a `hostname` stay distinct |
+| `hostname` | Prefix of the device's mDNS hostname, `<hostname>-<deviceId>.local` |
 | `accessPointPassword` | Password for the device's setup access point |
 
-For the default profile, the setup access point is `DavBar Tap 1`, the upload host
-is `davbar.local`, and the page titles and default display text use `DavBar`.
+For the default profile, the setup access point is `DavBar Tap 1`, the device is
+reachable at `davbar-tap1.local`, and the page titles and default display text use
+`DavBar`.
 
 To rebrand a device, create another profile such as `config/krisbar-tap-1.json`:
 
@@ -116,6 +141,10 @@ For a web-only iteration, rebuild and upload only the LittleFS filesystem:
 ```bash
 pnpm device:upload:fs --config config/davbar-tap-2.json
 ```
+
+Both `device:upload` and `device:upload:fs` replace the whole LittleFS filesystem,
+which also erases the saved Wi-Fi credentials and display image. Afterwards, the
+device starts in setup mode and needs its Wi-Fi configured again.
 
 Use `device:upload` whenever the profile or firmware changes. A filesystem-only
 upload can create mismatched web and firmware identities if it uses a different
