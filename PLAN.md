@@ -1,0 +1,355 @@
+# Keg level display plan
+
+Status: planning done, no code changed yet. Last updated 2026-10-31.
+
+## Goal
+
+Each tap's display shows its beer image plus how full the keg is, read over Bluetooth
+from a KegLand RAPT Laser Level Sensor in the keg lid. The displays are now always on
+(USB power), so the battery, power-switch and deep sleep design goes.
+
+## Hardware
+
+- 3 taps, each with a Seeed Studio XIAO ESP32-S3 and a 4-inch Spectra 6 (400 x 600)
+  e-paper panel, in a 3D-printed enclosure on top of the font, powered from one USB
+  splitter. One tap exists today; the other two are on order.
+- 3 RAPT Laser Level Sensors (Cornelius keg lid kits), all on 19 L corny kegs, labelled
+  with 1-3 dots. Kegs move between positions (back left, back right, centre front) and
+  taps, so the laser each tap shows is chosen in its web app and changes over time.
+  Addresses (as registered in the RAPT app):
+
+  | Laser | Address |
+  | --- | --- |
+  | 1 | `E5:4C:66:F9:E1:33` |
+  | 2 | `C4:A3:DF:A2:C5:1B` |
+  | 3 | `D9:EB:DE:7E:BE:48` |
+- Signal at the font with a sensor inside the kegerator: about -80 to -90 dBm,
+  measured with a phone.
+
+## Sensor broadcast
+
+Readings are in the sensor's Bluetooth advertisements, so the ESP32 only needs to
+listen; it never connects.
+
+- **Smart Mode (1, default):** advertises constantly (up to 12 times a minute heard).
+  It measures regularly but only updates the reading it broadcasts when the level
+  changes: a 1 cm lift was reported in about 2 minutes, while a steady level kept the
+  same reading, byte for byte, for an hour. The RAPT app can connect and force a
+  reading. KegLand quotes 18+ months on 3 AAA batteries (5-minute intervals), but
+  their Pill drains much faster than quoted, so watch the real battery drain.
+- **Session Mode (2):** entered by itself when the level changes, with a new reading
+  about every 35 seconds, then back to the previous mode a few minutes after the
+  level settles.
+- **Live Stream Mode (3):** a fresh reading about every second. Started or stopped by
+  holding the sensor's Bluetooth button for about 2 s (or from the app, with a Pro
+  subscription), and ends by itself. Useful for development and filling kegs; drains
+  the battery.
+- **Ultra Low Power Mode (4):** wakes on a 30-minute-7-second grid. After a level
+  change it reports in most slots for a few hours (the first report 16-52 minutes
+  after the change), then goes silent while the level stays steady (10+ hours seen).
+  Each broadcast lasts 2-5 seconds, so a phone scan rarely sees it. The RAPT docs say
+  it must first be "bonded" to a RAPT device, but the broadcasts are normal and
+  readable without that. The only way out is double-tapping the sensor's Bluetooth
+  button. KegLand quotes several years of battery.
+
+Sensor buttons ([RAPT docs](https://docs.rapt.io/equipment/rapt-laser-level-sensor/operation)):
+a single press of Bluetooth takes a reading and broadcasts it; a double tap toggles
+Smart and Ultra Low Power; holding it for about 2 s toggles Live Stream. A single press
+of Power shows the mode as 1-4 green blinks.
+
+Each advertisement contains flags (`0x06`), the 128-bit service UUID
+`52415054-0a06-9215-08bf-f2b018840000` ("RAPT"), and manufacturer data with company
+ID `0x4152` ("RA") followed by a 19-byte payload. Multi-byte values are
+little-endian.
+
+| Offset | Size | Field | Notes |
+| --- | --- | --- | --- |
+| 0 | 2 | `50 54` ("PT") | Signature, confirmed |
+| 2 | 1 | `A1` | Format or device type |
+| 3 | 6 | Sensor address | Matches the address in the RAPT web app, confirmed |
+| 9 | 2 | Laser distance, mm | 0 when there is no reading |
+| 11 | 2 | Liquid height, mm | Vessel height set in the RAPT app minus distance; not used |
+| 13 | 1 | Unknown (10) | Not used |
+| 14 | 2 | Battery, 0.1 % | Confirmed: 849 with old batteries, app showed 84% (rounds down). Sags while the laser fires (78.5-85.9% within a minute in Live Stream). `FFFF` = no value |
+| 16 | 2 | Temperature, 0.01 °C, signed | Moves in 0.25 °C steps. `0x8000` = no value |
+| 18 | 1 | Mode | Confirmed: 1 Smart, 2 Session, 3 Live Stream, 4 Ultra Low Power (matches the mode LED blinks) |
+
+Distance plus liquid height is always 560 in the broadcasts. The broadcast distance and
+the RAPT app's distance come from separate measurements and have differed by 3-9 mm.
+That is ignored; the ESP32 uses the broadcast value, and readings jitter anyway.
+
+Some advertisements are empty (no reading, like the second capture below), for example
+while the RAPT app is connected or just after it forces a reading. The ESP32 ignores
+them. To capture one with data: close the RAPT app, press the sensor's button, wait
+10-15 s, then copy the data.
+
+### Captures
+
+Payloads after the company ID, for decoder tests:
+
+| Payload | Decoded |
+| --- | --- |
+| `5054A1E54C66F9E13313001D020AE803B70703` | Distance 19 mm, height 541 mm, battery 1000, 19.75 °C |
+| `5054A1E54C66F9E1330000000000FFFF008001` | No reading (all values empty) |
+| `5054A1E54C66F9E1338500AB010AE8031B0801` | Distance 133 mm, height 427 mm, battery 1000, 20.75 °C. Ruler and RAPT app: 136 mm, 14.9 L |
+| `5054A1E54C66F9E1337001C0000A5103850701` | Distance 368 mm, height 192 mm, battery 849, 19.25 °C. Old batteries. RAPT app: 359 mm, 6.9 L, battery 84% |
+
+Full advertisement for the 136 mm capture:
+`0x020106110700008418B0F2BF081592060A5450415216FF52415054A1E54C66F9E1338500AB010AE8031B0801`
+
+### Litres and percentage
+
+```text
+litres     = capacity x (emptyDistance - distance) / (emptyDistance - fullDistance)
+             clamped to 0..capacity, shown rounded down to 0.1 L
+percentage = floor(litres / capacity x 100)
+```
+
+Constants: capacity 19 L, `emptyDistance` 552 mm and `fullDistance` 22 mm (about
+27.9 mm per litre), rounding down like the RAPT app. This matches every app reading so
+far. The first guess, from the app's custom 19 L vessel (563 mm and 17 mm), gave 7.0 L
+at 359 mm instead of 6.9 L. Keep the constants in one place so they can be updated
+from real kegs at the next keg change.
+
+| App distance | App volume | 552/22, rounded down |
+| --- | --- | --- |
+| About 17 mm | 19 L | 19.18, capped at 19 |
+| 133 mm | 15.0 L | 15.02 -> 15.0 |
+| 134 mm | 14.9 L | 14.98 -> 14.9 |
+| 135 mm | 14.9 L | 14.94 -> 14.9 |
+| 136 mm | 14.9 L | 14.91 -> 14.9 |
+| 250 mm | 10.8 L | 10.82 -> 10.8 |
+| 359 mm | 6.9 L | 6.91 -> 6.9 |
+
+## Display
+
+- **Top 400 x 400:** the uploaded image.
+- **Bottom 400 x 200 strip,** drawn by the ESP32:
+  - Top row: temperature on the left (`2.6°`), battery icon in the centre, litres on
+    the right (`14.9L`).
+  - Below: a horizontal bar with a black outline. Fill is green from 100% to 50%,
+    orange from 49% to 25% and red at 24% and below. Orange is a red and yellow
+    dither, tuned on the real screen. The percentage is centred in the bar in colours
+    that contrast with whatever is behind each part of the text.
+  - Battery icon: black outline, always shown. At 10% or more it has a green fill in
+    10% steps and no number. Below 10% it turns red and shows the number inside, in
+    1% steps.
+  - Laser dots: 1-3 dots matching the label on the laser's lid, so it is clear which
+    laser the tap is showing. Position to be tuned on the real screen.
+  - Mode icon, always shown next to the battery icon: a simple outline brain for
+    Smart or leaf for Eco (Ultra Low Power), matching the mode chosen for this tap.
+    Check it is recognisable on the real screen.
+  - Mode warning: an amber warning triangle next to the mode icon once the laser has
+    been in the other mode for over an hour. Session Mode and Live Stream never count.
+    Double-tapping the laser's Bluetooth button switches between the two. A battery
+    change or restart puts the laser back in Smart Mode.
+- **Special states:**
+  - No laser chosen: the strip shows "No laser".
+  - Nothing heard from the laser: keep showing the last values. With Smart chosen,
+    the laser broadcasts constantly, so silence for over about 15 minutes (tuned in
+    step 3) is a real problem: show a no signal icon (a crossed-out Bluetooth symbol)
+    next to the battery icon. One redraw when it appears, one when it clears. With Eco
+    chosen, a steady keg is silent for 10+ hours, so there is no warning. Either way,
+    flat batteries, the likely failure, show as the red battery icon first. No "last
+    updated" time on screen: it would be frozen at the last redraw. The web app's
+    Status dialog shows "last heard" live.
+  - Temperature or battery missing from an advertisement: keep the last known value.
+  - No saved image: show setup help instead. Before Wi-Fi is set up, that is the
+    access point name and password; once connected, it is
+    `http://<hostname>-<deviceId>.local`. Setup help never replaces a saved image, for
+    example after a power cut.
+
+## Redraw rules
+
+The panel can only redraw the whole screen, which flashes, so it redraws only when
+something shown changes.
+
+| Value | Rule |
+| --- | --- |
+| Level | 1% steps, rounded down. Only goes down; a rise of 5 points or more is a refill. Either change waits until the level has stayed the same for 1 minute (a debounce), so a pour or refill redraws once, after it has finished. In Ultra Low Power Mode this just delays the redraw by a minute. |
+| Battery | Use the highest reading from the last hour, to ignore sags while the laser fires. That value only goes down; a large rise (new batteries) shows immediately. |
+| Temperature | Updated whenever the screen redraws. On its own, it triggers a redraw only if it has moved 0.5° or more and the last redraw was at least an hour ago. |
+
+Force refresh in the settings menu still redraws on demand.
+
+## Firmware changes
+
+- **Always on:** remove deep sleep.
+- **Wi-Fi:** with saved Wi-Fi, retry every 30 s and never give up. After 5 minutes
+  without Wi-Fi, also open the setup access point while still retrying. Pause retries
+  while a phone is connected to the access point, and close it once Wi-Fi connects.
+  Sensor readings and display updates keep working without Wi-Fi.
+- **Storage:** keep Wi-Fi and sensor settings in the ESP32's settings storage (NVS) and
+  the image in its own partition, so `device:upload` and `device:upload:fs` erase
+  neither. Changing the partition table needs one full erase, so step 2 sets every
+  partition at once: two firmware slots of about 2 MB each (down from 3.2 MB, sized
+  by a test build with Bluetooth included), the web app files, the screen image, the
+  device log (1 MB) and the beer library (about 2.1 MB).
+- **Device log:** a rolling log in its own 1 MB partition, so uploads and firmware
+  updates keep it, for checking what happened later (and feeding it to Claude). It
+  records events, not every advertisement: each new reading (time, distance, mode,
+  battery, temperature, signal strength), a count of advertisements heard every 5
+  minutes, redraws and why, Wi-Fi drops, reboots and mode warnings. About 25 KB a
+  day, so roughly 6 weeks, oldest dropped first. Entries are held in memory and
+  written every few minutes to spare the flash, so a power cut loses at most those
+  minutes. Times come from the internet (NTP), or time since boot until Wi-Fi
+  connects.
+- **Beer library:** up to 30 beers per tap in their own partition, so uploads and
+  firmware updates keep them. Each is the cropped 400 x 400 picture as a JPEG of at
+  most 70 KB, plus a thumbnail and when it was last shown on a tap. The web app does
+  all the image work; the firmware only stores, lists and deletes them, and uses the
+  checksum it already keeps for the screen image to spot duplicates. Other taps'
+  pages can read and delete them (CORS headers).
+- **Factory reset** replaces Forget Wi-Fi. It clears Wi-Fi, sensor and image, then
+  reboots into setup. It keeps the log and the beer library unless asked to clear
+  them too (each is a whole partition, so clearing it is one erase).
+- **Lasers:** a shared list in `config/` (laser number and address) is built into
+  every tap. Each tap stores which laser it shows and which mode it expects (Smart by
+  default). RAPT sensors not in the list can
+  still be chosen by address. Changing laser resets the shown values straight away.
+  Nothing stops two taps showing the same laser; the dots make it visible.
+- **Over-the-air updates:** `ArduinoOTA` with a password. The new partition table keeps
+  two firmware slots, and `pnpm device:upload --ota` uploads over Wi-Fi to the
+  profile's address using PlatformIO's `espota` protocol. The first OTA-capable
+  firmware goes on over USB.
+- **Hostnames:** the build scripts and web app use the real
+  `<hostname>-<deviceId>.local` address, with one profile per tap in `config/`.
+- **Status dialog:** add the sensor address, chosen and actual mode, last reading,
+  signal strength and time since the last reading.
+
+## Web app changes
+
+- The image area is 400 x 400. Image mode takes an image of any size and fits it into
+  the square: Fit (the whole image, padded with white, which suits KegLand's product
+  shots) or Fill (cropped to a square, drag to choose which part shows). Text mode
+  renders at 400 x 400. Uploads become 80,000 bytes. Ways to give it an image:
+  - Choose file, as now.
+  - An "Image address" text field next to it. Pasting an address loads the image
+    straight away. On a laptop: right-click the image, Copy Image Address.
+  - Pasting a picture (Ctrl+V, or Copy Image on a laptop) into the same field. Check
+    in step 5 whether a picture copied on a phone pastes too; if not, Save to Photos
+    and Choose file still works, without the resizing.
+
+  KegLand's images (Shopify) let other pages read them, but their product pages
+  don't. Pasting a product page link, or an image from a site that blocks it, would
+  need the ESP32 to fetch it instead; left for later.
+- Beer library, for beers made again (image mode only; text mode is a last resort):
+  - Sending a beer also saves it to this tap's library unless it is already there.
+    Each tap keeps a copy of every beer it has shown, so a dead tap loses nothing.
+  - A Library button opens one grid of thumbnails from all three taps, each beer
+    once, sorted by when it was last on a tap, with that date under it (for example
+    "last on tap 2, Mar 2026"), and this tap's count (for example "27 of 30").
+    Picking a beer loads it into the preview, the same as choosing a file.
+  - Select several thumbnails, then "Remove 3" deletes them from every tap.
+  - When this tap is full, Send opens the same grid to choose what to remove, or
+    "Send without saving". Nothing is ever removed automatically, because the oldest
+    beers may be the ones made most often.
+- The preview shows the whole screen, including a close copy of the strip, with
+  controls for percentage (slider and number input), temperature and battery, and
+  the chosen mode's icon.
+- "Show on device" sends the preview values to the device for testing.
+- A laser picker next to Send, and in first-time setup (after Wi-Fi, with Skip). It
+  lists each laser's dots, current reading, mode and when it was last heard. It also
+  sets the mode this tap expects:
+  - Smart (default): screen a few minutes behind a pour, RAPT app works, batteries
+    changed more often.
+  - Eco (Ultra Low Power): batteries last longer, screen up to about an hour behind.
+
+  A laser in the other mode says how to fix it: "double-tap its Bluetooth button".
+- Tap switcher: a large tap badge in the header (for example "Tap 2") and a dropdown
+  linking to the other taps' pages, built from the profiles in `config/`.
+- Settings: Status, Force refresh, Download log (a CSV file), Reboot and Factory
+  reset.
+- Factory reset asks first, in a dialog like today's Forget Wi-Fi one. It says what
+  will be cleared (Wi-Fi, laser and screen image) and that the device restarts in
+  setup, with two checkboxes, unticked by default:
+  - Also clear the log.
+  - Also clear this tap's beer library. Copies on other taps stay, so those beers
+    still show in the library.
+
+## Steps
+
+Each step ends with something visible to check.
+
+0. **Capture advertisements.** Done, including the Ultra Low Power and Smart Mode
+   logs.
+1. **TypeScript decoder:** a new workspace package that parses advertisements and
+   converts distance to litres and percentage, tested with the captures above.
+   Optionally, a Node script that prints live readings from the laptop's Bluetooth.
+2. **Always-on housekeeping:** deep sleep, Wi-Fi retry, settings storage, the new
+   partition table (including the library's space), the device log and Download log,
+   factory reset, over-the-air updates and the hostname fix. Test by turning the router off for 10 minutes, doing a
+   filesystem upload, running a factory reset, and uploading over Wi-Fi, then
+   checking the downloaded log shows all of it.
+3. **ESP32 listens:** passive Bluetooth scanning, with a C++ decoder tested on the
+   laptop against the same captures. Readings, signal strength and missed readings
+   show in the serial log, the device log and the Status dialog.
+4. **Lasers:** the shared laser list, the picker (with the mode choice) next to Send
+   and in setup, and the dots and mode icon on screen.
+5. **New layout:** the 400 x 400 image area (any image size with Fit or Fill, pasting
+   an image address or an image) and full-screen preview with controls in the web
+   app, the strip drawn by the firmware, "Show on device" and the tap switcher.
+6. **Beer library:** storage on each tap, the shared grid, removing several at once
+   and the prompt when full. Test by sending a beer on one tap and picking it on
+   another.
+7. **Redraw rules,** special states (including the mode warning and no signal icon)
+   and the setup help screen.
+8. **Later:** RAPT cloud upload.
+
+## Open questions and later ideas
+
+- **Smart or Eco, a per-tap choice (2026-11-02):** default Smart, because the screen
+  stays a few minutes behind a pour and a silent sensor can be flagged. Eco (Ultra
+  Low Power) is there if Smart's battery drain turns out too high, at the cost of the
+  screen being up to about an hour behind. Whether Eco reports a single 500 ml pour
+  (about 14 mm) is untested; step 3's logs will show it. Laser 1 was logged with a
+  laptop; each Ultra Low Power broadcast lasts 2-5 seconds (3-14 advertisements
+  caught):
+  - Switched to Ultra Low Power at 20:16:31; 20:46 and 21:16 skipped.
+  - 21:46:36 to 02:17:38: every slot, 10 readings. The first reported a 9 cm lift
+    made at about 21:30 (like pouring 3 L at once), 16 minutes late.
+  - 02:17:38 to 10:43: nothing heard for 8.5 hours, until a button press. Unproven:
+    the laptop was later found not scanning (see below), so it may have missed these.
+  - Lifted about 25 mm at 10:51 and 12 mm at about 11:26 (two "pints"). First report
+    at 11:43:36, 52 minutes after the first lift. Then 12:43, 13:13, 13:43, 14:14,
+    15:14 and 15:44. Skipped 11:13 (after the level had changed), 12:13 and 14:44,
+    while the laptop was clearly listening.
+  - Nothing heard 16:14-17:44 because the laptop's Bluetooth was restarted (to fix a
+    mouse), which stopped scanning. The logger now records scanning changes and
+    restarts it.
+  - For comparison, Smart Mode (2026-11-01 evening): lowering the sensor 3 cm started
+    Session Mode, with a new reading about every 35 seconds for 5 minutes. It then
+    switched to Smart Mode by itself at 18:20:37 and advertised constantly (up to 12
+    times a minute), but with the same reading, byte for byte, until it was switched
+    back at 19:27, an hour later. (The next evening showed why: it only updates the
+    reading when the level changes.)
+  - Switched back to Ultra Low Power at 19:27:05 with no level change, then nothing
+    at all until at least 05:56 the next morning (10.5 hours), with the laptop
+    scanning the whole time. So the sensor mostly reports after the level changes
+    (a few hours of half-hourly readings, then quiet) and stays silent while the
+    level is steady. No check-in seen within 10.5 hours.
+  - Smart Mode, 2026-11-02 evening (3 hours logged): removing a block as it was
+    switched to Smart started Session Mode at 18:28:21, a new reading about every 35
+    seconds for 4 minutes, then back to Smart at 18:36. Idle, the reading stayed the
+    same for an hour. A lift at about 19:39 was reported at 19:41:07, in Session
+    Mode, which went back to Smart at 19:55 (with Live Stream from 19:45 to 19:48, not
+    started on purpose). Putting the block back (232 to 209 mm) was reported at
+    20:45:38, back to Smart at 20:52.
+    Session readings jitter by 1-3 mm. The longest gap between advertisements heard
+    was 88 seconds, so the 15-minute no signal limit has plenty of margin. In
+    Session and Live Stream the battery read as low as 76.7%, against 85.2-85.6% in
+    Smart, so the highest-in-an-hour battery rule is needed. Smart readings went from
+    85.6% to 85.2% over the 3 hours, too short to judge the drain.
+  The RAPT docs say a bonded receiver "detects a volume change", but the same page
+  calls the sensor the "Screen Board" elsewhere, so the sensor most likely starts
+  Session Mode by itself. Bonding would bring nothing the broadcasts don't already
+  give. Step 3 must check the ESP32's catch rate, because it shares one radio between
+  Wi-Fi and Bluetooth.
+- **Calibration:** check the constants against a real keg at the next keg change.
+- **Orange:** tune the dither on the real screen.
+- **Signal margin:** watch signal strength in step 3 and move the antenna if readings
+  are missed.
+- **RAPT cloud:** the public API has no level device type. External Devices (paid
+  subscription, one reading per 15 minutes) only accepts temperature, gravity,
+  pressure, signal strength and battery, so the level would have to go in a spare
+  field. Decide later.
