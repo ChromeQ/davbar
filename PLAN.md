@@ -294,7 +294,14 @@ Each step ends with something visible to check.
    another.
 7. **Redraw rules,** special states (including the mode warning and no signal icon)
    and the setup help screen.
-8. **Later:** RAPT cloud upload.
+8. **Wrap up,** the last commits on `keg-level` before merging into master: move the
+   lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
+   the display behaves into the READMEs), then move this plan to
+   `docs/plans/2026-11-keg-level.md` with a line at the top saying it is done and
+   when it was merged. After that the archived plan is never edited; fixes go in the
+   docs. Ideas still marked Later stay listed there, and each gets its own new plan
+   file when picked up.
+9. **Later:** RAPT cloud upload.
 
 ## Open questions and later ideas
 
