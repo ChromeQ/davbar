@@ -199,7 +199,9 @@ Force refresh in the settings menu still redraws on demand.
   (with the reason) and mode warnings. About 25 KB a day, so roughly 6 weeks, oldest
   dropped first. Entries are held in memory and written every few minutes to spare
   the flash, so a power cut loses at most those minutes. Times come from the
-  internet (NTP), or time since boot until Wi-Fi connects.
+  internet (NTP), or time since boot until Wi-Fi connects. Done in step 2b, with
+  boots, Wi-Fi, the setup access point, uploads and redraws; the sensor entries come
+  in step 3.
 - **Beer library:** up to 30 beers per tap in the data partition, so uploads and
   firmware updates keep them. Each is the cropped 400 x 400 picture as a JPEG of at
   most 70 KB, plus a thumbnail and when it was last shown on a tap. The web app does
@@ -208,7 +210,8 @@ Force refresh in the settings menu still redraws on demand.
   pages can read and delete them (CORS headers).
 - **Factory reset** replaces Forget Wi-Fi. It clears Wi-Fi, sensor and image, then
   reboots into setup. It keeps the log and the beer library unless asked to clear
-  them too.
+  them too. Done in step 2b, apart from the sensor (step 4) and library (step 6).
+  The screen keeps the last picture until the setup help screen arrives in step 7.
 - **Lasers:** a shared list in `config/` (laser number and address) is built into
   every tap. Each tap stores which laser it shows and which mode it expects (Smart by
   default). RAPT sensors not in the list can
@@ -266,12 +269,12 @@ Force refresh in the settings menu still redraws on demand.
   linking to the other taps' pages, built from the profiles in `config/`.
 - Settings: Status, Force refresh, Download log (a CSV file), Reboot and Factory
   reset.
-- Factory reset asks first, in a dialog like today's Forget Wi-Fi one. It says what
+- Factory reset asks first, in a dialog like the old Forget Wi-Fi one. It says what
   will be cleared (Wi-Fi, laser and screen image) and that the device restarts in
   setup, with two checkboxes, unticked by default:
-  - Also clear the log.
-  - Also clear this tap's beer library. Copies on other taps stay, so those beers
-    still show in the library.
+  - Also clear the log. Done in step 2b, with Download log.
+  - Also clear this tap's beer library (step 6). Copies on other taps stay, so those
+    beers still show in the library.
 
 ## Steps
 

@@ -21,3 +21,8 @@ bool mountStorage()
 
     return webMounted && dataMounted;
 }
+
+bool removeDataFile(const String& path)
+{
+    return !DataFS.exists(path) || DataFS.remove(path);
+}

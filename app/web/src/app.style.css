@@ -587,6 +587,24 @@ h2 {
   text-align: right;
 }
 
+.checkbox-option {
+  display: flex;
+  margin: -6px 0 24px;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkbox-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -630,7 +648,7 @@ h2 {
   background: rgba(239, 45, 86, 0.08);
 }
 
-.forget-modal-icon {
+.factory-reset-modal-icon {
   color: var(--accent);
   border-color: rgba(239, 45, 86, 0.25);
   background: rgba(239, 45, 86, 0.08);

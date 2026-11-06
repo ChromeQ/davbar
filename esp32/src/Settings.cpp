@@ -6,10 +6,11 @@ static const char* wifiNamespace = "wifi";
 
 bool loadWifiSettings(String& ssid, String& password)
 {
+    // Opened for writing so a missing namespace is created rather than logged
+    // as an error before Wi-Fi is first saved.
     Preferences preferences;
-    if (!preferences.begin(wifiNamespace, true))
+    if (!preferences.begin(wifiNamespace, false))
     {
-        // The namespace doesn't exist until Wi-Fi is first saved.
         return false;
     }
 

@@ -23,8 +23,14 @@ The device is powered over USB and always on.
    startup, it redraws only if the stored image differs from the one it last drew.
 
 The web app's device settings menu can show the device status, force a display
-refresh, reboot the device, or forget the saved Wi-Fi network and reboot into
-setup mode.
+refresh, download the device log, reboot the device, or factory reset it. A
+factory reset clears the saved Wi-Fi network and screen image, then reboots into
+setup mode. It keeps the log unless "Also clear the log" is ticked.
+
+The device log records events such as boots and why they happened, Wi-Fi drops
+and reconnects (with the reason), the setup access point opening and closing,
+uploads, and redraws (with the reason and how long they took). It holds about the
+last 1 MB of entries, and survives uploads and firmware updates.
 
 ## Prerequisites
 
