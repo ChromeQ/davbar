@@ -1,9 +1,9 @@
 #include "ImageLoader.h"
-#include <LittleFS.h>
+#include "Storage.h"
 
 bool loadImage(uint8_t *buffer)
 {
-    File file = LittleFS.open("/image.bin", "r");
+    File file = DataFS.open("/image.bin", "r");
 
     if (!file)
     {

@@ -7,26 +7,24 @@ DavBar Keg Display is a system for creating and showing custom 400 x 600 content
 
 ## How the device works
 
-1. **Wi-Fi setup.** If no Wi-Fi network is saved, or the saved network cannot be
-   joined within about 15 seconds, the device starts a setup access point (`DavBar
-   Tap 1` with the default profile). Connecting to it opens a captive setup page
-   that scans for nearby networks. The device tests the selected network before
-   saving it, then reboots.
+The device is powered over USB and always on.
+
+1. **Wi-Fi setup.** If no Wi-Fi network is saved, the device starts a setup access
+   point (`DavBar Tap 1` with the default profile). Connecting to it opens a
+   captive setup page that scans for nearby networks. The device tests the
+   selected network before saving it, then reboots. If the saved network drops, the
+   device retries every 30 seconds, and after 5 minutes without Wi-Fi it also opens
+   the setup access point until Wi-Fi is back.
 2. **Web app.** Once connected, the device serves the web app at
    `http://<hostname>-<deviceId>.local` (`http://davbar-tap1.local` with the
    default profile). Compose text or choose a 400 x 600 image, check the Spectra 6
    preview, and send it to the device.
-3. **Display and sleep.** After an upload, the device redraws the e-paper display
-   and enters deep sleep. No wake-up source is configured, so it stays asleep until
-   it is reset or power-cycled.
-4. **Startup.** On startup, the device compares the stored image with the image it
-   last drew. If they match, or no image has been uploaded yet, it skips the redraw
-   and stays awake serving the web app until the next upload. Otherwise it draws
-   the stored image and returns to deep sleep.
+3. **Display.** After an upload, the device redraws the e-paper display. On
+   startup, it redraws only if the stored image differs from the one it last drew.
 
 The web app's device settings menu can show the device status, force a display
 refresh, reboot the device, or forget the saved Wi-Fi network and reboot into
-setup mode. A forced refresh redraws the display but keeps the device awake.
+setup mode.
 
 ## Prerequisites
 

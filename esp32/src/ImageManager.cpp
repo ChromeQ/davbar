@@ -1,13 +1,12 @@
 #include "ImageManager.h"
 
-#include <LittleFS.h>
 #include <esp_crc.h>
-#include <esp_sleep.h>
 #include <new>
 
 #include "DEV_Config.h"
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
+#include "Storage.h"
 
 static bool imageUpdatePending = false;
 static bool forcedImageUpdatePending = false;
@@ -80,8 +79,8 @@ ImageUploadState* beginImageUpload(
         return state;
     }
 
-    LittleFS.remove("/image.upload");
-    state->file = LittleFS.open("/image.upload", "w");
+    DataFS.remove("/image.upload");
+    state->file = DataFS.open("/image.upload", "w");
 
     if (!state->file)
     {
@@ -139,30 +138,30 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     if (error != ImageUploadError::None)
     {
-        LittleFS.remove("/image.upload");
+        DataFS.remove("/image.upload");
         return { false, error, imageUploadErrorMessage(error) };
     }
 
-    LittleFS.remove("/image.previous");
+    DataFS.remove("/image.previous");
 
     if (
-        LittleFS.exists("/image.bin") &&
-        !LittleFS.rename("/image.bin", "/image.previous")
+        DataFS.exists("/image.bin") &&
+        !DataFS.rename("/image.bin", "/image.previous")
     )
     {
-        LittleFS.remove("/image.upload");
+        DataFS.remove("/image.upload");
         error = ImageUploadError::ReplaceFailed;
         return { false, error, imageUploadErrorMessage(error) };
     }
 
-    if (!LittleFS.rename("/image.upload", "/image.bin"))
+    if (!DataFS.rename("/image.upload", "/image.bin"))
     {
-        LittleFS.rename("/image.previous", "/image.bin");
+        DataFS.rename("/image.previous", "/image.bin");
         error = ImageUploadError::SaveFailed;
         return { false, error, imageUploadErrorMessage(error) };
     }
 
-    LittleFS.remove("/image.previous");
+    DataFS.remove("/image.previous");
 
     Serial.printf("Image upload complete (%u bytes)\n", IMAGE_SIZE);
 
@@ -183,7 +182,7 @@ void cancelImageUpload(ImageUploadState* state)
         state->file.close();
     }
 
-    LittleFS.remove("/image.upload");
+    DataFS.remove("/image.upload");
     delete state;
 }
 
@@ -215,7 +214,7 @@ void processImageManager()
 
 static bool displayedImageCrcMatches(uint32_t imageCrc)
 {
-    File file = LittleFS.open(displayedImageCrcPath, "r");
+    File file = DataFS.open(displayedImageCrcPath, "r");
     if (!file || file.size() != sizeof(imageCrc))
     {
         return false;
@@ -234,9 +233,9 @@ static bool displayedImageCrcMatches(uint32_t imageCrc)
 
 static bool saveDisplayedImageCrc(uint32_t imageCrc)
 {
-    LittleFS.remove(pendingDisplayedImageCrcPath);
+    DataFS.remove(pendingDisplayedImageCrcPath);
 
-    File file = LittleFS.open(pendingDisplayedImageCrcPath, "w");
+    File file = DataFS.open(pendingDisplayedImageCrcPath, "w");
     if (!file)
     {
         return false;
@@ -250,17 +249,17 @@ static bool saveDisplayedImageCrc(uint32_t imageCrc)
 
     if (bytesWritten != sizeof(imageCrc))
     {
-        LittleFS.remove(pendingDisplayedImageCrcPath);
+        DataFS.remove(pendingDisplayedImageCrcPath);
         return false;
     }
 
-    LittleFS.remove(displayedImageCrcPath);
-    if (!LittleFS.rename(
+    DataFS.remove(displayedImageCrcPath);
+    if (!DataFS.rename(
         pendingDisplayedImageCrcPath,
         displayedImageCrcPath
     ))
     {
-        LittleFS.remove(pendingDisplayedImageCrcPath);
+        DataFS.remove(pendingDisplayedImageCrcPath);
         return false;
     }
 
@@ -306,18 +305,4 @@ static void updateDisplay(bool force)
     }
 
     Serial.println("Display update complete");
-
-    if (force)
-    {
-        Serial.println("Keeping device awake after forced update");
-        return;
-    }
-
-    Serial.println("Entering deep sleep");
-
-    delay(2000);
-    
-    Serial.flush();
-
-    esp_deep_sleep_start();
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-bool connectWifi();
+void startWifi();
 
 void processWifiManager();
 
