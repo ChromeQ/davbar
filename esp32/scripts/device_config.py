@@ -1,26 +1,38 @@
 Import("env")
 
+import hashlib
 import json
 import os
 from pathlib import Path
 
 repository_directory = Path(env["PROJECT_DIR"]).parent
-selected_path = os.environ.get("DEVICE_CONFIG", "config/default.json")
+
+
+def read_json(path, description):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Unable to read {description} {path}: {error}") from error
+
+
+# The device commands in ../app always choose a profile. Raw PlatformIO builds,
+# including the IDE's, fall back to the example so they still compile.
+selected_path = os.environ.get("DEVICE_CONFIG")
+if not selected_path:
+    selected_path = "config/example.json"
+    print("No DEVICE_CONFIG set, so building with config/example.json")
+
 config_path = Path(selected_path)
 if not config_path.is_absolute():
     config_path = repository_directory / config_path
 
-try:
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-except (OSError, json.JSONDecodeError) as error:
-    raise RuntimeError(f"Unable to read device config {config_path}: {error}") from error
+config = read_json(config_path, "device config")
 
 required_keys = (
     "brandName",
     "deviceName",
     "deviceId",
     "hostname",
-    "accessPointPassword",
 )
 for key in required_keys:
     if not isinstance(config.get(key), str) or not config[key].strip():
@@ -30,8 +42,32 @@ access_point_name = f'{config["brandName"]} {config["deviceName"]}'
 if len(access_point_name.encode("utf-8")) > 32:
     raise RuntimeError("Derived access point name must not exceed 32 UTF-8 bytes.")
 
-if not 8 <= len(config["accessPointPassword"]) <= 63:
+mdns_hostname = f'{config["hostname"]}-{config["deviceId"]}'
+
+# Passwords live in a git-ignored file, shared by every tap, so they stay out of
+# the repository and the web app.
+secrets_path = repository_directory / "config/secrets.json"
+example_secrets_path = repository_directory / "config/secrets.example.json"
+if not secrets_path.exists():
+    raise RuntimeError(
+        f"Missing {secrets_path}. Copy config/secrets.example.json to "
+        "config/secrets.json and set both passwords."
+    )
+
+secrets = read_json(secrets_path, "secrets")
+example_secrets = read_json(example_secrets_path, "example secrets")
+
+for key in ("accessPointPassword", "otaPassword"):
+    if not isinstance(secrets.get(key), str) or not secrets[key]:
+        raise RuntimeError(f'{secrets_path} must define a non-empty string "{key}".')
+    if secrets[key] == example_secrets.get(key):
+        raise RuntimeError(f'{secrets_path} still has the example "{key}". Choose a password.')
+
+if not 8 <= len(secrets["accessPointPassword"]) <= 63:
     raise RuntimeError("accessPointPassword must be 8-63 characters.")
+
+# The firmware only needs the hash to check the password espota sends.
+ota_password_hash = hashlib.md5(secrets["otaPassword"].encode("utf-8")).hexdigest()
 
 generated_directory = Path(env.subst("$BUILD_DIR")) / "generated"
 generated_directory.mkdir(parents=True, exist_ok=True)
@@ -44,16 +80,34 @@ header_path.write_text(
     f'    constexpr char DeviceName[] = {json.dumps(config["deviceName"])};\n'
     f'    constexpr char DeviceId[] = {json.dumps(config["deviceId"])};\n'
     f'    constexpr char Hostname[] = {json.dumps(config["hostname"])};\n'
+    f'    constexpr char MdnsHostname[] = {json.dumps(mdns_hostname)};\n'
     f'    constexpr char AccessPointName[] = {json.dumps(access_point_name)};\n'
-    f'    constexpr char AccessPointPassword[] = {json.dumps(config["accessPointPassword"])};\n'
+    f'    constexpr char AccessPointPassword[] = {json.dumps(secrets["accessPointPassword"])};\n'
+    f'    constexpr char OtaPasswordHash[] = {json.dumps(ota_password_hash)};\n'
     "}\n",
     encoding="utf-8",
 )
 
 env.Append(CPPPATH=[str(generated_directory)])
 
-print(f"Device config: {config_path.relative_to(repository_directory)}")
+# pnpm device:upload --ota sets DEVICE_OTA, which uploads over Wi-Fi to the
+# profile's address instead of USB.
+if os.environ.get("DEVICE_OTA") == "1":
+    env.Replace(
+        UPLOAD_PROTOCOL="espota",
+        UPLOAD_PORT=f"{mdns_hostname}.local",
+        UPLOAD_FLAGS=[f'--auth={secrets["otaPassword"]}'],
+    )
+
+try:
+    shown_path = config_path.relative_to(repository_directory)
+except ValueError:
+    shown_path = config_path
+
+print(f"Device config: {shown_path}")
 print(f'Brand: {config["brandName"]}')
 print(f'Device: {config["deviceName"]} ({config["deviceId"]})')
 print(f"Access point: {access_point_name}")
-print(f'Hostname: {config["hostname"]}.local')
+print(f"Hostname: {mdns_hostname}.local")
+if os.environ.get("DEVICE_OTA") == "1":
+    print(f"Upload: over Wi-Fi to {mdns_hostname}.local")

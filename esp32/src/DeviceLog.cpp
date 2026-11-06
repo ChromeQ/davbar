@@ -2,6 +2,7 @@
 
 #include <esp32s3/rom/rtc.h>
 #include <esp_ota_ops.h>
+#include <esp_sntp.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
@@ -26,7 +27,9 @@ static const size_t flushThreshold = 4096;
 // If writing keeps failing, stop holding entries in memory beyond this.
 static const size_t maxPendingSize = 16 * 1024;
 
-// Before 2021 the clock hasn't been set from the internet yet.
+// Before 2021 the clock hasn't been set yet. After a power cut it starts at 1970;
+// after a restart it carries on from before, roughly, until the internet time
+// arrives.
 static const time_t clockSetAfter = 1609459200;
 
 // Entries come from both the main loop and web requests, which run in another
@@ -35,7 +38,9 @@ static SemaphoreHandle_t logMutex = nullptr;
 static String pending;
 static uint32_t currentSegment = 1;
 static unsigned long lastFlushAt = 0;
-static bool clockSetLogged = false;
+// Set from the time sync task when the internet time arrives.
+static volatile bool clockSynced = false;
+static bool clockSyncLogged = false;
 
 static String segmentPath(uint32_t segment)
 {
@@ -211,6 +216,13 @@ void startDeviceLog()
 
     lastFlushAt = millis();
 
+    sntp_set_time_sync_notification_cb(
+        [](struct timeval*)
+        {
+            clockSynced = true;
+        }
+    );
+
     logEvent(
         "boot",
         resetReasonText(esp_reset_reason()) + ", firmware " + firmwareId()
@@ -244,11 +256,11 @@ void processDeviceLog()
         return;
     }
 
-    if (!clockSetLogged && time(nullptr) >= clockSetAfter)
+    if (clockSynced && !clockSyncLogged)
     {
-        // Entries before this one only have an uptime.
-        clockSetLogged = true;
-        logEvent("clock set");
+        // Times before this entry are missing or approximate.
+        clockSyncLogged = true;
+        logEvent("clock synced");
     }
 
     xSemaphoreTake(logMutex, portMAX_DELAY);

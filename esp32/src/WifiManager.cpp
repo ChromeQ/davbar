@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
@@ -287,17 +288,13 @@ static void handleReboot(AsyncWebServerRequest* request)
 
 static void handleLog(AsyncWebServerRequest* request)
 {
-    String hostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
-
-    sendDeviceLog(request, hostname + "-log.csv");
+    sendDeviceLog(request, String(DeviceConfig::MdnsHostname) + "-log.csv");
 }
 
 static void handleStatus(AsyncWebServerRequest* request)
 {
-    String hostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
-
     JsonDocument doc;
-    doc["hostname"] = hostname;
+    doc["hostname"] = DeviceConfig::MdnsHostname;
     doc["ip"] = WiFi.localIP().toString();
     doc["wifi"]["ssid"] = WiFi.SSID();
     doc["wifi"]["rssi"] = WiFi.RSSI();
@@ -466,21 +463,89 @@ static void beginSavedWifi()
     lastWifiAttemptAt = millis();
 }
 
+static const char* otaErrorText(ota_error_t error)
+{
+    switch (error)
+    {
+        case OTA_AUTH_ERROR:
+            return "wrong password";
+        case OTA_BEGIN_ERROR:
+            return "couldn't start, the update may be too big";
+        case OTA_CONNECT_ERROR:
+            return "couldn't connect back to the uploader";
+        case OTA_RECEIVE_ERROR:
+            return "the upload stopped part way";
+        case OTA_END_ERROR:
+            return "the upload didn't check out";
+        default:
+            return "unknown";
+    }
+}
+
+static void startOverTheAirUpdates()
+{
+    ArduinoOTA.setHostname(DeviceConfig::MdnsHostname);
+    ArduinoOTA.setPasswordHash(DeviceConfig::OtaPasswordHash);
+    // Filesystem uploads go to the web app partition, never the data partition.
+    ArduinoOTA.setPartitionLabel("spiffs");
+    // mDNS is already running for the web app.
+    ArduinoOTA.setMdnsEnabled(false);
+
+    ArduinoOTA.onStart(
+        []()
+        {
+            bool webApp = ArduinoOTA.getCommand() == U_SPIFFS;
+
+            logEvent("update started", webApp ? "web app" : "firmware");
+            flushDeviceLog();
+
+            if (webApp)
+            {
+                LittleFS.end();
+            }
+        }
+    );
+
+    // The device restarts after a successful update, and the boot entry shows
+    // the new firmware's ID.
+    ArduinoOTA.onEnd(
+        []()
+        {
+            logEvent("update finished");
+            flushDeviceLog();
+        }
+    );
+
+    ArduinoOTA.onError(
+        [](ota_error_t error)
+        {
+            logEvent("update failed", otaErrorText(error));
+
+            if (ArduinoOTA.getCommand() == U_SPIFFS)
+            {
+                LittleFS.begin();
+            }
+        }
+    );
+
+    ArduinoOTA.begin();
+}
+
 static void startNetworkServices()
 {
     configTime(0, 0, "pool.ntp.org", "time.nist.gov");
 
-    String mdnsHostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
-
-    if (!MDNS.begin(mdnsHostname.c_str()))
+    if (!MDNS.begin(DeviceConfig::MdnsHostname))
     {
         logEvent("mDNS failed to start");
     }
     else
     {
         Serial.println("mDNS started");
-        Serial.printf("Visit: http://%s.local\n", mdnsHostname.c_str());
+        Serial.printf("Visit: http://%s.local\n", DeviceConfig::MdnsHostname);
     }
+
+    startOverTheAirUpdates();
 }
 
 static String wifiFailureReasonName()
@@ -613,6 +678,9 @@ void processWifiManager()
     }
 
     processSavedWifi();
+
+    // Does nothing until WiFi has first connected.
+    ArduinoOTA.handle();
 
     if (accessPointOpen())
     {

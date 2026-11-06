@@ -2,6 +2,5 @@
   "brandName": "DavBar",
   "deviceName": "Tap 1",
   "deviceId": "tap1",
-  "hostname": "davbar",
-  "accessPointPassword": "davbar123"
+  "hostname": "davbar"
 }

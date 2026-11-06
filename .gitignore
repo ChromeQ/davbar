@@ -3,3 +3,4 @@
 !.vscode/extensions.json
 
 node_modules/
+config/secrets.json
