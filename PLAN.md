@@ -182,22 +182,25 @@ Force refresh in the settings menu still redraws on demand.
   without Wi-Fi, also open the setup access point while still retrying. Pause retries
   while a phone is connected to the access point, and close it once Wi-Fi connects.
   Sensor readings and display updates keep working without Wi-Fi.
-- **Storage:** keep Wi-Fi and sensor settings in the ESP32's settings storage (NVS) and
-  the image in its own partition, so `device:upload` and `device:upload:fs` erase
-  neither. Changing the partition table needs one full erase, so step 2 sets every
-  partition at once: two firmware slots of about 2 MB each (down from 3.2 MB, sized
-  by a test build with Bluetooth included), the web app files, the screen image, the
-  device log (1 MB) and the beer library (about 2.1 MB).
-- **Device log:** a rolling log in its own 1 MB partition, so uploads and firmware
-  updates keep it, for checking what happened later (and feeding it to Claude). It
-  records events, not every advertisement: each new reading (time, distance, mode,
-  battery, temperature, signal strength), a count of advertisements heard every 5
-  minutes, redraws and why, Wi-Fi drops, reboots and mode warnings. About 25 KB a
-  day, so roughly 6 weeks, oldest dropped first. Entries are held in memory and
-  written every few minutes to spare the flash, so a power cut loses at most those
-  minutes. Times come from the internet (NTP), or time since boot until Wi-Fi
-  connects.
-- **Beer library:** up to 30 beers per tap in their own partition, so uploads and
+- **Storage:** keep Wi-Fi and sensor settings in the ESP32's settings storage (NVS),
+  and the screen image, log and beer library in one data partition (`store`, 3.9 MB),
+  so `device:upload` and `device:upload:fs` erase neither. One data partition rather
+  than one each, because LittleFS already handles flash wear and safe replacement;
+  the code caps the log and library sizes. Changing the partition table needs one
+  full erase, so step 2 sets every partition at once (see `esp32/partitions.csv`):
+  two firmware slots of 1.75 MB (down from 3.2 MB; a test build with Bluetooth
+  scanning and OTA was 1.06 MB), 512 KB for the web app files, and the data
+  partition. Done in step 2a.
+- **Device log:** a rolling log capped at 1 MB in the data partition, so uploads and
+  firmware updates keep it, for checking what happened later (and feeding it to
+  Claude). It records events, not every advertisement: each new reading (time,
+  distance, mode, battery, temperature, signal strength), a count of advertisements
+  heard every 5 minutes, redraws and why, Wi-Fi drops (with the reason), reboots
+  (with the reason) and mode warnings. About 25 KB a day, so roughly 6 weeks, oldest
+  dropped first. Entries are held in memory and written every few minutes to spare
+  the flash, so a power cut loses at most those minutes. Times come from the
+  internet (NTP), or time since boot until Wi-Fi connects.
+- **Beer library:** up to 30 beers per tap in the data partition, so uploads and
   firmware updates keep them. Each is the cropped 400 x 400 picture as a JPEG of at
   most 70 KB, plus a thumbnail and when it was last shown on a tap. The web app does
   all the image work; the firmware only stores, lists and deletes them, and uses the
@@ -205,7 +208,7 @@ Force refresh in the settings menu still redraws on demand.
   pages can read and delete them (CORS headers).
 - **Factory reset** replaces Forget Wi-Fi. It clears Wi-Fi, sensor and image, then
   reboots into setup. It keeps the log and the beer library unless asked to clear
-  them too (each is a whole partition, so clearing it is one erase).
+  them too.
 - **Lasers:** a shared list in `config/` (laser number and address) is built into
   every tap. Each tap stores which laser it shows and which mode it expects (Smart by
   default). RAPT sensors not in the list can

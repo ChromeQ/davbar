@@ -12,13 +12,25 @@
 
 #include "DeviceConfig.h"
 #include "ImageManager.h"
+#include "Settings.h"
+#include "Storage.h"
 
 static AsyncWebServer server(80);
 
 static DNSServer dnsServer;
 
+// With saved WiFi, retry every 30s forever. After 5 minutes without WiFi, also
+// open the setup access point so the network can be changed.
+static const unsigned long wifiRetryInterval = 30000;
+static const unsigned long fallbackAccessPointDelay = 5UL * 60 * 1000;
+
 static String ssid;
 static String password;
+static bool hasSavedWifi = false;
+static bool wifiConnected = false;
+static bool networkServicesStarted = false;
+static unsigned long lastWifiAttemptAt = 0;
+static unsigned long wifiOfflineSince = 0;
 static unsigned long restartAt = 0;
 
 enum class ConnectionState
@@ -33,61 +45,6 @@ static ConnectionState connectionState = ConnectionState::Idle;
 static String pendingSsid;
 static String pendingPassword;
 static unsigned long connectionStartedAt = 0;
-
-static bool loadCredentials()
-{
-    if (!LittleFS.exists("/wifi.json"))
-    {
-        Serial.println("No WiFi credentials found");
-        return false;
-    }
-
-    Serial.println("Opening wifi.json"); // TMP
-    File file = LittleFS.open("/wifi.json", "r");
-    if (!file)
-    {
-        Serial.println("Failed to open wifi.json");
-        return false;
-    }
-
-    JsonDocument doc;
-
-    DeserializationError error =
-        deserializeJson(doc, file);
-
-    file.close();
-
-    if (error)
-    {
-        Serial.println("Invalid wifi.json");
-        return false;
-    }
-
-    ssid = doc["ssid"].as<String>();
-    password = doc["password"].as<String>();
-
-    return !ssid.isEmpty();
-}
-
-static void saveCredentials(
-    const String& newSsid,
-    const String& newPassword
-)
-{
-    JsonDocument doc;
-
-    doc["ssid"] = newSsid;
-    doc["password"] = newPassword;
-
-    File file = LittleFS.open(
-        "/wifi.json",
-        "w"
-    );
-
-    serializeJson(doc, file);
-
-    file.close();
-}
 
 static void handleRoot(AsyncWebServerRequest* request)
 {
@@ -269,7 +226,7 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
 
 static void handleForgetWifi(AsyncWebServerRequest* request)
 {
-    if (LittleFS.exists("/wifi.json") && !LittleFS.remove("/wifi.json"))
+    if (!clearWifiSettings())
     {
         request->send(
             500,
@@ -326,7 +283,7 @@ static void handleStatus(AsyncWebServerRequest* request)
     doc["wifi"]["ssid"] = WiFi.SSID();
     doc["wifi"]["rssi"] = WiFi.RSSI();
 
-    File image = LittleFS.open("/image.bin", "r");
+    File image = DataFS.open("/image.bin", "r");
     if (image)
     {
         doc["image"]["size"] = image.size();
@@ -459,8 +416,124 @@ static void startAccessPoint()
 
     Serial.print("Setup IP: ");
     Serial.println(WiFi.softAPIP());
+}
 
-    startWebServer();
+static bool accessPointOpen()
+{
+    wifi_mode_t mode = WiFi.getMode();
+
+    return mode == WIFI_AP || mode == WIFI_AP_STA;
+}
+
+static void stopAccessPoint()
+{
+    Serial.println("Closing setup AP");
+
+    dnsServer.stop();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+}
+
+static void beginSavedWifi()
+{
+    Serial.printf("Connecting to %s...\n", ssid.c_str());
+
+    WiFi.begin(
+        ssid.c_str(),
+        password.c_str()
+    );
+
+    lastWifiAttemptAt = millis();
+}
+
+static void startNetworkServices()
+{
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+    String mdnsHostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
+
+    if (!MDNS.begin(mdnsHostname.c_str()))
+    {
+        Serial.println("Failed to start mDNS");
+    }
+    else
+    {
+        Serial.println("mDNS started");
+        Serial.printf("Visit: http://%s.local\n", mdnsHostname.c_str());
+    }
+}
+
+static void onWifiConnected()
+{
+    wifiConnected = true;
+
+    Serial.print("Connected to WiFi, IP address: ");
+    Serial.println(WiFi.localIP());
+
+    if (accessPointOpen())
+    {
+        stopAccessPoint();
+    }
+
+    if (!networkServicesStarted)
+    {
+        startNetworkServices();
+        networkServicesStarted = true;
+    }
+}
+
+static void onWifiLost()
+{
+    wifiConnected = false;
+    wifiOfflineSince = millis();
+
+    Serial.println("WiFi connection lost");
+}
+
+static void processSavedWifi()
+{
+    // A network chosen on the setup page is being tested; leave it alone.
+    if (!hasSavedWifi || connectionState == ConnectionState::Connecting)
+    {
+        return;
+    }
+
+    bool connected = WiFi.status() == WL_CONNECTED;
+
+    if (connected && !wifiConnected)
+    {
+        onWifiConnected();
+    }
+    else if (!connected && wifiConnected)
+    {
+        onWifiLost();
+    }
+
+    if (connected)
+    {
+        return;
+    }
+
+    unsigned long now = millis();
+
+    if (!accessPointOpen() && now - wifiOfflineSince >= fallbackAccessPointDelay)
+    {
+        Serial.println("No WiFi for 5 minutes");
+        startAccessPoint();
+    }
+
+    // Searching for the router disturbs the access point, so don't retry while
+    // a phone is connected to it.
+    if (accessPointOpen() && WiFi.softAPgetStationNum() > 0)
+    {
+        return;
+    }
+
+    if (now - lastWifiAttemptAt >= wifiRetryInterval)
+    {
+        WiFi.disconnect();
+        beginSavedWifi();
+    }
 }
 
 void processWifiManager()
@@ -476,9 +549,17 @@ void processWifiManager()
 
         if (status == WL_CONNECTED)
         {
-            Serial.println("WiFi test successful");
-            saveCredentials(pendingSsid, pendingPassword);
-            connectionState = ConnectionState::Success;
+            if (saveWifiSettings(pendingSsid, pendingPassword))
+            {
+                Serial.println("WiFi test successful");
+                connectionState = ConnectionState::Success;
+            }
+            else
+            {
+                Serial.println("WiFi test successful, but saving it failed");
+                WiFi.disconnect(false, true);
+                connectionState = ConnectionState::Failure;
+            }
         }
         else if (
             status == WL_CONNECT_FAILED ||
@@ -492,74 +573,35 @@ void processWifiManager()
         }
     }
 
-    wifi_mode_t mode = WiFi.getMode();
+    processSavedWifi();
 
-    if (mode == WIFI_AP || mode == WIFI_AP_STA)
+    if (accessPointOpen())
     {
         dnsServer.processNextRequest();
     }
 }
 
-bool connectWifi()
+void startWifi()
 {
-    if (!loadCredentials())
+    // Retries are timed here rather than by the WiFi library, and the network
+    // is saved in our own settings rather than the library's.
+    WiFi.persistent(false);
+    WiFi.setAutoReconnect(false);
+
+    hasSavedWifi = loadWifiSettings(ssid, password);
+
+    if (!hasSavedWifi)
     {
         Serial.println("No WiFi configured");
 
         startAccessPoint();
 
-        return false;
+        return;
     }
 
     WiFi.mode(WIFI_STA);
-    dnsServer.stop();
-
-    Serial.print("Connecting to ");
-    Serial.print(ssid);
-    Serial.println("...");
-
-    WiFi.begin(
-        ssid.c_str(),
-        password.c_str()
-    );
-
-    for (int i = 0; i < 30; i++)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            Serial.println();
-            Serial.println("Connected to WiFi");
-            Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
-
-            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
-            String mdnsHostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
-
-            if (!MDNS.begin(mdnsHostname.c_str()))
-            {
-                Serial.println("Failed to start mDNS");
-            }
-            else
-            {
-                Serial.println("mDNS started");
-                Serial.printf("Visit: http://%s.local\n", mdnsHostname.c_str());
-            }
-
-            return true;
-        }
-
-        Serial.print(".");
-
-        delay(500);
-    }
-
-    Serial.println();
-    Serial.println("Connection failed");
-
-    startAccessPoint();
-
-    return false;
+    wifiOfflineSince = millis();
+    beginSavedWifi();
 }
 
 void startWebServer()

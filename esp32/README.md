@@ -2,17 +2,44 @@
 
 This PlatformIO project contains the Arduino firmware for a Seeed Studio XIAO ESP32-S3 connected to a 4-inch Spectra 6 e-paper display.
 
-At startup, the firmware mounts LittleFS and connects to the saved Wi-Fi network.
-If no network is saved or the connection fails, it starts a setup access point
-instead. Once connected, it advertises `<hostname>-<deviceId>.local` over mDNS and
-serves the web app from LittleFS.
+The device is powered over USB and always on. At startup, the firmware mounts its
+two filesystems and joins the saved Wi-Fi network. Once connected, it advertises
+`<hostname>-<deviceId>.local` over mDNS and serves the web app.
 
-If the stored image (`/image.bin`) differs from the one last drawn, the firmware
-renders it, puts the panel to sleep, and enters ESP32 deep sleep. Otherwise it
-stays awake until a new image is uploaded, which triggers the same render and
-deep sleep. No wake-up source is configured, so the device sleeps until it is reset
-or power-cycled. A forced refresh from the web app redraws without entering deep
-sleep.
+With no saved network, it starts a setup access point. With a saved network, it
+retries every 30 seconds and never gives up. After 5 minutes without Wi-Fi it also
+opens the setup access point, so the network can be changed, and closes it once
+Wi-Fi connects. Retries pause while a phone is connected to the access point,
+because searching for the router disturbs it.
+
+When the stored image (`/image.bin`) differs from the one last drawn, the firmware
+renders it and puts the panel to sleep. A forced refresh from the web app redraws
+it anyway.
+
+## Storage
+
+`partitions.csv` splits the 8 MB flash:
+
+| Partition | Size | Holds |
+| --- | --- | --- |
+| `nvs` | 20 KB | Settings, such as the saved Wi-Fi network |
+| `app0`, `app1` | 1.75 MB each | Two firmware slots, for over-the-air updates |
+| `spiffs` | 512 KB | The web app, replaced by every filesystem upload |
+| `store` | 3.9 MB | The screen image |
+| `coredump` | 64 KB | Crash dumps |
+
+Filesystem uploads never touch `nvs` or `store`. `store` has a custom subtype
+because PlatformIO uploads the filesystem to the last `spiffs`, `fat` or `littlefs`
+partition it finds.
+
+Changing the partition table needs one full erase, which also clears the saved
+Wi-Fi and image. From the repository root:
+
+```bash
+~/.platformio/penv/bin/platformio run -d esp32 --target erase
+```
+
+Then upload everything again from `../app` with `pnpm device:upload`.
 
 The normal build and upload workflow runs from `../app`:
 

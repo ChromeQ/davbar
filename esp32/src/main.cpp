@@ -1,8 +1,8 @@
 #include <Arduino.h>
-#include <LittleFS.h>
 
 #include "DEV_Config.h"
 #include "ImageManager.h"
+#include "Storage.h"
 #include "WifiManager.h"
 
 void setup()
@@ -11,23 +11,13 @@ void setup()
 
     DEV_Module_Init();
 
-    Serial.println("Mounting filesystem...");
-    if (!LittleFS.begin())
-    {
-        Serial.println("LittleFS mount failed");
-        return;
-    }
+    // Keep going if a filesystem fails to mount: WiFi and the web server
+    // still start, so the problem can be seen and fixed.
+    mountStorage();
 
-    // Remove WiFi credentials to force AP mode for testing
-    // LittleFS.remove("/wifi.json");
-    // Serial.println("Removed WiFi credentials");
-    
-    Serial.println("Connecting WiFi...");
-    if (!connectWifi())
-    {
-        return;
-    }
-    
+    Serial.println("Starting WiFi...");
+    startWifi();
+
     Serial.println("Starting web server...");
     startWebServer();
 
