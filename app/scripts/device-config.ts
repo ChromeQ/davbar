@@ -7,7 +7,6 @@ export type DeviceConfig = {
   deviceName: string;
   deviceId: string;
   hostname: string;
-  accessPointPassword: string;
   accessPointName: string;
   uploadHost: string;
   uploadUrl: string;
@@ -19,7 +18,7 @@ export type DeviceConfig = {
 
 type DeviceConfigInput = Pick<
   DeviceConfig,
-  "brandName" | "deviceName" | "deviceId" | "hostname" | "accessPointPassword"
+  "brandName" | "deviceName" | "deviceId" | "hostname"
 >;
 
 const appDirectory = path.resolve(
@@ -27,9 +26,11 @@ const appDirectory = path.resolve(
   "..",
 );
 export const repositoryDirectory = path.resolve(appDirectory, "..");
+// The device commands require a profile; the web dev server falls back to the
+// example.
 export const defaultConfigPath = path.join(
   repositoryDirectory,
-  "config/default.json",
+  "config/example.json",
 );
 
 const requiredKeys: Array<keyof DeviceConfigInput> = [
@@ -37,7 +38,6 @@ const requiredKeys: Array<keyof DeviceConfigInput> = [
   "deviceName",
   "deviceId",
   "hostname",
-  "accessPointPassword",
 ];
 
 const readInput = (configPath: string): DeviceConfigInput => {
@@ -79,15 +79,6 @@ const readInput = (configPath: string): DeviceConfigInput => {
     );
   }
 
-  if (
-    input.accessPointPassword.length < 8 ||
-    input.accessPointPassword.length > 63
-  ) {
-    throw new Error(
-      `Device config ${configPath} accessPointPassword must be 8-63 characters.`,
-    );
-  }
-
   return input;
 };
 
@@ -105,7 +96,7 @@ export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const uploadHost = `${input.hostname}.local`;
+  const uploadHost = `${input.hostname}-${input.deviceId}.local`;
   const config: DeviceConfig = {
     ...input,
     accessPointName: `${input.brandName} ${input.deviceName}`,

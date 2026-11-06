@@ -3,7 +3,6 @@ export type DeviceConfig = {
   deviceName: string;
   deviceId: string;
   hostname: string;
-  accessPointPassword: string;
   accessPointName: string;
   uploadHost: string;
   uploadUrl: string;

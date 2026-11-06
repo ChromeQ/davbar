@@ -220,9 +220,16 @@ Force refresh in the settings menu still redraws on demand.
 - **Over-the-air updates:** `ArduinoOTA` with a password. The new partition table keeps
   two firmware slots, and `pnpm device:upload --ota` uploads over Wi-Fi to the
   profile's address using PlatformIO's `espota` protocol. The first OTA-capable
-  firmware goes on over USB.
+  firmware goes on over USB. Done in step 2c: firmware and web app in about 35 s,
+  with each update (and a wrong password) in the device log.
 - **Hostnames:** the build scripts and web app use the real
-  `<hostname>-<deviceId>.local` address, with one profile per tap in `config/`.
+  `<hostname>-<deviceId>.local` address, with one profile per tap in `config/`
+  (`tap-1.json` to `tap-3.json`, and `example.json`). Device commands require
+  `--config`. Done in step 2c.
+- **Passwords:** the repository is public, so the setup access point and OTA
+  passwords live in a git-ignored `config/secrets.json`, read only by the firmware
+  build. They no longer appear in the web app, and the firmware only keeps the OTA
+  password's hash. Done in step 2c.
 - **Status dialog:** add the sensor address, chosen and actual mode, last reading,
   signal strength and time since the last reading.
 
@@ -287,9 +294,10 @@ Each step ends with something visible to check.
    Optionally, a Node script that prints live readings from the laptop's Bluetooth.
 2. **Always-on housekeeping:** deep sleep, Wi-Fi retry, settings storage, the new
    partition table (including the library's space), the device log and Download log,
-   factory reset, over-the-air updates and the hostname fix. Test by turning the router off for 10 minutes, doing a
-   filesystem upload, running a factory reset, and uploading over Wi-Fi, then
-   checking the downloaded log shows all of it.
+   factory reset, over-the-air updates and the hostname fix. Test by turning the
+   router off for 10 minutes, doing a filesystem upload, running a factory reset, and
+   uploading over Wi-Fi, then checking the downloaded log shows all of it. Done, in
+   three parts (2a, 2b, 2c), tested on tap 1.
 3. **ESP32 listens:** passive Bluetooth scanning, with a C++ decoder tested on the
    laptop against the same captures. Readings, signal strength and missed readings
    show in the serial log, the device log and the Status dialog.

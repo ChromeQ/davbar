@@ -16,6 +16,33 @@ When the stored image (`/image.bin`) differs from the one last drawn, the firmwa
 renders it and puts the panel to sleep. A forced refresh from the web app redraws
 it anyway.
 
+## Building and uploading
+
+The normal build and upload workflow runs from `../app`:
+
+```bash
+pnpm device:build --config config/tap-1.json
+pnpm device:upload --config config/tap-1.json
+pnpm device:upload --config config/tap-1.json --ota
+```
+
+These commands build the web filesystem and firmware with the same shared device
+profile. See the [project README](../README.md) for profile fields and all commands.
+
+Raw PlatformIO commands are intended for firmware-only development. From the
+repository root, set `DEVICE_CONFIG` to choose the tap. Without it, raw builds
+(including the IDE's) use `config/example.json`, so they compile but shouldn't be
+uploaded:
+
+```bash
+DEVICE_CONFIG=config/tap-1.json ~/.platformio/penv/bin/platformio run -d esp32
+DEVICE_CONFIG=config/tap-1.json ~/.platformio/penv/bin/platformio run -d esp32 --target upload
+```
+
+Profile paths are resolved relative to the repository root. A raw firmware upload
+does not rebuild or upload the LittleFS web filesystem. Every build needs
+`config/secrets.json` (see the project README).
+
 ## Storage
 
 `partitions.csv` splits the 8 MB flash:
@@ -39,37 +66,25 @@ Wi-Fi and image. From the repository root:
 ~/.platformio/penv/bin/platformio run -d esp32 --target erase
 ```
 
-Then upload everything again from `../app` with `pnpm device:upload`.
+Then upload everything again over USB from `../app` with `pnpm device:upload`.
 
 ## Device log
 
 `DeviceLog` records events to the serial port and to numbered CSV segments in
 `/log` on `store`: 16 segments of up to 64 KB, the oldest removed first. Entries
 are held in memory and written every 5 minutes, or sooner when 4 KB build up or
-before a restart. Each entry has a UTC time (empty until the clock is set from the
-internet; a `clock set` entry marks the switch), the uptime in seconds, the event
-and its details. The boot entry includes the reset reason and the firmware build
+before a restart. Each entry has a UTC time, the uptime in seconds, the event and
+its details. Until the internet time arrives, marked by a `clock synced` entry, the
+time is empty after a power cut, or carried over and slightly off after a restart. The boot entry includes the reset reason and the firmware build
 ID (the start of the ELF SHA-256), which tells builds apart.
 
 `GET /log` streams the whole log as one CSV file.
 
-The normal build and upload workflow runs from `../app`:
+## Over-the-air updates
 
-```bash
-pnpm device:build
-pnpm device:upload
-```
-
-These commands build the web filesystem and firmware with the same shared device
-profile. See the [project README](../README.md) for profile fields and all commands.
-
-Raw PlatformIO commands are intended for firmware-only development. From the
-repository root, set `DEVICE_CONFIG` explicitly when using a non-default profile:
-
-```bash
-DEVICE_CONFIG=config/davbar-tap-1.json ~/.platformio/penv/bin/platformio run -d esp32
-DEVICE_CONFIG=config/davbar-tap-1.json ~/.platformio/penv/bin/platformio run -d esp32 --target upload
-```
-
-Profile paths are resolved relative to the repository root. A raw firmware upload
-does not rebuild or upload the LittleFS web filesystem.
+Once the device has joined Wi-Fi, `ArduinoOTA` accepts firmware and filesystem
+uploads at `<hostname>-<deviceId>.local`, checked against the hash of
+`otaPassword`. Filesystem uploads always go to the `spiffs` partition. The device
+log records each update starting, finishing or failing, and the next boot entry
+shows the new firmware ID. Setting `DEVICE_OTA=1` makes `scripts/device_config.py`
+switch PlatformIO's upload to `espota`, which is what `--ota` does.
