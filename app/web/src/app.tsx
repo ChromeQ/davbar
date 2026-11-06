@@ -4,12 +4,13 @@ import {
   Activity,
   CheckCircle2,
   CircleAlert,
+  Download,
   LoaderCircle,
   Power,
   RefreshCw,
+  RotateCcw,
   Settings,
   Trash2,
-  WifiOff,
 } from 'lucide-react';
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
@@ -150,9 +151,10 @@ const App = () => {
   const [rebootDialogOpen, setRebootDialogOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
   const [rebootResult, setRebootResult] = useState<ApiResult | null>(null);
-  const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
-  const [forgetting, setForgetting] = useState(false);
-  const [forgetResult, setForgetResult] = useState<ApiResult | null>(null);
+  const [factoryResetDialogOpen, setFactoryResetDialogOpen] = useState(false);
+  const [clearLog, setClearLog] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [factoryResetResult, setFactoryResetResult] = useState<ApiResult | null>(null);
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const isUploading = uploadState === 'uploading';
   const uploadSucceeded = uploadState === 'success';
@@ -164,7 +166,7 @@ const App = () => {
     statusDialogOpen ||
     refreshDialogOpen ||
     rebootDialogOpen ||
-    forgetDialogOpen;
+    factoryResetDialogOpen;
 
   useEffect(() => {
     if (!modalOpen) {
@@ -179,7 +181,7 @@ const App = () => {
         !statusLoading &&
         !refreshing &&
         !rebooting &&
-        !forgetting
+        !resetting
       ) {
         setPendingReset(null);
         setUploadError(null);
@@ -187,7 +189,7 @@ const App = () => {
         setStatusDialogOpen(false);
         setRefreshDialogOpen(false);
         setRebootDialogOpen(false);
-        setForgetDialogOpen(false);
+        setFactoryResetDialogOpen(false);
       }
     };
 
@@ -198,7 +200,7 @@ const App = () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [forgetting, isUploading, modalOpen, rebooting, refreshing, statusLoading]);
+  }, [isUploading, modalOpen, rebooting, refreshing, resetting, statusLoading]);
 
   useEffect(() => {
     if (mode !== 'text') {
@@ -522,10 +524,21 @@ const App = () => {
     }
   };
 
-  const openForgetDialog = () => {
+  const openFactoryResetDialog = () => {
     setSettingsOpen(false);
-    setForgetResult(null);
-    setForgetDialogOpen(true);
+    setClearLog(false);
+    setFactoryResetResult(null);
+    setFactoryResetDialogOpen(true);
+  };
+
+  const downloadLog = () => {
+    setSettingsOpen(false);
+
+    // The device names the file in its response.
+    const link = document.createElement('a');
+    link.href = '/log';
+    link.download = '';
+    link.click();
   };
 
   const loadDeviceStatus = async () => {
@@ -585,7 +598,7 @@ const App = () => {
     setStatusDialogOpen(false);
     setRefreshDialogOpen(false);
     setRebootDialogOpen(false);
-    setForgetDialogOpen(false);
+    setFactoryResetDialogOpen(false);
     setSettingsOpen(true);
   };
 
@@ -661,12 +674,15 @@ const App = () => {
     }
   };
 
-  const forgetWifi = async () => {
-    setForgetting(true);
-    setForgetResult(null);
+  const factoryReset = async () => {
+    setResetting(true);
+    setFactoryResetResult(null);
 
     try {
-      const response = await fetch('/wifi', { method: 'DELETE' });
+      const response = await fetch('/factory-reset', {
+        method: 'POST',
+        body: new URLSearchParams({ clearLog: clearLog ? '1' : '0' }),
+      });
       const responseBody = await response.text();
 
       if (!responseBody) {
@@ -685,15 +701,15 @@ const App = () => {
         throw new Error('The device returned an invalid response.');
       }
 
-      setForgetResult(result);
-    } catch (forgetError) {
-      setForgetResult({
+      setFactoryResetResult(result);
+    } catch (resetError) {
+      setFactoryResetResult({
         success: false,
         message:
-          forgetError instanceof Error ? forgetError.message : 'Unable to forget the saved WiFi.',
+          resetError instanceof Error ? resetError.message : 'Unable to factory reset the device.',
       });
     } finally {
-      setForgetting(false);
+      setResetting(false);
     }
   };
 
@@ -1059,6 +1075,13 @@ const App = () => {
                   <small>Refresh the display using the currently saved image</small>
                 </span>
               </button>
+              <button type="button" onClick={downloadLog}>
+                <Download size={19} aria-hidden="true" />
+                <span>
+                  <strong>Download log</strong>
+                  <small>Save the device's event log as a CSV file</small>
+                </span>
+              </button>
               <button type="button" onClick={openRebootDialog}>
                 <Power size={19} aria-hidden="true" />
                 <span>
@@ -1066,11 +1089,11 @@ const App = () => {
                   <small>Restart the device without changing its settings</small>
                 </span>
               </button>
-              <button type="button" onClick={openForgetDialog}>
-                <WifiOff size={19} aria-hidden="true" />
+              <button type="button" onClick={openFactoryResetDialog}>
+                <RotateCcw size={19} aria-hidden="true" />
                 <span>
-                  <strong>Forget saved WiFi</strong>
-                  <small>Remove the saved network and return to setup mode</small>
+                  <strong>Factory reset</strong>
+                  <small>Clear the WiFi and screen image, then return to setup mode</small>
                 </span>
               </button>
             </div>
@@ -1334,12 +1357,12 @@ const App = () => {
         </div>
       )}
 
-      {forgetDialogOpen && (
+      {factoryResetDialogOpen && (
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !forgetting) {
-              setForgetDialogOpen(false);
+            if (event.target === event.currentTarget && !resetting) {
+              setFactoryResetDialogOpen(false);
             }
           }}
         >
@@ -1347,42 +1370,58 @@ const App = () => {
             className="app-modal"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="forget-modal-title"
-            aria-describedby="forget-modal-description"
-            aria-busy={forgetting}
+            aria-labelledby="factory-reset-modal-title"
+            aria-describedby="factory-reset-modal-description"
+            aria-busy={resetting}
           >
             <div
-              className={`modal-icon forget-modal-icon ${forgetResult?.success ? 'success-modal-icon' : ''}`}
+              className={`modal-icon factory-reset-modal-icon ${factoryResetResult?.success ? 'success-modal-icon' : ''}`}
               aria-hidden="true"
             >
-              {forgetting ? (
+              {resetting ? (
                 <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : factoryResetResult?.success ? (
+                <CheckCircle2 size={22} strokeWidth={1.8} />
+              ) : factoryResetResult ? (
+                <CircleAlert size={22} strokeWidth={1.8} />
               ) : (
-                <WifiOff size={22} strokeWidth={1.8} />
+                <RotateCcw size={22} strokeWidth={1.8} />
               )}
             </div>
-            <h2 id="forget-modal-title">
-              {forgetting
-                ? 'Forgetting saved WiFi'
-                : forgetResult?.success
-                  ? 'WiFi forgotten'
-                  : forgetResult
-                    ? 'Unable to forget WiFi'
-                    : 'Forget saved WiFi?'}
+            <h2 id="factory-reset-modal-title">
+              {resetting
+                ? 'Resetting the device'
+                : factoryResetResult?.success
+                  ? 'Factory reset done'
+                  : factoryResetResult
+                    ? 'Unable to factory reset'
+                    : 'Factory reset?'}
             </h2>
-            <p id="forget-modal-description">
-              {forgetResult?.message ??
-                (forgetting
-                  ? 'Removing the saved network from this device.'
-                  : 'The device will remove its saved network and reboot into setup mode.')}
+            <p id="factory-reset-modal-description">
+              {factoryResetResult?.success
+                ? `${factoryResetResult.message} To set it up again, join the ${deviceConfig.accessPointName} WiFi network.`
+                : (factoryResetResult?.message ??
+                  (resetting
+                    ? 'Clearing the device.'
+                    : 'The device will forget its WiFi network and clear its screen image, then restart in setup mode. The screen keeps showing the current picture until a new one is sent. The log is kept unless you tick the box below.'))}
             </p>
-            {!forgetting && (
+            {!resetting && !factoryResetResult && (
+              <label className="checkbox-option">
+                <input
+                  type="checkbox"
+                  checked={clearLog}
+                  onChange={(event) => setClearLog(event.target.checked)}
+                />
+                Also clear the log
+              </label>
+            )}
+            {!resetting && (
               <div className="modal-actions">
-                {forgetResult ? (
+                {factoryResetResult ? (
                   <button
                     className="modal-button primary-modal-button"
                     type="button"
-                    onClick={() => setForgetDialogOpen(false)}
+                    onClick={() => setFactoryResetDialogOpen(false)}
                   >
                     Close
                   </button>
@@ -1399,9 +1438,9 @@ const App = () => {
                     <button
                       className="modal-button destructive-button"
                       type="button"
-                      onClick={() => void forgetWifi()}
+                      onClick={() => void factoryReset()}
                     >
-                      Forget WiFi
+                      Factory reset
                     </button>
                   </>
                 )}

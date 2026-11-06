@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "DeviceConfig.h"
+#include "DeviceLog.h"
 #include "ImageManager.h"
 #include "Settings.h"
 #include "Storage.h"
@@ -31,6 +32,9 @@ static bool wifiConnected = false;
 static bool networkServicesStarted = false;
 static unsigned long lastWifiAttemptAt = 0;
 static unsigned long wifiOfflineSince = 0;
+static uint32_t wifiAttempts = 0;
+// Why the last WiFi attempt or connection failed. Set from the WiFi event task.
+static volatile uint8_t lastWifiFailureReason = 0;
 static unsigned long restartAt = 0;
 
 enum class ConnectionState
@@ -224,29 +228,37 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
     );
 }
 
-static void handleForgetWifi(AsyncWebServerRequest* request)
+static void handleFactoryReset(AsyncWebServerRequest* request)
 {
-    if (!clearWifiSettings())
+    bool clearLog = request->arg("clearLog") == "1";
+
+    bool cleared = clearWifiSettings() && clearScreenImage();
+    if (clearLog)
     {
+        cleared = clearDeviceLog() && cleared;
+    }
+
+    if (!cleared)
+    {
+        logEvent("factory reset failed");
         request->send(
             500,
             "application/json",
-            R"({"success":false,"message":"Unable to remove saved WiFi"})"
+            R"({"success":false,"message":"Unable to clear everything. Try again, or reboot the device first."})"
         );
 
         return;
     }
 
-    ssid = "";
-    password = "";
+    // With the log cleared, this is the first entry of the new one.
+    logEvent("factory reset", clearLog ? "log cleared" : "log kept");
 
     request->send(
         200,
         "application/json",
-        R"({"success":true,"message":"Saved WiFi forgotten. Rebooting..."})"
+        R"({"success":true,"message":"Factory reset done. The device is restarting in setup mode."})"
     );
 
-    Serial.println("WiFi credentials removed. Rebooting...");
     restartAt = millis() + 1000;
 }
 
@@ -269,8 +281,15 @@ static void handleReboot(AsyncWebServerRequest* request)
         R"({"success":true,"message":"Device reboot requested."})"
     );
 
-    Serial.println("Device reboot requested");
+    logEvent("reboot requested", "from the web app");
     restartAt = millis() + 1000;
+}
+
+static void handleLog(AsyncWebServerRequest* request)
+{
+    String hostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
+
+    sendDeviceLog(request, hostname + "-log.csv");
 }
 
 static void handleStatus(AsyncWebServerRequest* request)
@@ -397,9 +416,9 @@ static void handleImageUploadFinished(AsyncWebServerRequest* request)
     );
 }
 
-static void startAccessPoint()
+static void startAccessPoint(const char* reason)
 {
-    Serial.println("Starting setup AP");
+    logEvent("setup access point opened", reason);
 
     WiFi.mode(WIFI_AP_STA);
 
@@ -427,7 +446,7 @@ static bool accessPointOpen()
 
 static void stopAccessPoint()
 {
-    Serial.println("Closing setup AP");
+    logEvent("setup access point closed", "WiFi connected");
 
     dnsServer.stop();
     WiFi.softAPdisconnect(true);
@@ -438,6 +457,7 @@ static void beginSavedWifi()
 {
     Serial.printf("Connecting to %s...\n", ssid.c_str());
 
+    wifiAttempts++;
     WiFi.begin(
         ssid.c_str(),
         password.c_str()
@@ -454,7 +474,7 @@ static void startNetworkServices()
 
     if (!MDNS.begin(mdnsHostname.c_str()))
     {
-        Serial.println("Failed to start mDNS");
+        logEvent("mDNS failed to start");
     }
     else
     {
@@ -463,12 +483,31 @@ static void startNetworkServices()
     }
 }
 
+static String wifiFailureReasonName()
+{
+    return WiFi.disconnectReasonName(
+        static_cast<wifi_err_reason_t>(lastWifiFailureReason)
+    );
+}
+
 static void onWifiConnected()
 {
     wifiConnected = true;
 
-    Serial.print("Connected to WiFi, IP address: ");
-    Serial.println(WiFi.localIP());
+    String details =
+        ssid + ", IP " + WiFi.localIP().toString() +
+        ", signal " + String(WiFi.RSSI()) + " dBm" +
+        ", attempt " + String(wifiAttempts);
+
+    if (wifiAttempts > 1 && lastWifiFailureReason != 0)
+    {
+        details += ", last failure " + wifiFailureReasonName();
+    }
+
+    logEvent("wifi connected", details);
+
+    wifiAttempts = 0;
+    lastWifiFailureReason = 0;
 
     if (accessPointOpen())
     {
@@ -487,7 +526,7 @@ static void onWifiLost()
     wifiConnected = false;
     wifiOfflineSince = millis();
 
-    Serial.println("WiFi connection lost");
+    logEvent("wifi lost", wifiFailureReasonName());
 }
 
 static void processSavedWifi()
@@ -518,8 +557,7 @@ static void processSavedWifi()
 
     if (!accessPointOpen() && now - wifiOfflineSince >= fallbackAccessPointDelay)
     {
-        Serial.println("No WiFi for 5 minutes");
-        startAccessPoint();
+        startAccessPoint("no WiFi for 5 minutes");
     }
 
     // Searching for the router disturbs the access point, so don't retry while
@@ -540,6 +578,7 @@ void processWifiManager()
 {
     if (restartAt != 0 && static_cast<long>(millis() - restartAt) >= 0)
     {
+        flushDeviceLog();
         ESP.restart();
     }
 
@@ -551,12 +590,12 @@ void processWifiManager()
         {
             if (saveWifiSettings(pendingSsid, pendingPassword))
             {
-                Serial.println("WiFi test successful");
+                logEvent("wifi saved", pendingSsid);
                 connectionState = ConnectionState::Success;
             }
             else
             {
-                Serial.println("WiFi test successful, but saving it failed");
+                logEvent("wifi save failed", pendingSsid);
                 WiFi.disconnect(false, true);
                 connectionState = ConnectionState::Failure;
             }
@@ -567,7 +606,7 @@ void processWifiManager()
             millis() - connectionStartedAt >= 20000
         )
         {
-            Serial.println("WiFi test failed");
+            logEvent("wifi test failed", pendingSsid + ", " + wifiFailureReasonName());
             WiFi.disconnect(false, true);
             connectionState = ConnectionState::Failure;
         }
@@ -588,13 +627,25 @@ void startWifi()
     WiFi.persistent(false);
     WiFi.setAutoReconnect(false);
 
+    WiFi.onEvent(
+        [](arduino_event_id_t, arduino_event_info_t info)
+        {
+            uint8_t reason = info.wifi_sta_disconnected.reason;
+
+            // The disconnect before each retry reports leaving; keep the real reason.
+            if (reason != WIFI_REASON_ASSOC_LEAVE)
+            {
+                lastWifiFailureReason = reason;
+            }
+        },
+        ARDUINO_EVENT_WIFI_STA_DISCONNECTED
+    );
+
     hasSavedWifi = loadWifiSettings(ssid, password);
 
     if (!hasSavedWifi)
     {
-        Serial.println("No WiFi configured");
-
-        startAccessPoint();
+        startAccessPoint("no WiFi saved");
 
         return;
     }
@@ -637,9 +688,15 @@ void startWebServer()
     );
 
     server.on(
-        "/wifi",
-        HTTP_DELETE,
-        handleForgetWifi
+        "/factory-reset",
+        HTTP_POST,
+        handleFactoryReset
+    );
+
+    server.on(
+        "/log",
+        HTTP_GET,
+        handleLog
     );
 
     server.on(

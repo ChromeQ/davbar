@@ -4,12 +4,14 @@
 #include <new>
 
 #include "DEV_Config.h"
+#include "DeviceLog.h"
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
 #include "Storage.h"
 
 static bool imageUpdatePending = false;
 static bool forcedImageUpdatePending = false;
+static const char* imageUpdateReason = "";
 
 static uint8_t imageBuffer[IMAGE_SIZE];
 
@@ -18,7 +20,7 @@ static const char* pendingDisplayedImageCrcPath = "/image.displayed.crc.tmp";
 
 static bool displayedImageCrcMatches(uint32_t imageCrc);
 static bool saveDisplayedImageCrc(uint32_t imageCrc);
-static void updateDisplay(bool force);
+static void updateDisplay(bool force, const char* reason);
 
 struct ImageUploadState
 {
@@ -79,7 +81,7 @@ ImageUploadState* beginImageUpload(
         return state;
     }
 
-    DataFS.remove("/image.upload");
+    removeDataFile("/image.upload");
     state->file = DataFS.open("/image.upload", "w");
 
     if (!state->file)
@@ -138,19 +140,21 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     if (error != ImageUploadError::None)
     {
-        DataFS.remove("/image.upload");
+        removeDataFile("/image.upload");
+        logEvent("image upload failed", imageUploadErrorMessage(error));
         return { false, error, imageUploadErrorMessage(error) };
     }
 
-    DataFS.remove("/image.previous");
+    removeDataFile("/image.previous");
 
     if (
         DataFS.exists("/image.bin") &&
         !DataFS.rename("/image.bin", "/image.previous")
     )
     {
-        DataFS.remove("/image.upload");
+        removeDataFile("/image.upload");
         error = ImageUploadError::ReplaceFailed;
+        logEvent("image upload failed", imageUploadErrorMessage(error));
         return { false, error, imageUploadErrorMessage(error) };
     }
 
@@ -158,14 +162,15 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
     {
         DataFS.rename("/image.previous", "/image.bin");
         error = ImageUploadError::SaveFailed;
+        logEvent("image upload failed", imageUploadErrorMessage(error));
         return { false, error, imageUploadErrorMessage(error) };
     }
 
-    DataFS.remove("/image.previous");
+    removeDataFile("/image.previous");
 
-    Serial.printf("Image upload complete (%u bytes)\n", IMAGE_SIZE);
+    logEvent("image uploaded", String(IMAGE_SIZE) + " bytes");
 
-    requestImageUpdate();
+    requestImageUpdate("upload");
 
     return { true, ImageUploadError::None, "The display image was uploaded successfully." };
 }
@@ -182,19 +187,28 @@ void cancelImageUpload(ImageUploadState* state)
         state->file.close();
     }
 
-    DataFS.remove("/image.upload");
+    removeDataFile("/image.upload");
     delete state;
+
+    logEvent("image upload failed", "the connection closed before it finished");
 }
 
-void requestImageUpdate()
+void requestImageUpdate(const char* reason)
 {
+    imageUpdateReason = reason;
     imageUpdatePending = true;
 }
 
 void requestForcedImageUpdate()
 {
+    imageUpdateReason = "forced refresh";
     forcedImageUpdatePending = true;
     imageUpdatePending = true;
+}
+
+bool clearScreenImage()
+{
+    return removeDataFile("/image.bin") && removeDataFile(displayedImageCrcPath);
 }
 
 void processImageManager()
@@ -205,15 +219,21 @@ void processImageManager()
     }
 
     bool force = forcedImageUpdatePending;
+    const char* reason = imageUpdateReason;
 
     forcedImageUpdatePending = false;
     imageUpdatePending = false;
 
-    updateDisplay(force);
+    updateDisplay(force, reason);
 }
 
 static bool displayedImageCrcMatches(uint32_t imageCrc)
 {
+    if (!DataFS.exists(displayedImageCrcPath))
+    {
+        return false;
+    }
+
     File file = DataFS.open(displayedImageCrcPath, "r");
     if (!file || file.size() != sizeof(imageCrc))
     {
@@ -233,7 +253,7 @@ static bool displayedImageCrcMatches(uint32_t imageCrc)
 
 static bool saveDisplayedImageCrc(uint32_t imageCrc)
 {
-    DataFS.remove(pendingDisplayedImageCrcPath);
+    removeDataFile(pendingDisplayedImageCrcPath);
 
     File file = DataFS.open(pendingDisplayedImageCrcPath, "w");
     if (!file)
@@ -249,41 +269,49 @@ static bool saveDisplayedImageCrc(uint32_t imageCrc)
 
     if (bytesWritten != sizeof(imageCrc))
     {
-        DataFS.remove(pendingDisplayedImageCrcPath);
+        removeDataFile(pendingDisplayedImageCrcPath);
         return false;
     }
 
-    DataFS.remove(displayedImageCrcPath);
+    removeDataFile(displayedImageCrcPath);
     if (!DataFS.rename(
         pendingDisplayedImageCrcPath,
         displayedImageCrcPath
     ))
     {
-        DataFS.remove(pendingDisplayedImageCrcPath);
+        removeDataFile(pendingDisplayedImageCrcPath);
         return false;
     }
 
     return true;
 }
 
-static void updateDisplay(bool force)
+static void updateDisplay(bool force, const char* reason)
 {
     Serial.println("Updating display");
+
+    if (!DataFS.exists("/image.bin"))
+    {
+        logEvent("redraw skipped", String(reason) + ", no image saved");
+        return;
+    }
 
     Serial.println("Loading image...");
 
     if (!loadImage(imageBuffer))
     {
-        Serial.println("Failed to load image");
+        logEvent("redraw failed", String(reason) + ", unable to load the image");
         return;
     }
 
     uint32_t imageCrc = esp_crc32_le(0, imageBuffer, IMAGE_SIZE);
     if (!force && displayedImageCrcMatches(imageCrc))
     {
-        Serial.println("Image is already displayed");
+        logEvent("redraw skipped", String(reason) + ", image already displayed");
         return;
     }
+
+    unsigned long startedAt = millis();
 
     Serial.println("Initialising display...");
 
@@ -304,5 +332,8 @@ static void updateDisplay(bool force)
         Serial.println("Failed to save displayed image CRC");
     }
 
-    Serial.println("Display update complete");
+    logEvent(
+        "redraw",
+        String(reason) + ", " + String((millis() - startedAt) / 1000.0, 1) + " s"
+    );
 }

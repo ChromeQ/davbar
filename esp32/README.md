@@ -25,7 +25,7 @@ it anyway.
 | `nvs` | 20 KB | Settings, such as the saved Wi-Fi network |
 | `app0`, `app1` | 1.75 MB each | Two firmware slots, for over-the-air updates |
 | `spiffs` | 512 KB | The web app, replaced by every filesystem upload |
-| `store` | 3.9 MB | The screen image |
+| `store` | 3.9 MB | The screen image and the device log |
 | `coredump` | 64 KB | Crash dumps |
 
 Filesystem uploads never touch `nvs` or `store`. `store` has a custom subtype
@@ -40,6 +40,18 @@ Wi-Fi and image. From the repository root:
 ```
 
 Then upload everything again from `../app` with `pnpm device:upload`.
+
+## Device log
+
+`DeviceLog` records events to the serial port and to numbered CSV segments in
+`/log` on `store`: 16 segments of up to 64 KB, the oldest removed first. Entries
+are held in memory and written every 5 minutes, or sooner when 4 KB build up or
+before a restart. Each entry has a UTC time (empty until the clock is set from the
+internet; a `clock set` entry marks the switch), the uptime in seconds, the event
+and its details. The boot entry includes the reset reason and the firmware build
+ID (the start of the ELF SHA-256), which tells builds apart.
+
+`GET /log` streams the whole log as one CSV file.
 
 The normal build and upload workflow runs from `../app`:
 

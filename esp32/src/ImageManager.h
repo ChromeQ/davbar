@@ -41,8 +41,13 @@ ImageUploadResult finishImageUpload(ImageUploadState* state);
 
 void cancelImageUpload(ImageUploadState* state);
 
-void requestImageUpdate();
+// Redraws the saved image if it differs from the one on screen. The reason,
+// such as "upload", goes in the device log.
+void requestImageUpdate(const char* reason);
 
 void requestForcedImageUpdate();
+
+// Removes the saved image, for a factory reset. The screen keeps showing it.
+bool clearScreenImage();
 
 void processImageManager();
