@@ -1,0 +1,30 @@
+{
+  "name": "@chromeq/davbar-rapt-laser",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The RAPT Laser Level Sensor decoder for the DavBar Keg Display project",
+  "main": "src/index.js",
+  "type": "module",
+  "author": "ChromeQ",
+  "scripts": {
+    "compile": "tsc --noEmit",
+    "decode": "tsx src/cli.ts",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "test": "vitest",
+    "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@tsconfig/node26": "26.0.0",
+    "@types/node": "catalog:",
+    "@typescript/native": "catalog:typescript",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "globals": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:typescript",
+    "typescript-eslint": "catalog:",
+    "vitest": "4.1.10"
+  }
+}

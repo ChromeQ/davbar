@@ -93,6 +93,9 @@ Payloads after the company ID, for decoder tests:
 | `5054A1E54C66F9E1330000000000FFFF008001` | No reading (all values empty) |
 | `5054A1E54C66F9E1338500AB010AE8031B0801` | Distance 133 mm, height 427 mm, battery 1000, 20.75 °C. Ruler and RAPT app: 136 mm, 14.9 L |
 | `5054A1E54C66F9E1337001C0000A5103850701` | Distance 368 mm, height 192 mm, battery 849, 19.25 °C. Old batteries. RAPT app: 359 mm, 6.9 L, battery 84% |
+| `5054A1E54C66F9E133C1006F010A5703210702` | Distance 193 mm, height 367 mm, battery 855, 18.25 °C, Session Mode. Laptop log, 2026-11-02 |
+| `5054A1E54C66F9E133E90047010AFF02530703` | Distance 233 mm, height 327 mm, battery 767 (sagging while the laser fires), 18.75 °C, Live Stream. Laptop log, 2026-11-02 |
+| `5054A1E54C66F9E133DB0055010A5B039E0704` | Distance 219 mm, height 341 mm, battery 859, 19.50 °C, Ultra Low Power. Laptop log |
 
 Full advertisement for the 136 mm capture:
 `0x020106110700008418B0F2BF081592060A5450415216FF52415054A1E54C66F9E1338500AB010AE8031B0801`

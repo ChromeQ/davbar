@@ -4,6 +4,7 @@ This pnpm workspace contains the software used to prepare content for the keg di
 
 - `web` is a React app for composing text or selecting a 400 x 600 image, previewing the result in the Spectra 6 palette, and uploading the encoded image to the display.
 - `spectra6` provides the shared Spectra 6 encoder, decoder, dithering, palette, and command-line conversion tools.
+- `rapt-laser` decodes the Bluetooth advertisements of a RAPT Laser Level Sensor and converts its distance reading to the litres and percentage left in the keg. To decode one by hand, paste the hex from nRF Connect (the payload, the manufacturer data or the whole advertisement): `pnpm --dir rapt-laser decode <hex>`.
 
 Install dependencies and use the workspace-level commands:
 
