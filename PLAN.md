@@ -155,8 +155,8 @@ from real kegs at the next keg change.
 - **Special states:**
   - No laser chosen: the strip shows "No laser".
   - Nothing heard from the laser: keep showing the last values. With Smart chosen,
-    the laser broadcasts constantly, so silence for over about 15 minutes (tuned in
-    step 3) is a real problem: show a no signal icon (a crossed-out Bluetooth symbol)
+    the laser broadcasts constantly, so silence for over 10 minutes (set in step 3)
+    is a real problem: show a no signal icon (a crossed-out Bluetooth symbol)
     next to the battery icon. One redraw when it appears, one when it clears. With Eco
     chosen, a steady keg is silent for 10+ hours, so there is no warning. Either way,
     flat batteries, the likely failure, show as the red battery icon first. No "last
@@ -379,10 +379,12 @@ Each step ends with something visible to check.
   for nearly 2 hours while the laptop heard all three; a raw dump showed every Smart
   Mode advertisement held only the service UUID. Switched to active scanning, the tap
   heard each laser 176-189 times in 5 minutes, with a longest gap of 14 s, while its
-  setup access point was open. The no signal limit can come down a long way from 15
-  minutes; the long run settles it. Open: whether answering scan requests from three
-  taps shortens battery life. Step 4 can have each tap ask only its own laser (the
-  Bluetooth accept list), so each laser answers one tap.
+  setup access point was open. Over 3 hours on home Wi-Fi the longest gap was 15s,
+  apart from 9 minutes while the RAPT app was connected to laser 1, which stops its
+  broadcasts. So the no signal limit is 10 minutes: a dead laser shows soon, and a
+  few minutes in the RAPT app doesn't trigger it. Open: whether answering scan
+  requests from three taps shortens battery life. Step 4 can have each tap ask only
+  its own laser (the Bluetooth accept list), so each laser answers one tap.
 - **Step 3 lift test (2026-11-07, laser 1):** the tap saw a 16 mm lift and the
   return within seconds, each as Session Mode, and Smart came back about 9 minutes
   after the level settled. While the RAPT app was connected, laser 1 broadcast
