@@ -3,6 +3,7 @@
 #include "DEV_Config.h"
 #include "DeviceLog.h"
 #include "ImageManager.h"
+#include "LaserScanner.h"
 #include "Storage.h"
 #include "WifiManager.h"
 
@@ -28,6 +29,8 @@ void setup()
     Serial.println("Starting web server...");
     startWebServer();
 
+    startLaserScanner();
+
     requestImageUpdate("boot");
 
     Serial.println("Ready");
@@ -38,6 +41,8 @@ void loop()
     processWifiManager();
 
     processImageManager();
+
+    processLaserScanner();
 
     processDeviceLog();
 }

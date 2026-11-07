@@ -14,6 +14,7 @@
 #include "DeviceConfig.h"
 #include "DeviceLog.h"
 #include "ImageManager.h"
+#include "LaserScanner.h"
 #include "Settings.h"
 #include "Storage.h"
 
@@ -34,8 +35,12 @@ static bool networkServicesStarted = false;
 static unsigned long lastWifiAttemptAt = 0;
 static unsigned long wifiOfflineSince = 0;
 static uint32_t wifiAttempts = 0;
-// Why the last WiFi attempt or connection failed. Set from the WiFi event task.
+// Why the last WiFi attempt or connection failed, and how many failures there
+// have been. Set from the WiFi event task.
 static volatile uint8_t lastWifiFailureReason = 0;
+static volatile uint32_t wifiFailureCount = 0;
+// A connection attempt is given this long before Bluetooth scanning resumes.
+static const unsigned long wifiAttemptDuration = 15000;
 static unsigned long restartAt = 0;
 
 enum class ConnectionState
@@ -50,6 +55,10 @@ static ConnectionState connectionState = ConnectionState::Idle;
 static String pendingSsid;
 static String pendingPassword;
 static unsigned long connectionStartedAt = 0;
+// Failures before the test started belong to earlier attempts, such as retries
+// of a saved network that has gone, so they don't count against the test.
+static uint32_t failuresBeforeTest = 0;
+static String connectionFailureMessage;
 
 static void handleRoot(AsyncWebServerRequest* request)
 {
@@ -120,9 +129,38 @@ static void handleScan(AsyncWebServerRequest* request)
 
     for (int i = 0; i < count; i++)
     {
+        String networkSsid = WiFi.SSID(i);
+        if (networkSsid.isEmpty())
+        {
+            // A hidden network
+            continue;
+        }
+
+        // Mesh systems and extenders broadcast one network from several access
+        // points, so list each name once, with its strongest signal.
+        bool listed = false;
+        for (JsonObject network : networks)
+        {
+            if (network["ssid"] == networkSsid)
+            {
+                listed = true;
+                if (WiFi.RSSI(i) > network["rssi"].as<int>())
+                {
+                    network["rssi"] = WiFi.RSSI(i);
+                }
+
+                break;
+            }
+        }
+
+        if (listed)
+        {
+            continue;
+        }
+
         JsonObject network = networks.add<JsonObject>();
 
-        network["ssid"] = WiFi.SSID(i);
+        network["ssid"] = networkSsid;
         network["rssi"] = WiFi.RSSI(i);
         network["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
     }
@@ -170,6 +208,9 @@ static void handleConnect(AsyncWebServerRequest* request)
     Serial.printf("Testing WiFi '%s'\n", pendingSsid.c_str());
 
     WiFi.mode(WIFI_AP_STA);
+    // Stops any retry of the saved network first.
+    WiFi.disconnect();
+    failuresBeforeTest = wifiFailureCount;
     WiFi.begin(
         pendingSsid.c_str(),
         pendingPassword.c_str()
@@ -213,11 +254,14 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
     if (connectionState == ConnectionState::Failure)
     {
         connectionState = ConnectionState::Idle;
-        request->send(
-            400,
-            "application/json",
-            R"({"success":false,"message":"Unable to connect. Check the password and try again."})"
-        );
+
+        JsonDocument doc;
+        doc["success"] = false;
+        doc["message"] = connectionFailureMessage;
+        String response;
+        serializeJson(doc, response);
+
+        request->send(400, "application/json", response);
 
         return;
     }
@@ -335,6 +379,10 @@ static void handleStatus(AsyncWebServerRequest* request)
     }
 
     doc["uptime"] = static_cast<uint64_t>(esp_timer_get_time()) / 1000000;
+    doc["firmware"] = firmwareId();
+    doc["memory"]["free"] = ESP.getFreeHeap();
+    doc["memory"]["lowest"] = ESP.getMinFreeHeap();
+    addLaserStatus(doc["lasers"].to<JsonArray>());
 
     String payload;
     serializeJson(doc, payload);
@@ -441,10 +489,34 @@ static bool accessPointOpen()
     return mode == WIFI_AP || mode == WIFI_AP_STA;
 }
 
+// Phones and laptops on the setup access point, logged as they join and leave.
+static uint8_t accessPointDevices = 0;
+
+static void logAccessPointDevices()
+{
+    if (!accessPointOpen())
+    {
+        return;
+    }
+
+    uint8_t devices = WiFi.softAPgetStationNum();
+    if (devices == accessPointDevices)
+    {
+        return;
+    }
+
+    logEvent(
+        devices > accessPointDevices ? "setup access point joined" : "setup access point left",
+        String(devices) + (devices == 1 ? " device" : " devices") + " connected"
+    );
+    accessPointDevices = devices;
+}
+
 static void stopAccessPoint()
 {
     logEvent("setup access point closed", "WiFi connected");
 
+    accessPointDevices = 0;
     dnsServer.stop();
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
@@ -498,6 +570,7 @@ static void startOverTheAirUpdates()
 
             logEvent("update started", webApp ? "web app" : "firmware");
             flushDeviceLog();
+            pauseLaserScanner(ScanPause::Update);
 
             if (webApp)
             {
@@ -520,6 +593,7 @@ static void startOverTheAirUpdates()
         [](ota_error_t error)
         {
             logEvent("update failed", otaErrorText(error));
+            resumeLaserScanner(ScanPause::Update);
 
             if (ArduinoOTA.getCommand() == U_SPIFFS)
             {
@@ -553,6 +627,29 @@ static String wifiFailureReasonName()
     return WiFi.disconnectReasonName(
         static_cast<wifi_err_reason_t>(lastWifiFailureReason)
     );
+}
+
+// What the setup page shows when a network chosen there fails to connect.
+static String testFailureMessage(bool failureReported)
+{
+    if (!failureReported)
+    {
+        return "Unable to connect to " + pendingSsid + " in time. Try again.";
+    }
+
+    switch (lastWifiFailureReason)
+    {
+        case WIFI_REASON_NO_AP_FOUND:
+            return "Couldn't find " + pendingSsid +
+                ". It must be a 2.4 GHz network in range. Rescan and try again.";
+        case WIFI_REASON_AUTH_FAIL:
+        case WIFI_REASON_AUTH_EXPIRE:
+        case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+        case WIFI_REASON_HANDSHAKE_TIMEOUT:
+            return "Unable to connect to " + pendingSsid + ". Check the password and try again.";
+        default:
+            return "Unable to connect to " + pendingSsid + " (" + wifiFailureReasonName() + "). Try again.";
+    }
 }
 
 static void onWifiConnected()
@@ -662,22 +759,43 @@ void processWifiManager()
             {
                 logEvent("wifi save failed", pendingSsid);
                 WiFi.disconnect(false, true);
+                connectionFailureMessage = "Connected, but unable to save the network. Try again.";
                 connectionState = ConnectionState::Failure;
             }
         }
         else if (
-            status == WL_CONNECT_FAILED ||
-            status == WL_NO_SSID_AVAIL ||
+            wifiFailureCount != failuresBeforeTest ||
             millis() - connectionStartedAt >= 20000
         )
         {
-            logEvent("wifi test failed", pendingSsid + ", " + wifiFailureReasonName());
+            bool failureReported = wifiFailureCount != failuresBeforeTest;
+
+            logEvent(
+                "wifi test failed",
+                pendingSsid + ", " + (failureReported ? wifiFailureReasonName() : String("timed out"))
+            );
             WiFi.disconnect(false, true);
+            connectionFailureMessage = testFailureMessage(failureReported);
             connectionState = ConnectionState::Failure;
         }
     }
 
     processSavedWifi();
+
+    // Bluetooth scanning takes half the radio's time, which can make WiFi miss
+    // the router while connecting, so it pauses meanwhile.
+    bool wifiConnecting =
+        connectionState == ConnectionState::Connecting ||
+        (hasSavedWifi && !wifiConnected && millis() - lastWifiAttemptAt < wifiAttemptDuration);
+
+    if (wifiConnecting)
+    {
+        pauseLaserScanner(ScanPause::WifiConnect);
+    }
+    else
+    {
+        resumeLaserScanner(ScanPause::WifiConnect);
+    }
 
     // Does nothing until WiFi has first connected.
     ArduinoOTA.handle();
@@ -685,6 +803,7 @@ void processWifiManager()
     if (accessPointOpen())
     {
         dnsServer.processNextRequest();
+        logAccessPointDevices();
     }
 }
 
@@ -695,15 +814,22 @@ void startWifi()
     WiFi.persistent(false);
     WiFi.setAutoReconnect(false);
 
+    // With several access points for one network (a mesh system or extenders),
+    // check every channel and join the strongest, not the first found.
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+
     WiFi.onEvent(
         [](arduino_event_id_t, arduino_event_info_t info)
         {
             uint8_t reason = info.wifi_sta_disconnected.reason;
 
-            // The disconnect before each retry reports leaving; keep the real reason.
+            // The disconnect before each retry or test reports leaving; keep the
+            // real reason.
             if (reason != WIFI_REASON_ASSOC_LEAVE)
             {
                 lastWifiFailureReason = reason;
+                wifiFailureCount++;
             }
         },
         ARDUINO_EVENT_WIFI_STA_DISCONNECTED
