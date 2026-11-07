@@ -14,8 +14,9 @@ bool loadWifiSettings(String& ssid, String& password)
         return false;
     }
 
-    ssid = preferences.getString("ssid", "");
-    password = preferences.getString("password", "");
+    // Checked first, because reading a missing key logs an error.
+    ssid = preferences.isKey("ssid") ? preferences.getString("ssid", "") : "";
+    password = preferences.isKey("password") ? preferences.getString("password", "") : "";
     preferences.end();
 
     return !ssid.isEmpty();
@@ -41,6 +42,58 @@ bool clearWifiSettings()
 {
     Preferences preferences;
     if (!preferences.begin(wifiNamespace, false))
+    {
+        return false;
+    }
+
+    bool cleared = preferences.clear();
+    preferences.end();
+
+    return cleared;
+}
+
+static const char* laserNamespace = "laser";
+
+bool loadLaserSettings(String& address, String& mode)
+{
+    Preferences preferences;
+    if (!preferences.begin(laserNamespace, false))
+    {
+        return false;
+    }
+
+    // Checked first, because reading a missing key logs an error.
+    bool chosen = preferences.isKey("address");
+    if (chosen)
+    {
+        address = preferences.getString("address", "");
+        mode = preferences.isKey("mode") ? preferences.getString("mode", "smart") : "smart";
+    }
+    preferences.end();
+
+    return chosen && !address.isEmpty();
+}
+
+bool saveLaserSettings(const String& address, const String& mode)
+{
+    Preferences preferences;
+    if (!preferences.begin(laserNamespace, false))
+    {
+        return false;
+    }
+
+    bool saved =
+        preferences.putString("address", address) == address.length() &&
+        preferences.putString("mode", mode) == mode.length();
+    preferences.end();
+
+    return saved;
+}
+
+bool clearLaserSettings()
+{
+    Preferences preferences;
+    if (!preferences.begin(laserNamespace, false))
     {
         return false;
     }

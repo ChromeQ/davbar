@@ -3,6 +3,7 @@ Import("env")
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 
 repository_directory = Path(env["PROJECT_DIR"]).parent
@@ -69,11 +70,41 @@ if not 8 <= len(secrets["accessPointPassword"]) <= 63:
 # The firmware only needs the hash to check the password espota sends.
 ota_password_hash = hashlib.md5(secrets["otaPassword"].encode("utf-8")).hexdigest()
 
+# The lasers, numbered like the dots on their lids, are shared by every tap.
+lasers_path = repository_directory / "config/lasers.json"
+lasers = read_json(lasers_path, "laser list")
+address_pattern = re.compile(r"^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
+
+if not isinstance(lasers, list) or not lasers:
+    raise RuntimeError(f"{lasers_path} must be a non-empty list of lasers.")
+
+for laser in lasers:
+    number = laser.get("number") if isinstance(laser, dict) else None
+    address = laser.get("address") if isinstance(laser, dict) else None
+    if not isinstance(number, int) or not 1 <= number <= 9:
+        raise RuntimeError(f"{lasers_path}: each laser needs a number from 1 to 9.")
+    if not isinstance(address, str) or not address_pattern.match(address):
+        raise RuntimeError(
+            f'{lasers_path}: laser {number} needs an address like "E5:4C:66:F9:E1:33" '
+            "(capital letters)."
+        )
+
+for key in ("number", "address"):
+    values = [laser[key] for laser in lasers]
+    if len(set(values)) != len(values):
+        raise RuntimeError(f"{lasers_path}: two lasers have the same {key}.")
+
+laser_lines = "".join(
+    f'        {{{laser["number"]}, {json.dumps(laser["address"])}}},\n'
+    for laser in sorted(lasers, key=lambda laser: laser["number"])
+)
+
 generated_directory = Path(env.subst("$BUILD_DIR")) / "generated"
 generated_directory.mkdir(parents=True, exist_ok=True)
 header_path = generated_directory / "DeviceConfig.h"
 header_path.write_text(
     "#pragma once\n\n"
+    "#include <stdint.h>\n\n"
     "namespace DeviceConfig\n"
     "{\n"
     f'    constexpr char BrandName[] = {json.dumps(config["brandName"])};\n'
@@ -84,6 +115,17 @@ header_path.write_text(
     f'    constexpr char AccessPointName[] = {json.dumps(access_point_name)};\n'
     f'    constexpr char AccessPointPassword[] = {json.dumps(secrets["accessPointPassword"])};\n'
     f'    constexpr char OtaPasswordHash[] = {json.dumps(ota_password_hash)};\n'
+    "\n"
+    "    struct Laser\n"
+    "    {\n"
+    "        uint8_t number;\n"
+    "        const char* address;\n"
+    "    };\n"
+    "\n"
+    "    // From config/lasers.json, in number order\n"
+    "    constexpr Laser Lasers[] = {\n"
+    f"{laser_lines}"
+    "    };\n"
     "}\n",
     encoding="utf-8",
 )

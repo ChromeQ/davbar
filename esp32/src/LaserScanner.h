@@ -1,10 +1,15 @@
 #pragma once
 
+#include <Arduino.h>
 #include <ArduinoJson.h>
 
 // Listens for RAPT Laser Level Sensor broadcasts and keeps the latest reading
-// from each laser it hears. Until each tap chooses its laser (step 4), every
-// laser is tracked.
+// from each laser it hears.
+//
+// Until this tap's laser is chosen, every laser is asked for its readings.
+// After that, only the chosen one, so each laser answers one tap instead of
+// three. The laser picker lifts that for a minute at a time (addLaserList), so
+// it can show every laser live.
 
 void startLaserScanner();
 
@@ -25,5 +30,22 @@ void pauseLaserScanner(ScanPause reason);
 
 void resumeLaserScanner(ScanPause reason);
 
+// Chooses this tap's laser by address ("E5:4C:66:F9:E1:33"), and the mode it
+// expects ("smart", the default, or "eco"), and saves them in settings. An
+// empty address chooses none. Returns false with a message for the web app if
+// the address or mode is wrong or saving fails.
+bool chooseLaser(const String& address, const String& mode, String& error);
+
+// Forgets the chosen laser, for a factory reset.
+bool clearLaserChoice();
+
+// Sets "laser" to the chosen laser (number, address and mode), or null.
+void addChosenLaser(JsonObject response);
+
 // Adds each laser's latest reading, for the status page.
 void addLaserStatus(JsonArray lasers);
+
+// For the laser picker: the chosen laser, then "lasers" with every laser in
+// config/lasers.json (heard or not) and any other RAPT laser heard. Asking also
+// listens to every laser for the next minute.
+void addLaserList(JsonObject response);

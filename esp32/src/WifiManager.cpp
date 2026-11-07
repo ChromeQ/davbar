@@ -283,7 +283,7 @@ static void handleFactoryReset(AsyncWebServerRequest* request)
 {
     bool clearLog = request->arg("clearLog") == "1";
 
-    bool cleared = clearWifiSettings() && clearScreenImage();
+    bool cleared = clearWifiSettings() && clearLaserChoice() && clearScreenImage();
     if (clearLog)
     {
         cleared = clearDeviceLog() && cleared;
@@ -341,6 +341,21 @@ static void handleLog(AsyncWebServerRequest* request)
     sendDeviceLog(request, String(DeviceConfig::MdnsHostname) + "-log.csv");
 }
 
+// Never cached, because the values change all the time.
+static void sendJson(AsyncWebServerRequest* request, int code, const JsonDocument& doc)
+{
+    String payload;
+    serializeJson(doc, payload);
+
+    AsyncWebServerResponse* response = request->beginResponse(
+        code,
+        "application/json",
+        payload
+    );
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
+}
+
 static void handleStatus(AsyncWebServerRequest* request)
 {
     JsonDocument doc;
@@ -349,7 +364,8 @@ static void handleStatus(AsyncWebServerRequest* request)
     doc["wifi"]["ssid"] = WiFi.SSID();
     doc["wifi"]["rssi"] = WiFi.RSSI();
 
-    File image = DataFS.open("/image.bin", "r");
+    // Checked first, because opening a missing file logs an error.
+    File image = DataFS.exists("/image.bin") ? DataFS.open("/image.bin", "r") : File();
     if (image)
     {
         doc["image"]["size"] = image.size();
@@ -388,18 +404,39 @@ static void handleStatus(AsyncWebServerRequest* request)
     doc["firmware"] = firmwareId();
     doc["memory"]["free"] = ESP.getFreeHeap();
     doc["memory"]["lowest"] = ESP.getMinFreeHeap();
+    addChosenLaser(doc.as<JsonObject>());
     addLaserStatus(doc["lasers"].to<JsonArray>());
 
-    String payload;
-    serializeJson(doc, payload);
+    sendJson(request, 200, doc);
+}
 
-    AsyncWebServerResponse* response = request->beginResponse(
-        200,
-        "application/json",
-        payload
-    );
-    response->addHeader("Cache-Control", "no-store");
-    request->send(response);
+// The laser picker asks every few seconds while it's open.
+static void handleLasers(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    addLaserList(doc.to<JsonObject>());
+
+    sendJson(request, 200, doc);
+}
+
+static void handleChooseLaser(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    JsonObject response = doc.to<JsonObject>();
+    String error;
+
+    if (!chooseLaser(request->arg("address"), request->arg("mode"), error))
+    {
+        response["success"] = false;
+        response["message"] = error;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    response["success"] = true;
+    addChosenLaser(response);
+    sendJson(request, 200, doc);
 }
 
 static void handleImageUpload(
@@ -917,6 +954,18 @@ void startWebServer()
         "/status",
         HTTP_GET,
         handleStatus
+    );
+
+    server.on(
+        "/lasers",
+        HTTP_GET,
+        handleLasers
+    );
+
+    server.on(
+        "/laser",
+        HTTP_POST,
+        handleChooseLaser
     );
 
     server.onNotFound(

@@ -124,6 +124,19 @@ Only the firmware build reads this file, so the passwords never reach the web
 app. Firmware builds fail with a clear message if it is missing or still has the
 example values.
 
+### Lasers
+
+`config/lasers.json` lists the RAPT Laser Level Sensors, numbered like the dots on
+their lids. It is shared by every tap and built into the firmware, which uses the
+numbers in the web app and the device log:
+
+```json
+[{ "number": 1, "address": "E5:4C:66:F9:E1:33" }]
+```
+
+Numbers are 1 to 9 and addresses are in capitals, as the RAPT app shows them.
+Each tap's web app chooses which laser it shows.
+
 ## Device commands
 
 Run device commands from `app`, always choosing a tap's profile with `--config`

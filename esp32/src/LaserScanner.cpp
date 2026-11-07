@@ -1,13 +1,14 @@
 #include "LaserScanner.h"
 
-#include <Arduino.h>
 #include <NimBLEDevice.h>
 #include <RaptLaser.h>
 #include <atomic>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#include "DeviceConfig.h"
 #include "DeviceLog.h"
+#include "Settings.h"
 
 // The radio is shared with WiFi, so it listens for half of each 100 ms. The
 // catch rate tests in step 3 check this is enough.
@@ -19,6 +20,9 @@ static const unsigned long summaryInterval = 5UL * 60 * 1000;
 // Live Stream sends a new reading every second; log at most one per 10s.
 static const unsigned long minLogInterval = 10000;
 static const unsigned long scanCheckInterval = 10000;
+// How long each laser list request listens to every laser. The picker asks
+// every few seconds while it's open, and a laser answers about every 15s.
+static const unsigned long searchDuration = 60000;
 
 struct LaserState
 {
@@ -38,17 +42,38 @@ struct LaserState
     unsigned long longestGapMs;
 };
 
-// Broadcasts arrive in the Bluetooth task, while the loop and web requests read
-// the lasers, so they are guarded by a mutex.
+// The mode this tap expects its laser to be in, chosen in the web app.
+enum class ChosenMode : uint8_t
+{
+    Smart,
+    Eco,
+};
+
+// Broadcasts arrive in the Bluetooth task and choices in web requests, while
+// the loop and web requests read them, so all of this is guarded by a mutex.
 static SemaphoreHandle_t lasersMutex = nullptr;
 static LaserState lasers[maxLasers];
 static size_t laserCount = 0;
+static bool laserChosen = false;
+static uint8_t chosenAddress[6];
+static ChosenMode chosenMode = ChosenMode::Smart;
+// Every laser is asked for readings until this time (millis); 0 when not.
+static unsigned long searchUntil = 0;
+// Set when the choice changes, so the loop updates the scan.
+static bool choiceChanged = false;
+
 // Broadcasts from any device since the last summary, lasers or not. None at all
 // means Bluetooth isn't getting any time on the radio.
 static std::atomic<uint32_t> broadcastsHeard{0};
+
+// Used only by the loop
 static unsigned long lastSummaryAt = 0;
 static unsigned long lastScanCheckAt = 0;
 static uint8_t pausedFor = 0;
+// Whether the scan asks only the chosen laser, and whether that failed to set
+// up (then every laser is asked until the choice changes).
+static bool scanFiltered = false;
+static bool filterFailed = false;
 
 static bool sameReading(const RaptLaser::Reading& a, const RaptLaser::Reading& b)
 {
@@ -81,6 +106,20 @@ static LaserState* findOrAddLaser(const uint8_t address[6])
     memcpy(laser->address, address, sizeof(laser->address));
 
     return laser;
+}
+
+// The caller holds lasersMutex. Returns null for a laser not heard yet.
+static const LaserState* findLaser(const uint8_t address[6])
+{
+    for (size_t i = 0; i < laserCount; i++)
+    {
+        if (memcmp(lasers[i].address, address, sizeof(lasers[i].address)) == 0)
+        {
+            return &lasers[i];
+        }
+    }
+
+    return nullptr;
 }
 
 class ScanCallbacks : public NimBLEScanCallbacks
@@ -154,6 +193,58 @@ static String addressText(const uint8_t address[6])
     return text;
 }
 
+// The laser's number in config/lasers.json, or 0 for a laser not in it.
+static uint8_t laserNumber(const uint8_t address[6])
+{
+    for (const DeviceConfig::Laser& known : DeviceConfig::Lasers)
+    {
+        uint8_t knownAddress[6];
+        if (
+            RaptLaser::parseAddress(known.address, knownAddress) &&
+            memcmp(knownAddress, address, sizeof(knownAddress)) == 0
+        )
+        {
+            return known.number;
+        }
+    }
+
+    return 0;
+}
+
+// "laser 2 (C4:A3:DF:A2:C5:1B)", or just the address for a laser not in the list
+static String laserName(const uint8_t address[6])
+{
+    uint8_t number = laserNumber(address);
+    if (number == 0)
+    {
+        return addressText(address);
+    }
+
+    return "laser " + String(number) + " (" + addressText(address) + ")";
+}
+
+static const char* modeText(ChosenMode mode)
+{
+    return mode == ChosenMode::Eco ? "eco" : "smart";
+}
+
+static bool parseMode(const String& text, ChosenMode& mode)
+{
+    if (text == "smart")
+    {
+        mode = ChosenMode::Smart;
+        return true;
+    }
+
+    if (text == "eco")
+    {
+        mode = ChosenMode::Eco;
+        return true;
+    }
+
+    return false;
+}
+
 static String litresText(uint16_t litresTenths)
 {
     return String(litresTenths / 10) + "." + String(litresTenths % 10) + " L";
@@ -185,7 +276,7 @@ static String readingDetails(const LaserState& laser)
     const RaptLaser::Reading& reading = laser.reading;
     RaptLaser::KegLevel level = RaptLaser::kegLevel(reading.distanceMm);
 
-    return addressText(laser.address) +
+    return laserName(laser.address) +
         ", " + String(reading.distanceMm) + " mm" +
         ", " + litresText(level.litresTenths) +
         ", " + String(level.percent) + "%" +
@@ -201,6 +292,90 @@ static void startScan()
     if (!scan->start(0, false, true))
     {
         logEvent("laser scan failed to start");
+    }
+}
+
+// Makes the scan ask only the given laser (the controller's accept list), or
+// every laser. The list can only change while the scan is stopped, so this
+// stops it; the caller starts it again. Returns false if the list can't be set.
+static bool filterScan(bool filtered, const uint8_t address[6])
+{
+    NimBLEScan* scan = NimBLEDevice::getScan();
+    if (scan->isScanning())
+    {
+        scan->stop();
+    }
+
+    while (NimBLEDevice::getWhiteListCount() > 0)
+    {
+        if (!NimBLEDevice::whiteListRemove(NimBLEDevice::getWhiteListAddress(0)))
+        {
+            filtered = false;
+            break;
+        }
+    }
+
+    bool listed = true;
+    if (filtered)
+    {
+        // RAPT lasers use random static addresses. The public kind is added
+        // too, in case another RAPT sensor doesn't.
+        listed =
+            NimBLEDevice::whiteListAdd(NimBLEAddress(address, BLE_ADDR_RANDOM)) &&
+            NimBLEDevice::whiteListAdd(NimBLEAddress(address, BLE_ADDR_PUBLIC));
+    }
+
+    scanFiltered = filtered && listed;
+    scan->setFilterPolicy(scanFiltered ? BLE_HCI_SCAN_FILT_USE_WL : BLE_HCI_SCAN_FILT_NO_WL);
+
+    return listed;
+}
+
+// Asks only the chosen laser, except while the picker is searching. Called
+// from the loop, because the Bluetooth calls aren't safe from web requests.
+static void updateScanFilter()
+{
+    unsigned long now = millis();
+    uint8_t address[6];
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+
+    if (searchUntil != 0 && static_cast<long>(now - searchUntil) >= 0)
+    {
+        searchUntil = 0;
+    }
+
+    bool filtered = laserChosen && searchUntil == 0;
+    bool changed = choiceChanged;
+    choiceChanged = false;
+    memcpy(address, chosenAddress, sizeof(address));
+
+    xSemaphoreGive(lasersMutex);
+
+    if (changed)
+    {
+        filterFailed = false;
+    }
+
+    filtered = filtered && !filterFailed;
+
+    // A different laser needs the list rewritten even if filtering stays on.
+    if (filtered == scanFiltered && !(changed && filtered))
+    {
+        return;
+    }
+
+    if (!filterScan(filtered, address))
+    {
+        filterFailed = true;
+        logEvent("laser filter failed", "asking every laser instead");
+        filterScan(false, address);
+    }
+
+    if (pausedFor == 0)
+    {
+        startScan();
+        lastScanCheckAt = millis();
     }
 }
 
@@ -222,11 +397,30 @@ void startLaserScanner()
     scan->setInterval(scanIntervalMs);
     scan->setWindow(scanWindowMs);
 
+    String address;
+    String mode;
+    String choice = "no laser chosen";
+    if (
+        loadLaserSettings(address, mode) &&
+        RaptLaser::parseAddress(address.c_str(), chosenAddress)
+    )
+    {
+        laserChosen = true;
+        parseMode(mode, chosenMode);
+        choice = laserName(chosenAddress) + ", " + modeText(chosenMode);
+
+        if (!filterScan(true, chosenAddress))
+        {
+            filterFailed = true;
+            filterScan(false, chosenAddress);
+        }
+    }
+
     lastSummaryAt = millis();
     lastScanCheckAt = millis();
 
     startScan();
-    logEvent("laser scan started");
+    logEvent("laser scan started", choice);
 }
 
 static void logChangedReadings()
@@ -276,8 +470,15 @@ static void logSummary()
     for (size_t i = 0; i < laserCount; i++)
     {
         LaserState& laser = lasers[i];
+        bool chosen = laserChosen && memcmp(laser.address, chosenAddress, sizeof(chosenAddress)) == 0;
 
-        summary += addressText(laser.address) + " ";
+        // Once a laser is chosen, the others are only heard while searching.
+        if (laser.heard == 0 && laserChosen && !chosen)
+        {
+            continue;
+        }
+
+        summary += laserName(laser.address) + " ";
 
         if (laser.heard == 0)
         {
@@ -297,15 +498,27 @@ static void logSummary()
         laser.longestGapMs = 0;
     }
 
+    bool chosenHeard = !laserChosen || findLaser(chosenAddress) != nullptr;
+    String chosenName = laserChosen ? laserName(chosenAddress) : String();
+
     xSemaphoreGive(lasersMutex);
+
+    if (!chosenHeard)
+    {
+        summary = chosenName + " not heard yet; " + summary;
+    }
 
     if (summary.isEmpty())
     {
         summary = "no lasers heard yet; ";
     }
 
+    // While only the chosen laser is asked, the controller passes on nothing
+    // else, so an Eco laser's silence makes this 0.
+    summary += String(broadcastsHeard.exchange(0)) +
+        (scanFiltered ? " broadcasts (only the chosen laser is asked); " : " broadcasts from any device; ");
+
     summary +=
-        String(broadcastsHeard.exchange(0)) + " broadcasts from any device; " +
         "free memory " + String(ESP.getFreeHeap() / 1024) + " KB" +
         " (lowest " + String(ESP.getMinFreeHeap() / 1024) + " KB)";
 
@@ -318,6 +531,8 @@ void processLaserScanner()
     {
         return;
     }
+
+    updateScanFilter();
 
     logChangedReadings();
 
@@ -385,6 +600,172 @@ void resumeLaserScanner(ScanPause reason)
     }
 }
 
+bool chooseLaser(const String& address, const String& mode, String& error)
+{
+    if (!lasersMutex)
+    {
+        error = "Bluetooth hasn't started yet. Try again.";
+        return false;
+    }
+
+    bool none = address.isEmpty();
+    uint8_t parsed[6] = {};
+    if (!none && !RaptLaser::parseAddress(address.c_str(), parsed))
+    {
+        error = "That isn't a laser address, such as E5:4C:66:F9:E1:33.";
+        return false;
+    }
+
+    ChosenMode parsedMode = ChosenMode::Smart;
+    if (!mode.isEmpty() && !parseMode(mode, parsedMode))
+    {
+        error = "The mode must be smart or eco.";
+        return false;
+    }
+
+    // Saved with capital letters, however it was typed
+    bool saved = none
+        ? clearLaserSettings()
+        : saveLaserSettings(addressText(parsed), modeText(parsedMode));
+    if (!saved)
+    {
+        error = "Unable to save the laser. Try again.";
+        return false;
+    }
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+    laserChosen = !none;
+    memcpy(chosenAddress, parsed, sizeof(chosenAddress));
+    chosenMode = parsedMode;
+    choiceChanged = true;
+    xSemaphoreGive(lasersMutex);
+
+    logEvent(
+        "laser chosen",
+        none ? String("none") : laserName(parsed) + ", " + modeText(parsedMode)
+    );
+
+    return true;
+}
+
+bool clearLaserChoice()
+{
+    if (!clearLaserSettings())
+    {
+        return false;
+    }
+
+    if (lasersMutex)
+    {
+        xSemaphoreTake(lasersMutex, portMAX_DELAY);
+        laserChosen = false;
+        choiceChanged = true;
+        xSemaphoreGive(lasersMutex);
+    }
+
+    return true;
+}
+
+// The caller holds lasersMutex.
+static void addChosenLaserLocked(JsonObject response)
+{
+    if (!laserChosen)
+    {
+        response["laser"] = nullptr;
+        return;
+    }
+
+    JsonObject laser = response["laser"].to<JsonObject>();
+    uint8_t number = laserNumber(chosenAddress);
+
+    if (number == 0)
+    {
+        laser["number"] = nullptr;
+    }
+    else
+    {
+        laser["number"] = number;
+    }
+
+    laser["address"] = addressText(chosenAddress);
+    laser["mode"] = modeText(chosenMode);
+}
+
+void addChosenLaser(JsonObject response)
+{
+    if (!lasersMutex)
+    {
+        response["laser"] = nullptr;
+        return;
+    }
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+    addChosenLaserLocked(response);
+    xSemaphoreGive(lasersMutex);
+}
+
+// The caller holds lasersMutex. A laser not heard yet has nulls.
+static void addLaserItem(JsonArray list, const uint8_t address[6], const LaserState* laser, unsigned long now)
+{
+    JsonObject item = list.add<JsonObject>();
+    uint8_t number = laserNumber(address);
+
+    if (number == 0)
+    {
+        item["number"] = nullptr;
+    }
+    else
+    {
+        item["number"] = number;
+    }
+
+    item["address"] = addressText(address);
+
+    if (!laser)
+    {
+        item["rssi"] = nullptr;
+        item["lastHeardSeconds"] = nullptr;
+        item["reading"] = nullptr;
+        return;
+    }
+
+    item["rssi"] = laser->rssi;
+    item["lastHeardSeconds"] = (now - laser->lastHeardAt) / 1000;
+
+    if (!laser->hasReading)
+    {
+        item["reading"] = nullptr;
+        return;
+    }
+
+    const RaptLaser::Reading& reading = laser->reading;
+    RaptLaser::KegLevel level = RaptLaser::kegLevel(reading.distanceMm);
+    JsonObject details = item["reading"].to<JsonObject>();
+
+    details["mode"] = RaptLaser::modeName(reading.mode);
+    details["distanceMm"] = reading.distanceMm;
+    details["litres"] = level.litresTenths / 10.0;
+    details["percent"] = level.percent;
+
+    if (reading.hasBattery)
+    {
+        details["batteryPercent"] = reading.batteryTenthsPercent / 10.0;
+    }
+    else
+    {
+        details["batteryPercent"] = nullptr;
+    }
+
+    if (reading.hasTemperature)
+    {
+        details["temperatureC"] = reading.temperatureHundredthsC / 100.0;
+    }
+    else
+    {
+        details["temperatureC"] = nullptr;
+    }
+}
+
 void addLaserStatus(JsonArray list)
 {
     if (!lasersMutex)
@@ -398,46 +779,53 @@ void addLaserStatus(JsonArray list)
 
     for (size_t i = 0; i < laserCount; i++)
     {
-        const LaserState& laser = lasers[i];
-        JsonObject item = list.add<JsonObject>();
+        addLaserItem(list, lasers[i].address, &lasers[i], now);
+    }
 
-        item["address"] = addressText(laser.address);
-        item["rssi"] = laser.rssi;
-        item["lastHeardSeconds"] = (now - laser.lastHeardAt) / 1000;
+    xSemaphoreGive(lasersMutex);
+}
 
-        if (!laser.hasReading)
+void addLaserList(JsonObject response)
+{
+    if (!lasersMutex)
+    {
+        response["laser"] = nullptr;
+        response["lasers"].to<JsonArray>();
+        return;
+    }
+
+    unsigned long now = millis();
+    JsonArray list = response["lasers"].to<JsonArray>();
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+
+    bool searchStarting = laserChosen && searchUntil == 0;
+    // Never 0, which means not searching
+    searchUntil = (now + searchDuration) | 1;
+
+    addChosenLaserLocked(response);
+
+    for (const DeviceConfig::Laser& known : DeviceConfig::Lasers)
+    {
+        uint8_t address[6];
+        if (RaptLaser::parseAddress(known.address, address))
         {
-            item["reading"] = nullptr;
-            continue;
+            addLaserItem(list, address, findLaser(address), now);
         }
+    }
 
-        const RaptLaser::Reading& reading = laser.reading;
-        RaptLaser::KegLevel level = RaptLaser::kegLevel(reading.distanceMm);
-        JsonObject details = item["reading"].to<JsonObject>();
-
-        details["mode"] = RaptLaser::modeName(reading.mode);
-        details["distanceMm"] = reading.distanceMm;
-        details["litres"] = level.litresTenths / 10.0;
-        details["percent"] = level.percent;
-
-        if (reading.hasBattery)
+    for (size_t i = 0; i < laserCount; i++)
+    {
+        if (laserNumber(lasers[i].address) == 0)
         {
-            details["batteryPercent"] = reading.batteryTenthsPercent / 10.0;
-        }
-        else
-        {
-            details["batteryPercent"] = nullptr;
-        }
-
-        if (reading.hasTemperature)
-        {
-            details["temperatureC"] = reading.temperatureHundredthsC / 100.0;
-        }
-        else
-        {
-            details["temperatureC"] = nullptr;
+            addLaserItem(list, lasers[i].address, &lasers[i], now);
         }
     }
 
     xSemaphoreGive(lasersMutex);
+
+    if (searchStarting)
+    {
+        logEvent("laser search", "asking every laser for a minute");
+    }
 }

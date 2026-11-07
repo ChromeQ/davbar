@@ -69,6 +69,59 @@ namespace RaptLaser
         }
     }
 
+    static int hexValue(char digit)
+    {
+        if (digit >= '0' && digit <= '9')
+        {
+            return digit - '0';
+        }
+
+        if (digit >= 'A' && digit <= 'F')
+        {
+            return digit - 'A' + 10;
+        }
+
+        if (digit >= 'a' && digit <= 'f')
+        {
+            return digit - 'a' + 10;
+        }
+
+        return -1;
+    }
+
+    bool parseAddress(const char* text, uint8_t address[6])
+    {
+        uint8_t parsed[6];
+
+        for (int i = 0; i < 6; i++)
+        {
+            const char* pair = text + i * 3;
+            int high = hexValue(pair[0]);
+            int low = high < 0 ? -1 : hexValue(pair[1]);
+
+            if (low < 0)
+            {
+                return false;
+            }
+
+            // A colon between pairs, and nothing after the last one.
+            char separator = i < 5 ? ':' : '\0';
+            if (pair[2] != separator)
+            {
+                return false;
+            }
+
+            parsed[i] = static_cast<uint8_t>(high * 16 + low);
+        }
+
+        for (int i = 0; i < 6; i++)
+        {
+            address[i] = parsed[i];
+        }
+
+        return true;
+    }
+
     void formatAddress(const uint8_t address[6], char* text)
     {
         snprintf(
