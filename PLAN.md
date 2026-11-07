@@ -218,11 +218,14 @@ Force refresh in the settings menu still redraws on demand.
   reboots into setup. It keeps the log and the beer library unless asked to clear
   them too. Done in step 2b, apart from the sensor (step 4) and library (step 6).
   The screen keeps the last picture until the setup help screen arrives in step 7.
-- **Lasers:** a shared list in `config/` (laser number and address) is built into
-  every tap. Each tap stores which laser it shows and which mode it expects (Smart by
-  default). RAPT sensors not in the list can
-  still be chosen by address. Changing laser resets the shown values straight away.
-  Nothing stops two taps showing the same laser; the dots make it visible.
+- **Lasers:** a shared list, `config/lasers.json` (laser number and address), is
+  built into every tap. Each tap stores which laser it shows and which mode it
+  expects (Smart by default). RAPT sensors not in the list can still be chosen by
+  address. Changing laser resets the shown values straight away. Nothing stops two
+  taps showing the same laser; the dots make it visible. Once a laser is chosen, the
+  tap asks only that one for readings (the Bluetooth accept list), so each laser
+  answers one tap. Each request for the laser list (`GET /lasers`) asks every laser
+  for the next minute, so the picker shows them all live while it's open.
 - **Over-the-air updates:** `ArduinoOTA` with a password. The new partition table keeps
   two firmware slots, and `pnpm device:upload --ota` uploads over Wi-Fi to the
   profile's address using PlatformIO's `espota` protocol. The first OTA-capable
@@ -270,9 +273,13 @@ Force refresh in the settings menu still redraws on demand.
   controls for percentage (slider and number input), temperature and battery, and
   the chosen mode's icon.
 - "Show on device" sends the preview values to the device for testing.
-- A laser picker next to Send, and in first-time setup (after Wi-Fi, with Skip). It
-  lists each laser's dots, current reading, mode and when it was last heard. It also
-  sets the mode this tap expects:
+- A laser picker next to Send, and on the setup page beside the Wi-Fi settings (the
+  setup hotspot closes as soon as Wi-Fi connects, so it can't come after). It lists
+  every laser in the shared list with its dots and, when heard recently, its
+  reading, mode and when it was last heard; a laser in Eco may not be heard yet, so
+  check the dots on its lid. Choosing one saves it straight away, whether or not
+  Wi-Fi connects, and it can be skipped. The setup page shows which tap it is in a
+  large badge (for example "Tap 1"). The picker also sets the mode this tap expects:
   - Smart (default): screen a few minutes behind a pour, RAPT app works, batteries
     changed more often.
   - Eco (Ultra Low Power): batteries last longer, screen up to about an hour behind.
@@ -307,11 +314,18 @@ Each step ends with something visible to check.
 3. **ESP32 listens:** active Bluetooth scanning, with a C++ decoder tested on the
    laptop against the same captures. Readings, signal strength and missed readings
    show in the serial log, the device log and the Status dialog.
-4. **Lasers:** the shared laser list, the picker (with the mode choice) next to Send
-   and in setup, and the dots and mode icon on screen.
+4. **Lasers,** in two parts:
+   - 4a, firmware: the shared laser list (`config/lasers.json`), the chosen laser and
+     mode in settings, asking only that laser except while the picker searches,
+     `GET /lasers` and `POST /laser`, and factory reset clearing the choice.
+   - 4b, web app: the picker (with the mode choice) next to Send and on the setup
+     page, the setup page's tap badge, and Status marking the chosen laser.
+
+   The dots and mode icon on screen moved to step 5, which draws the strip.
 5. **New layout:** the 400 x 400 image area (any image size with Fit or Fill, pasting
    an image address or an image) and full-screen preview with controls in the web
-   app, the strip drawn by the firmware, "Show on device" and the tap switcher.
+   app, the strip drawn by the firmware (with the laser dots and mode icon), "Show on
+   device" and the tap switcher.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once
    and the prompt when full. Test by sending a beer on one tap and picking it on
    another.
@@ -391,12 +405,20 @@ Each step ends with something visible to check.
   nothing at all. Soon after the app was closed, it went from Session into Live
   Stream for 3.5 minutes with no button pressed, perhaps left over from the app's
   connection.
-- **Calibration:** check the constants against a real keg at the next keg change.
-  Near full the straight line may be off: on 2026-11-07 the RAPT app showed laser 1
-  at 83 mm with 15.8 L remaining (Diagnostics), where the formula gives 16.8 L,
-  though the app readings at 133-359 mm fit it exactly. Perhaps the app allows for
-  the keg's domed top. Needs more app readings below about 130 mm before the screen
-  shows litres.
+- **Calibration:** measure an empty keg filled from a graduated jug. Note the
+  broadcast distance and the RAPT app's litres when empty, then after each fill, in
+  1 L steps near the bottom and top and larger ones in between. Near full the
+  straight line is off: on 2026-11-07 the RAPT app showed laser 1 at 83 mm with
+  15.8 L remaining (Diagnostics), where the formula gives 16.8 L, though the app
+  readings at 133-359 mm fit it exactly. The app has 0.9 L between 83 and 133 mm
+  where the straight line has 1.8 L, which fits the keg's domed top holding less
+  per mm (the bottom is domed too). If so, the litres come from a table of measured
+  points, interpolated between them, instead of one straight line.
+  The distance is measured from about where the laser rests, the underside of the
+  lid, not the bottom of its housing: each laser read 84-89 mm on its 85 mm delivery
+  box, with the bottom of the housing about 70 mm above the table. So the housing
+  hangs about 15 mm below the lid, and a full keg can't read much less than that.
+  Every reading has the same offset, so the constants already include it.
 - **Orange:** tune the dither on the real screen.
 - **Signal margin:** watch signal strength in step 3 and move the antenna if readings
   are missed.

@@ -49,6 +49,10 @@ namespace RaptLaser
     // Writes the address as "E5:4C:66:F9:E1:33", which needs 18 characters.
     void formatAddress(const uint8_t address[6], char* text);
 
+    // Reads an address written like "E5:4C:66:F9:E1:33" (either case). Returns
+    // false, leaving address unchanged, for anything else.
+    bool parseAddress(const char* text, uint8_t address[6]);
+
     // The laser distances for an empty and a full keg.
     struct KegCalibration
     {

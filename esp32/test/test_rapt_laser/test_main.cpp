@@ -166,6 +166,43 @@ static void testModeNames()
     TEST_ASSERT_EQUAL_STRING("Ultra Low Power", RaptLaser::modeName(Mode::UltraLowPower));
 }
 
+static void testParsesAddress()
+{
+    uint8_t address[6];
+
+    TEST_ASSERT_TRUE(RaptLaser::parseAddress("E5:4C:66:F9:E1:33", address));
+    char text[18];
+    RaptLaser::formatAddress(address, text);
+    TEST_ASSERT_EQUAL_STRING("E5:4C:66:F9:E1:33", text);
+
+    TEST_ASSERT_TRUE(RaptLaser::parseAddress("c4:a3:df:a2:c5:1b", address));
+    RaptLaser::formatAddress(address, text);
+    TEST_ASSERT_EQUAL_STRING("C4:A3:DF:A2:C5:1B", text);
+}
+
+static void testRejectsBadAddress()
+{
+    const char* bad[] = {
+        "",
+        "E5:4C:66:F9:E1",
+        "E5:4C:66:F9:E1:3",
+        "E5:4C:66:F9:E1:33:",
+        "E5:4C:66:F9:E1:33 ",
+        "E54C66F9E133",
+        "E5-4C-66-F9-E1-33",
+        "G5:4C:66:F9:E1:33",
+    };
+
+    for (const char* text : bad)
+    {
+        uint8_t address[6] = {1, 2, 3, 4, 5, 6};
+        TEST_ASSERT_FALSE_MESSAGE(RaptLaser::parseAddress(text, address), text);
+        // Left unchanged
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(1, address[0], text);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(6, address[5], text);
+    }
+}
+
 struct AppReading
 {
     uint16_t distanceMm;
@@ -230,6 +267,8 @@ int main()
     RUN_TEST(testRejectsOtherRaptDevice);
     RUN_TEST(testDecodesManufacturerData);
     RUN_TEST(testModeNames);
+    RUN_TEST(testParsesAddress);
+    RUN_TEST(testRejectsBadAddress);
     RUN_TEST(testKegLevelMatchesRaptApp);
     RUN_TEST(testKegLevelWithAnotherCalibration);
     RUN_TEST(testKegLevelWithInvalidCalibration);

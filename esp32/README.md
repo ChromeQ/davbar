@@ -77,12 +77,22 @@ UUID, and the reading comes in the scan response, which it sends only when asked
 listens for 50ms of every 100ms, and pauses while Wi-Fi connects and during
 over-the-air updates.
 
+Each tap shows one laser, chosen in the web app (`POST /laser` with `address` and
+`mode`, `smart` or `eco`) and kept in settings until a factory reset. Until one is
+chosen, the tap asks every laser for readings. After that it asks only the chosen
+one, using the Bluetooth controller's accept list, so each laser answers one tap.
+`GET /lasers` lists every laser in `config/lasers.json`, heard or not, plus any
+other RAPT laser heard, and asks every laser for the next minute, so the picker
+shows them all while it's open.
+
 The device log records a `laser reading` entry when a reading changes (at most one
 every 10 seconds per laser, unless the mode changes) and a `lasers heard` summary
 every 5 minutes. The summary gives each laser's broadcast count, signal range and
 longest gap, the broadcasts heard from any device (none at all means Bluetooth is
-getting no time on the radio) and the free memory. The Status dialog shows each
-laser's latest reading.
+getting no time on the radio; once a laser is chosen, only its broadcasts count)
+and the free memory. Once a laser is chosen, the
+others only appear when a search heard them. The Status dialog shows each laser's
+latest reading.
 
 ## Unit tests
 
