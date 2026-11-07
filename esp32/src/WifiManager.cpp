@@ -60,25 +60,31 @@ static unsigned long connectionStartedAt = 0;
 static uint32_t failuresBeforeTest = 0;
 static String connectionFailureMessage;
 
+// Each page is one gzipped file with its script and styles inside (see
+// app/web/single-file-page.ts): every file a browser downloads at once costs
+// 12-20 KB of memory, so a page load is a single download.
+static void sendPage(AsyncWebServerRequest* request, const char* path)
+{
+    AsyncWebServerResponse* response = request->beginResponse(
+        LittleFS,
+        path,
+        "text/html"
+    );
+    response->addHeader("Content-Encoding", "gzip");
+    request->send(response);
+}
+
 static void handleRoot(AsyncWebServerRequest* request)
 {
     wifi_mode_t mode = WiFi.getMode();
 
     if (mode == WIFI_AP || mode == WIFI_AP_STA)
     {
-        request->send(
-            LittleFS,
-            "/connect.html",
-            "text/html"
-        );
+        sendPage(request, "/connect.html.gz");
     }
     else
     {
-        request->send(
-            LittleFS,
-            "/index.html",
-            "text/html"
-        );
+        sendPage(request, "/index.html.gz");
     }
 }
 
@@ -851,12 +857,6 @@ void startWifi()
 
 void startWebServer()
 {
-    server.serveStatic(
-        "/assets/",
-        LittleFS,
-        "/assets/"
-    ).setTryGzipFirst(false);
-
     server.on(
         "/",
         HTTP_GET,

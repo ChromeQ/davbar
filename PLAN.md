@@ -383,7 +383,18 @@ Each step ends with something visible to check.
   minutes; the long run settles it. Open: whether answering scan requests from three
   taps shortens battery life. Step 4 can have each tap ask only its own laser (the
   Bluetooth accept list), so each laser answers one tap.
+- **Step 3 lift test (2026-11-07, laser 1):** the tap saw a 16 mm lift and the
+  return within seconds, each as Session Mode, and Smart came back about 9 minutes
+  after the level settled. While the RAPT app was connected, laser 1 broadcast
+  nothing at all. Soon after the app was closed, it went from Session into Live
+  Stream for 3.5 minutes with no button pressed, perhaps left over from the app's
+  connection.
 - **Calibration:** check the constants against a real keg at the next keg change.
+  Near full the straight line may be off: on 2026-11-07 the RAPT app showed laser 1
+  at 83 mm with 15.8 L remaining (Diagnostics), where the formula gives 16.8 L,
+  though the app readings at 133-359 mm fit it exactly. Perhaps the app allows for
+  the keg's domed top. Needs more app readings below about 130 mm before the screen
+  shows litres.
 - **Orange:** tune the dither on the real screen.
 - **Signal margin:** watch signal strength in step 3 and move the antenna if readings
   are missed.
