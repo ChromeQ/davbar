@@ -51,7 +51,7 @@ does not rebuild or upload the LittleFS web filesystem. Every build needs
 | --- | --- | --- |
 | `nvs` | 20 KB | Settings, such as the saved Wi-Fi network |
 | `app0`, `app1` | 1.75 MB each | Two firmware slots, for over-the-air updates |
-| `spiffs` | 512 KB | The web app, replaced by every filesystem upload |
+| `spiffs` | 512 KB | The web app (two gzipped pages), replaced by every filesystem upload |
 | `store` | 3.9 MB | The screen image and the device log |
 | `coredump` | 64 KB | Crash dumps |
 

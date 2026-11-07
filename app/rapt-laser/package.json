@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
-    "@tsconfig/node26": "26.0.0",
+    "@tsconfig/node26": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:typescript",
     "eslint": "catalog:",
@@ -25,6 +25,6 @@
     "tsx": "catalog:",
     "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:",
-    "vitest": "4.1.10"
+    "vitest": "catalog:"
   }
 }

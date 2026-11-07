@@ -52,11 +52,18 @@ Run these commands from `app`:
 
 ```bash
 pnpm dev       # Start the Vite development server
-pnpm build     # Build the web app
+pnpm build     # Build the web app into web/dist
 pnpm preview   # Preview the production web build
 pnpm lint      # Lint all workspace packages
 pnpm test      # Test all workspace packages
 ```
+
+The build makes each page (the app and the Wi-Fi setup page) a single gzipped HTML
+file with its script and styles inside: `web/dist/index.html.gz` and
+`web/dist/connect.html.gz`. Every file a browser downloads at the same time costs the
+ESP32 12-20 KB of memory it can't spare, so a page load is one download. The
+device commands copy these files to `esp32/data`, and `pnpm preview` serves them the
+same way the device does.
 
 To open the Vite server from another device on the same network, expose it on all
 interfaces:
