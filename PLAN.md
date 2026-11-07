@@ -28,8 +28,13 @@ from a KegLand RAPT Laser Level Sensor in the keg lid. The displays are now alwa
 
 ## Sensor broadcast
 
-Readings are in the sensor's Bluetooth advertisements, so the ESP32 only needs to
-listen; it never connects.
+Readings are in the sensor's Bluetooth broadcasts, so the ESP32 never connects. It
+does have to ask for them, though: the advertisement itself holds only the service
+UUID, and the reading is in the scan response, which the sensor sends only to a
+scanner that requests it (active scanning). Phones, nRF Connect and the laptop do this
+by default and show both merged, which hid it until step 3. Passive scanning on the
+ESP32 heard a Smart Mode laser a few times an hour at best (more in Session Mode);
+active scanning hears each one about 36 times a minute.
 
 - **Smart Mode (1, default):** advertises constantly (up to 12 times a minute heard).
   It measures regularly but only updates the reading it broadcasts when the level
@@ -41,7 +46,7 @@ listen; it never connects.
   about every 35 seconds, then back to the previous mode a few minutes after the
   level settles.
 - **Live Stream Mode (3):** a fresh reading about every second. Started or stopped by
-  holding the sensor's Bluetooth button for about 2 s (or from the app, with a Pro
+  holding the sensor's Bluetooth button for about 2s (or from the app, with a Pro
   subscription), and ends by itself. Useful for development and filling kegs; drains
   the battery.
 - **Ultra Low Power Mode (4):** wakes on a 30-minute-7-second grid. After a level
@@ -54,13 +59,13 @@ listen; it never connects.
 
 Sensor buttons ([RAPT docs](https://docs.rapt.io/equipment/rapt-laser-level-sensor/operation)):
 a single press of Bluetooth takes a reading and broadcasts it; a double tap toggles
-Smart and Ultra Low Power; holding it for about 2 s toggles Live Stream. A single press
+Smart and Ultra Low Power; holding it for about 2s toggles Live Stream. A single press
 of Power shows the mode as 1-4 green blinks.
 
-Each advertisement contains flags (`0x06`), the 128-bit service UUID
-`52415054-0a06-9215-08bf-f2b018840000` ("RAPT"), and manufacturer data with company
-ID `0x4152` ("RA") followed by a 19-byte payload. Multi-byte values are
-little-endian.
+The advertisement (a connectable `ADV_IND`) contains flags (`0x06`) and the 128-bit
+service UUID `52415054-0a06-9215-08bf-f2b018840000` ("RAPT"). The scan response
+contains manufacturer data with company ID `0x4152` ("RA") followed by a 19-byte
+payload. Multi-byte values are little-endian.
 
 | Offset | Size | Field | Notes |
 | --- | --- | --- | --- |
@@ -97,7 +102,8 @@ Payloads after the company ID, for decoder tests:
 | `5054A1E54C66F9E133E90047010AFF02530703` | Distance 233 mm, height 327 mm, battery 767 (sagging while the laser fires), 18.75 °C, Live Stream. Laptop log, 2026-11-02 |
 | `5054A1E54C66F9E133DB0055010A5B039E0704` | Distance 219 mm, height 341 mm, battery 859, 19.50 °C, Ultra Low Power. Laptop log |
 
-Full advertisement for the 136 mm capture:
+Advertisement and scan response for the 136 mm capture, merged as nRF Connect shows
+them (the advertisement ends after `...54504152`):
 `0x020106110700008418B0F2BF081592060A5450415216FF52415054A1E54C66F9E1338500AB010AE8031B0801`
 
 ### Litres and percentage
@@ -178,7 +184,7 @@ Force refresh in the settings menu still redraws on demand.
 ## Firmware changes
 
 - **Always on:** remove deep sleep.
-- **Wi-Fi:** with saved Wi-Fi, retry every 30 s and never give up. After 5 minutes
+- **Wi-Fi:** with saved Wi-Fi, retry every 30s and never give up. After 5 minutes
   without Wi-Fi, also open the setup access point while still retrying. Pause retries
   while a phone is connected to the access point, and close it once Wi-Fi connects.
   Sensor readings and display updates keep working without Wi-Fi.
@@ -298,7 +304,7 @@ Each step ends with something visible to check.
    router off for 10 minutes, doing a filesystem upload, running a factory reset, and
    uploading over Wi-Fi, then checking the downloaded log shows all of it. Done, in
    three parts (2a, 2b, 2c), tested on tap 1.
-3. **ESP32 listens:** passive Bluetooth scanning, with a C++ decoder tested on the
+3. **ESP32 listens:** active Bluetooth scanning, with a C++ decoder tested on the
    laptop against the same captures. Readings, signal strength and missed readings
    show in the serial log, the device log and the Status dialog.
 4. **Lasers:** the shared laser list, the picker (with the mode choice) next to Send
@@ -369,6 +375,14 @@ Each step ends with something visible to check.
   Session Mode by itself. Bonding would bring nothing the broadcasts don't already
   give. Step 3 must check the ESP32's catch rate, because it shares one radio between
   Wi-Fi and Bluetooth.
+- **Step 3 catch rate (2026-11-07):** with passive scanning, tap 1 heard no lasers
+  for nearly 2 hours while the laptop heard all three; a raw dump showed every Smart
+  Mode advertisement held only the service UUID. Switched to active scanning, the tap
+  heard each laser 176-189 times in 5 minutes, with a longest gap of 14 s, while its
+  setup access point was open. The no signal limit can come down a long way from 15
+  minutes; the long run settles it. Open: whether answering scan requests from three
+  taps shortens battery life. Step 4 can have each tap ask only its own laser (the
+  Bluetooth accept list), so each laser answers one tap.
 - **Calibration:** check the constants against a real keg at the next keg change.
 - **Orange:** tune the dither on the real screen.
 - **Signal margin:** watch signal strength in step 3 and move the antenna if readings

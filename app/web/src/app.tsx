@@ -39,6 +39,20 @@ type ApiResult = {
   success: boolean;
   message: string;
 };
+type LaserStatus = {
+  address: string;
+  rssi: number;
+  lastHeardSeconds: number;
+  reading: {
+    mode: string;
+    distanceMm: number;
+    litres: number;
+    percent: number;
+    batteryPercent: number | null;
+    temperatureC: number | null;
+  } | null;
+};
+
 type DeviceStatus = {
   hostname: string;
   ip: string;
@@ -51,6 +65,12 @@ type DeviceStatus = {
     size: number;
   };
   uptime: number;
+  firmware?: string;
+  memory?: {
+    free: number;
+    lowest: number;
+  };
+  lasers?: LaserStatus[];
 };
 
 const isApiResult = (value: unknown): value is ApiResult =>
@@ -97,6 +117,28 @@ const formatUptime = (totalSeconds: number) => {
   ]
     .filter(Boolean)
     .join(' ');
+};
+
+const formatLaser = (laser: LaserStatus) => {
+  const heard = `heard ${formatUptime(laser.lastHeardSeconds)} ago`;
+  const reading = laser.reading;
+
+  if (!reading) {
+    return `No reading yet · ${laser.rssi} dBm · ${heard}`;
+  }
+
+  return [
+    `${reading.distanceMm} mm`,
+    `${reading.litres.toFixed(1)} L`,
+    `${reading.percent}%`,
+    reading.mode,
+    reading.batteryPercent === null ? null : `battery ${reading.batteryPercent.toFixed(1)}%`,
+    reading.temperatureC === null ? null : `${reading.temperatureC.toFixed(1)}°`,
+    `${laser.rssi} dBm`,
+    heard,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 };
 
 const formatImageUpdated = (updated: string | null) => {
@@ -1166,6 +1208,33 @@ const App = () => {
                   <dt>Uptime</dt>
                   <dd>{formatUptime(status.uptime)}</dd>
                 </div>
+                {status.firmware && (
+                  <div>
+                    <dt>Firmware</dt>
+                    <dd>{status.firmware}</dd>
+                  </div>
+                )}
+                {status.memory && (
+                  <div>
+                    <dt>Free memory</dt>
+                    <dd>
+                      {Math.floor(status.memory.free / 1024)} KB (lowest{' '}
+                      {Math.floor(status.memory.lowest / 1024)} KB)
+                    </dd>
+                  </div>
+                )}
+                {status.lasers?.length === 0 && (
+                  <div>
+                    <dt>Lasers</dt>
+                    <dd>None heard yet</dd>
+                  </div>
+                )}
+                {status.lasers?.map((laser) => (
+                  <div key={laser.address}>
+                    <dt>Laser {laser.address}</dt>
+                    <dd>{formatLaser(laser)}</dd>
+                  </div>
+                ))}
               </dl>
             ) : null}
             {!statusLoading && (

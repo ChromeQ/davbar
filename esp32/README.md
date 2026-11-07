@@ -68,6 +68,33 @@ Wi-Fi and image. From the repository root:
 
 Then upload everything again over USB from `../app` with `pnpm device:upload`.
 
+## Lasers
+
+`LaserScanner` listens for RAPT Laser Level Sensor broadcasts with NimBLE, decoded by
+`lib/RaptLaser`. It scans actively: a laser's advertisement holds only its service
+UUID, and the reading comes in the scan response, which it sends only when asked
+(see `PLAN.md`, Sensor broadcast). The radio is shared with Wi-Fi, so scanning
+listens for 50ms of every 100ms, and pauses while Wi-Fi connects and during
+over-the-air updates.
+
+The device log records a `laser reading` entry when a reading changes (at most one
+every 10 seconds per laser, unless the mode changes) and a `lasers heard` summary
+every 5 minutes. The summary gives each laser's broadcast count, signal range and
+longest gap, the broadcasts heard from any device (none at all means Bluetooth is
+getting no time on the radio) and the free memory. The Status dialog shows each
+laser's latest reading.
+
+## Unit tests
+
+Code without Arduino dependencies, such as the laser decoder, is tested on the
+laptop by the `native` environment. The tests in `test/test_rapt_laser` use the same
+captures as the TypeScript decoder's tests in `app/rapt-laser`. From the repository
+root:
+
+```bash
+~/.platformio/penv/bin/platformio test -d esp32 -e native
+```
+
 ## Device log
 
 `DeviceLog` records events to the serial port and to numbered CSV segments in
