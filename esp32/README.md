@@ -77,8 +77,9 @@ UUID, and the reading comes in the scan response, which it sends only when asked
 listens for 50ms of every 100ms, and pauses while Wi-Fi connects and during
 over-the-air updates.
 
-Each tap shows one laser, chosen in the web app (`POST /laser` with `address` and
-`mode`, `smart` or `eco`) and kept in settings until a factory reset. Until one is
+Each tap shows one laser, chosen in the web app or on the setup page (`POST /laser`
+with `address` and `mode`, `smart` or `eco`; an empty `address` clears it) and kept
+in settings until a factory reset. Until one is
 chosen, the tap asks every laser for readings. After that it asks only the chosen
 one, using the Bluetooth controller's accept list, so each laser answers one tap.
 `GET /lasers` lists every laser in `config/lasers.json`, heard or not, plus any

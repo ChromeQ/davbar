@@ -104,8 +104,8 @@ export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
     uploadUrl: `http://${uploadHost}`,
     defaultText: input.brandName,
     outputFileName: `${outputFileStem || "display"}-text.bin`,
-    appTitle: `${input.brandName} Display`,
-    connectTitle: `${input.brandName} | Configure WiFi`,
+    appTitle: `${input.brandName} Display | ${input.deviceName}`,
+    connectTitle: `${input.brandName} | Set up ${input.deviceName}`,
   };
 
   return { config, configPath };

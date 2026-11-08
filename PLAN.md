@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: planning done, no code changed yet. Last updated 2026-10-31.
+Status: steps 0 to 4 done, step 5 next. Last updated 2026-11-08.
 
 ## Goal
 
@@ -273,13 +273,15 @@ Force refresh in the settings menu still redraws on demand.
   controls for percentage (slider and number input), temperature and battery, and
   the chosen mode's icon.
 - "Show on device" sends the preview values to the device for testing.
-- A laser picker next to Send, and on the setup page beside the Wi-Fi settings (the
-  setup hotspot closes as soon as Wi-Fi connects, so it can't come after). It lists
-  every laser in the shared list with its dots and, when heard recently, its
-  reading, mode and when it was last heard; a laser in Eco may not be heard yet, so
-  check the dots on its lid. Choosing one saves it straight away, whether or not
-  Wi-Fi connects, and it can be skipped. The setup page shows which tap it is in a
-  large badge (for example "Tap 1"). The picker also sets the mode this tap expects:
+- A laser picker next to Send, and on the setup page below the Wi-Fi settings, as
+  it's optional there and can be changed later in the app. It lists every laser in
+  the shared list with its dots and, when heard recently, its reading, mode and when
+  it was last heard; a laser in Eco may not be heard yet, so check the dots on its
+  lid. A Save button sends the choice, and it can be skipped. On the setup page the
+  laser and Wi-Fi are one form: its Save sends the laser first (kept whether or not
+  Wi-Fi connects), then joins Wi-Fi. Both pages show which tap it is in a large
+  badge (for example "Tap 1"), and so does the browser tab's title. The picker also
+  sets the mode this tap expects:
   - Smart (default): screen a few minutes behind a pour, RAPT app works, batteries
     changed more often.
   - Eco (Ultra Low Power): batteries last longer, screen up to about an hour behind.
@@ -313,15 +315,18 @@ Each step ends with something visible to check.
    three parts (2a, 2b, 2c), tested on tap 1.
 3. **ESP32 listens:** active Bluetooth scanning, with a C++ decoder tested on the
    laptop against the same captures. Readings, signal strength and missed readings
-   show in the serial log, the device log and the Status dialog.
+   show in the serial log, the device log and the Status dialog. Done, tested on
+   tap 1.
 4. **Lasers,** in two parts:
    - 4a, firmware: the shared laser list (`config/lasers.json`), the chosen laser and
      mode in settings, asking only that laser except while the picker searches,
      `GET /lasers` and `POST /laser`, and factory reset clearing the choice.
    - 4b, web app: the picker (with the mode choice) next to Send and on the setup
-     page, the setup page's tap badge, and Status marking the chosen laser.
+     page, the tap badge and title on both pages, and Status marking the chosen
+     laser.
 
-   The dots and mode icon on screen moved to step 5, which draws the strip.
+   The dots and mode icon on screen moved to step 5, which draws the strip. Done,
+   both parts tested on tap 1, including the setup page after a factory reset.
 5. **New layout:** the 400 x 400 image area (any image size with Fit or Fill, pasting
    an image address or an image) and full-screen preview with controls in the web
    app, the strip drawn by the firmware (with the laser dots and mode icon), "Show on

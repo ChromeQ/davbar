@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Download,
+  Gauge,
   LoaderCircle,
   Power,
   RefreshCw,
@@ -15,6 +16,15 @@ import {
 
 import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
 import { deviceConfig } from './device-config';
+import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
+import {
+  byLaserNumber,
+  fetchChosenLaser,
+  laserName,
+  modeLabel,
+  type ChosenLaser,
+  type LaserItem,
+} from './lasers';
 import './common.style.css';
 import './app.style.css';
 
@@ -39,20 +49,6 @@ type ApiResult = {
   success: boolean;
   message: string;
 };
-type LaserStatus = {
-  address: string;
-  rssi: number;
-  lastHeardSeconds: number;
-  reading: {
-    mode: string;
-    distanceMm: number;
-    litres: number;
-    percent: number;
-    batteryPercent: number | null;
-    temperatureC: number | null;
-  } | null;
-};
-
 type DeviceStatus = {
   hostname: string;
   ip: string;
@@ -70,7 +66,8 @@ type DeviceStatus = {
     free: number;
     lowest: number;
   };
-  lasers?: LaserStatus[];
+  laser?: ChosenLaser | null;
+  lasers?: LaserItem[];
 };
 
 const isApiResult = (value: unknown): value is ApiResult =>
@@ -119,26 +116,103 @@ const formatUptime = (totalSeconds: number) => {
     .join(' ');
 };
 
-const formatLaser = (laser: LaserStatus) => {
-  const heard = `heard ${formatUptime(laser.lastHeardSeconds)} ago`;
-  const reading = laser.reading;
-
-  if (!reading) {
-    return `No reading yet · ${laser.rssi} dBm · ${heard}`;
+// The Status dialog's line for a laser, with everything the tap knows about it.
+const formatLaser = (laser: LaserItem) => {
+  if (laser.lastHeardSeconds === null) {
+    return `${laser.address} · not heard yet`;
   }
 
+  const reading = laser.reading;
+
   return [
-    `${reading.distanceMm} mm`,
-    `${reading.litres.toFixed(1)} L`,
-    `${reading.percent}%`,
-    reading.mode,
-    reading.batteryPercent === null ? null : `battery ${reading.batteryPercent.toFixed(1)}%`,
-    reading.temperatureC === null ? null : `${reading.temperatureC.toFixed(1)}°`,
-    `${laser.rssi} dBm`,
-    heard,
+    laser.address,
+    reading ? `${reading.distanceMm} mm` : 'no reading yet',
+    reading ? `${reading.litres.toFixed(1)} L` : null,
+    reading ? `${reading.percent}%` : null,
+    reading?.mode,
+    reading && reading.batteryPercent !== null
+      ? `battery ${reading.batteryPercent.toFixed(1)}%`
+      : null,
+    reading && reading.temperatureC !== null ? `${reading.temperatureC.toFixed(1)}°` : null,
+    laser.rssi === null ? null : `${laser.rssi} dBm`,
+    `heard ${formatUptime(laser.lastHeardSeconds)} ago`,
   ]
     .filter(Boolean)
     .join(' · ');
+};
+
+const formatChosenLaser = (laser: ChosenLaser | null) =>
+  laser ? `${laserName(laser)} · ${modeLabel(laser.mode)}` : 'None chosen';
+
+type LaserDialogProps = {
+  onClose: () => void;
+  onSaved: (laser: ChosenLaser) => void;
+};
+
+// Its own component so the tap only searches every laser while it's open.
+const LaserDialog = ({ onClose, onSaved }: LaserDialogProps) => {
+  const picker = useLaserPicker();
+
+  const save = async () => {
+    const laser = await picker.save();
+
+    if (laser) {
+      onSaved(laser);
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="app-modal laser-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="laser-modal-title"
+        aria-describedby="laser-modal-description"
+        aria-busy={picker.saving}
+      >
+        <div className="modal-icon settings-modal-icon" aria-hidden="true">
+          <Gauge size={22} strokeWidth={1.8} />
+        </div>
+        <h2 id="laser-modal-title">{deviceConfig.deviceName}'s laser</h2>
+        <p id="laser-modal-description">Choose the laser in this tap's keg and its mode.</p>
+        <LaserPicker picker={picker} />
+        {picker.saveError && (
+          <p className="laser-modal-error" role="alert">
+            {picker.saveError}
+          </p>
+        )}
+        <div className="modal-actions laser-modal-actions">
+          <button className="modal-button" type="button" autoFocus onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="modal-button primary-modal-button"
+            type="button"
+            disabled={!picker.changed}
+            onClick={() => void save()}
+          >
+            {picker.saving ? (
+              <>
+                <LoaderCircle className="upload-spinner" size={16} aria-hidden="true" />
+                Saving
+              </>
+            ) : (
+              'Save'
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const formatImageUpdated = (updated: string | null) => {
@@ -197,6 +271,10 @@ const App = () => {
   const [clearLog, setClearLog] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [factoryResetResult, setFactoryResetResult] = useState<ApiResult | null>(null);
+  const [laserDialogOpen, setLaserDialogOpen] = useState(false);
+  // undefined until loaded; null when no laser is chosen.
+  const [chosenLaser, setChosenLaser] = useState<ChosenLaser | null | undefined>(undefined);
+  const [chosenLaserFailed, setChosenLaserFailed] = useState(false);
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const isUploading = uploadState === 'uploading';
   const uploadSucceeded = uploadState === 'success';
@@ -208,7 +286,14 @@ const App = () => {
     statusDialogOpen ||
     refreshDialogOpen ||
     rebootDialogOpen ||
-    factoryResetDialogOpen;
+    factoryResetDialogOpen ||
+    laserDialogOpen;
+
+  useEffect(() => {
+    fetchChosenLaser()
+      .then((laser) => setChosenLaser(laser))
+      .catch(() => setChosenLaserFailed(true));
+  }, []);
 
   useEffect(() => {
     if (!modalOpen) {
@@ -232,6 +317,7 @@ const App = () => {
         setRefreshDialogOpen(false);
         setRebootDialogOpen(false);
         setFactoryResetDialogOpen(false);
+        setLaserDialogOpen(false);
       }
     };
 
@@ -772,7 +858,9 @@ const App = () => {
             <Settings size={20} aria-hidden="true" />
           </button>
         </div>
-        <h1>Keg Display Studio</h1>
+        <h1>
+          Keg Display Studio <span className="tap-badge">{deviceConfig.deviceName}</span>
+        </h1>
         <div className="display-spec">
           <span className="status-dot" />
           400 × 600 Spectra 6
@@ -966,6 +1054,28 @@ const App = () => {
               </strong>
             </div>
             <button
+              className="laser-button"
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setLaserDialogOpen(true)}
+            >
+              <span className="upload-label">Laser</span>
+              <strong>
+                {chosenLaser ? (
+                  <>
+                    <LaserDots number={chosenLaser.number} />
+                    {formatChosenLaser(chosenLaser)}
+                  </>
+                ) : chosenLaser === null ? (
+                  'Choose a laser'
+                ) : chosenLaserFailed ? (
+                  'Not available'
+                ) : (
+                  'Checking…'
+                )}
+              </strong>
+            </button>
+            <button
               className="upload-button"
               type="button"
               disabled={!binary || uploadState === 'uploading'}
@@ -1082,6 +1192,16 @@ const App = () => {
         </div>
       )}
 
+      {laserDialogOpen && (
+        <LaserDialog
+          onClose={() => setLaserDialogOpen(false)}
+          onSaved={(laser) => {
+            setChosenLaser(laser);
+            setChosenLaserFailed(false);
+          }}
+        />
+      )}
+
       {settingsOpen && (
         <div
           className="modal-backdrop"
@@ -1107,7 +1227,7 @@ const App = () => {
                 <Activity size={19} aria-hidden="true" />
                 <span>
                   <strong>Device status</strong>
-                  <small>View network, image, and uptime information</small>
+                  <small>View network, laser, image, and uptime information</small>
                 </span>
               </button>
               <button type="button" onClick={openRefreshDialog}>
@@ -1135,7 +1255,7 @@ const App = () => {
                 <RotateCcw size={19} aria-hidden="true" />
                 <span>
                   <strong>Factory reset</strong>
-                  <small>Clear the WiFi and screen image, then return to setup mode</small>
+                  <small>Clear the WiFi, laser, and screen image, then return to setup mode</small>
                 </span>
               </button>
             </div>
@@ -1223,15 +1343,24 @@ const App = () => {
                     </dd>
                   </div>
                 )}
-                {status.lasers?.length === 0 && (
+                {status.laser !== undefined && (
                   <div>
-                    <dt>Lasers</dt>
-                    <dd>None heard yet</dd>
+                    <dt>This tap's laser</dt>
+                    <dd>{formatChosenLaser(status.laser)}</dd>
                   </div>
                 )}
-                {status.lasers?.map((laser) => (
+                {status.lasers?.length === 0 && (
+                  <div>
+                    <dt>Lasers heard</dt>
+                    <dd>None yet</dd>
+                  </div>
+                )}
+                {[...(status.lasers ?? [])].sort(byLaserNumber).map((laser) => (
                   <div key={laser.address}>
-                    <dt>Laser {laser.address}</dt>
+                    <dt>
+                      {laserName(laser)}
+                      {laser.address === status.laser?.address && ' (this tap)'}
+                    </dt>
                     <dd>{formatLaser(laser)}</dd>
                   </div>
                 ))}
@@ -1472,7 +1601,7 @@ const App = () => {
                 : (factoryResetResult?.message ??
                   (resetting
                     ? 'Clearing the device.'
-                    : 'The device will forget its WiFi network and clear its screen image, then restart in setup mode. The screen keeps showing the current picture until a new one is sent. The log is kept unless you tick the box below.'))}
+                    : 'The device will forget its WiFi network and laser and clear its screen image, then restart in setup mode. The screen keeps showing the current picture until a new one is sent. The log is kept unless you tick the box below.'))}
             </p>
             {!resetting && !factoryResetResult && (
               <label className="checkbox-option">
