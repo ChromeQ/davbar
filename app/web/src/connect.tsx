@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { deviceConfig } from './device-config';
+import { LaserPicker, useLaserPicker } from './laser-picker';
 import './common.style.css';
 import './connect.style.css';
 
@@ -101,6 +102,7 @@ const Connect = () => {
   const [scanError, setScanError] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [connectionResult, setConnectionResult] = useState<ConnectionResult | null>(null);
+  const laserPicker = useLaserPicker();
 
   const scanNetworks = async () => {
     setScanning(true);
@@ -191,6 +193,7 @@ const Connect = () => {
   const passwordRequired = selectedNetwork?.secure === true;
   const saveDisabled =
     connecting ||
+    laserPicker.saving ||
     !selectedNetwork ||
     (passwordRequired && (password.length < 8 || password.length > 63));
 
@@ -204,6 +207,14 @@ const Connect = () => {
     setConnecting(true);
     setNetworkDropdownOpen(false);
     setConnectionResult(null);
+
+    // The laser is sent first, although it's below the WiFi fields: once WiFi
+    // connects, the tap restarts and this page closes. A laser already saved, or
+    // none chosen, is skipped.
+    if (laserPicker.changed && !(await laserPicker.save())) {
+      setConnecting(false);
+      return;
+    }
 
     try {
       let response = await fetch('/connect', {
@@ -310,7 +321,9 @@ const Connect = () => {
     <main className="connect-shell">
       <header className="connect-header">
         <p className="eyebrow">{deviceConfig.brandName}</p>
-        <h1>Configure WiFi</h1>
+        <h1>
+          Set up <span className="tap-badge">{deviceConfig.deviceName}</span>
+        </h1>
       </header>
 
       <form className="connect-form" action="/connect" method="post" onSubmit={handleSubmit}>
@@ -434,16 +447,25 @@ const Connect = () => {
           </div>
         </div>
 
+        {/* Optional here: it can also be chosen later in the app. */}
+        <LaserPicker picker={laserPicker} />
+
         <button className="connect-submit" type="submit" disabled={saveDisabled}>
           {connecting ? (
             <>
               <LoaderCircle className="connect-spinner" size={18} aria-hidden="true" />
-              Connecting
+              {laserPicker.saving ? 'Saving laser' : 'Connecting'}
             </>
           ) : (
             'Save'
           )}
         </button>
+        {laserPicker.saveError && (
+          <p className="connection-message is-error" role="alert">
+            <CircleAlert size={18} aria-hidden="true" />
+            <span>The laser wasn't saved: {laserPicker.saveError}</span>
+          </p>
+        )}
         {connectionResult && (
           <p
             className={`connection-message ${connectionResult.success ? 'is-success' : 'is-error'}`}

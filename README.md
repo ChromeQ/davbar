@@ -9,23 +9,27 @@ DavBar Keg Display is a system for creating and showing custom 400 x 600 content
 
 The device is powered over USB and always on.
 
-1. **Wi-Fi setup.** If no Wi-Fi network is saved, the device starts a setup access
-   point (`DavBar Tap 1` with the `tap-1` profile). Connecting to it opens a
-   captive setup page that scans for nearby networks. The device tests the
-   selected network before saving it, then reboots. If the saved network drops, the
-   device retries every 30 seconds, and after 5 minutes without Wi-Fi it also opens
-   the setup access point until Wi-Fi is back.
+1. **Setup.** If no Wi-Fi network is saved, the device starts a setup access point
+   (`DavBar Tap 1` with the `tap-1` profile). Connecting to it opens a captive
+   "Set up Tap 1" page: one form that scans for nearby networks, then lists the
+   lasers (choosing one can be skipped). Save sends the laser first, then the
+   device tests the selected network before saving it, then reboots, which closes
+   the page. If the saved network drops, the device retries every 30 seconds, and
+   after 5 minutes without Wi-Fi it also opens the setup access point until Wi-Fi
+   is back.
 2. **Web app.** Once connected, the device serves the web app at
    `http://<hostname>-<deviceId>.local` (`http://davbar-tap1.local` with the
    `tap-1` profile). Compose text or choose a 400 x 600 image, check the Spectra 6
-   preview, and send it to the device.
+   preview, and send it to the device. The Laser button beside the upload button
+   shows the tap's laser and opens a dialog to change it, or its mode (Smart or
+   Eco).
 3. **Display.** After an upload, the device redraws the e-paper display. On
    startup, it redraws only if the stored image differs from the one it last drew.
 
 The web app's device settings menu can show the device status, force a display
 refresh, download the device log, reboot the device, or factory reset it. A
-factory reset clears the saved Wi-Fi network and screen image, then reboots into
-setup mode. It keeps the log unless "Also clear the log" is ticked.
+factory reset clears the saved Wi-Fi network, laser and screen image, then reboots
+into setup mode. It keeps the log unless "Also clear the log" is ticked.
 
 The device log records events such as boots and why they happened, Wi-Fi drops
 and reconnects (with the reason), the setup access point opening and closing,
