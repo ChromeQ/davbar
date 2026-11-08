@@ -29,14 +29,11 @@ export type KegLevel = {
  * straight-sided cylinder. Uses whole numbers (tenths of a litre and mm) so
  * rounding down is exact, and the C++ version can match it.
  */
-export function kegLevel(
-  distanceMm: number,
-  keg: KegCalibration = CORNY_KEG_19L,
-): KegLevel {
+export function kegLevel(distanceMm: number, keg: KegCalibration = CORNY_KEG_19L): KegLevel {
   const range = keg.emptyDistanceMm - keg.fullDistanceMm;
 
   if (range <= 0) {
-    throw new Error("The empty distance must be greater than the full distance");
+    throw new Error('The empty distance must be greater than the full distance');
   }
 
   const depth = Math.min(Math.max(keg.emptyDistanceMm - distanceMm, 0), range);

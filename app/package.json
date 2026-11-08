@@ -14,16 +14,24 @@
     "device:build": "tsx scripts/device.ts build",
     "device:upload": "tsx scripts/device.ts upload",
     "device:upload:fs": "tsx scripts/device.ts upload-fs",
-    "lint": "pnpm -r --parallel --aggregate-output run lint",
+    "lint": "eslint . && pnpm -r --parallel --aggregate-output run lint",
+    "lint:fix": "eslint --fix . && pnpm -r --parallel --aggregate-output run lint:fix",
     "outdated": "pnpm -r --parallel --aggregate-output run outdated",
     "preview": "pnpm --dir web preview",
     "test": "pnpm -r --parallel --aggregate-output run test"
   },
   "devDependencies": {
+    "@eslint/js": "catalog:",
     "@types/node": "catalog:",
+    "@typescript/native": "catalog:typescript",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "globals": "catalog:",
     "jiti": "2.7.0",
+    "prettier": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:typescript",
-    "@typescript/native": "catalog:typescript"
+    "typescript-eslint": "catalog:"
   }
 }

@@ -14,8 +14,15 @@ pnpm dev
 pnpm build
 pnpm preview
 pnpm lint
+pnpm lint:fix
 pnpm test
 ```
+
+`pnpm lint` runs ESLint on the workspace's `scripts` and then on each package. ESLint
+also checks the code (and the web app's CSS) against Prettier's format, using
+`eslint-plugin-prettier`, so `pnpm lint` fails on unformatted files and
+`pnpm lint:fix` rewrites them. The Prettier settings are in `.prettierrc`, shared by
+every package.
 
 Device branding and identity come from the shared profiles under `../config`. Use
 `pnpm device:build`, `pnpm device:upload`, or `pnpm device:upload:fs` so the web app

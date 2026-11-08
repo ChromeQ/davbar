@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { encodeSpectra6, decodeSpectra6 } from "../src/index.js";
+import { describe, expect, it } from 'vitest';
+import { encodeSpectra6, decodeSpectra6 } from '../src/index.js';
 
-describe("Spectra6 encoder", () => {
-  it("encodes a 400x600 image into the expected framebuffer size", () => {
+describe('Spectra6 encoder', () => {
+  it('encodes a 400x600 image into the expected framebuffer size', () => {
     const width = 400;
     const height = 600;
 
@@ -17,7 +17,7 @@ describe("Spectra6 encoder", () => {
     expect(result.bytes.length).toBe((width * height) / 2);
   });
 
-  it("encodes two pixels into one byte using high/low nibbles", () => {
+  it('encodes two pixels into one byte using high/low nibbles', () => {
     const pixels = new Uint8Array([
       // pixel 1: black
       0, 0, 0, 255,
@@ -34,8 +34,8 @@ describe("Spectra6 encoder", () => {
   });
 });
 
-describe("Spectra6 decoder", () => {
-  it("decodes packed bytes back into RGB pixels", () => {
+describe('Spectra6 decoder', () => {
+  it('decodes packed bytes back into RGB pixels', () => {
     const bytes = new Uint8Array([
       // black, red
       0x03,
@@ -57,8 +57,8 @@ describe("Spectra6 decoder", () => {
   });
 });
 
-describe("Spectra6 round trip", () => {
-  it("preserves palette colours through encode/decode", () => {
+describe('Spectra6 round trip', () => {
+  it('preserves palette colours through encode/decode', () => {
     const width = 6;
     const height = 1;
 
@@ -95,13 +95,7 @@ describe("Spectra6 round trip", () => {
   });
 });
 
-function createSolidImage(
-  width: number,
-  height: number,
-  r: number,
-  g: number,
-  b: number,
-) {
+function createSolidImage(width: number, height: number, r: number, g: number, b: number) {
   const pixels = new Uint8Array(width * height * 4);
 
   for (let i = 0; i < width * height; i++) {

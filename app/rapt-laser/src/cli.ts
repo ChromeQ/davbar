@@ -7,16 +7,16 @@ import {
   hexToBytes,
   kegLevel,
   LASER_MODE_NAMES,
-} from "./index.js";
+} from './index.js';
 
 function main() {
-  const hex = process.argv.slice(2).join("");
+  const hex = process.argv.slice(2).join('');
 
   if (!hex) {
     console.error(
-      "Usage: rapt-laser <hex>\n" +
-        "The hex can be the payload, the manufacturer data or the whole " +
-        "advertisement, as copied from nRF Connect.",
+      'Usage: rapt-laser <hex>\n' +
+        'The hex can be the payload, the manufacturer data or the whole ' +
+        'advertisement, as copied from nRF Connect.'
     );
     process.exit(1);
   }
@@ -28,11 +28,11 @@ function main() {
     decodeLaserAdvertisement(bytes);
 
   if (!reading) {
-    console.error("Not a RAPT Laser Level Sensor advertisement");
+    console.error('Not a RAPT Laser Level Sensor advertisement');
     process.exit(1);
   }
 
-  let distance = "no reading";
+  let distance = 'no reading';
 
   if (reading.distanceMm !== null) {
     const level = kegLevel(reading.distanceMm);
@@ -40,15 +40,13 @@ function main() {
   }
 
   console.log(`Address      ${reading.address}`);
-  console.log(
-    `Mode         ${reading.mode ? LASER_MODE_NAMES[reading.mode] : "unknown"}`,
-  );
+  console.log(`Mode         ${reading.mode ? LASER_MODE_NAMES[reading.mode] : 'unknown'}`);
   console.log(`Distance     ${distance}`);
   console.log(
-    `Battery      ${reading.batteryPercent === null ? "missing" : `${reading.batteryPercent.toFixed(1)}%`}`,
+    `Battery      ${reading.batteryPercent === null ? 'missing' : `${reading.batteryPercent.toFixed(1)}%`}`
   );
   console.log(
-    `Temperature  ${reading.temperatureC === null ? "missing" : `${reading.temperatureC.toFixed(2)} °C`}`,
+    `Temperature  ${reading.temperatureC === null ? 'missing' : `${reading.temperatureC.toFixed(2)} °C`}`
   );
 }
 

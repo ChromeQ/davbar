@@ -58,7 +58,7 @@ export const singleFilePage = (): Plugin => {
       };
 
       const pages = Object.values(bundle).filter(
-        (file): file is OutputAsset => file.type === 'asset' && file.fileName.endsWith('.html'),
+        (file): file is OutputAsset => file.type === 'asset' && file.fileName.endsWith('.html')
       );
 
       for (const page of pages) {
@@ -93,7 +93,7 @@ export const singleFilePage = (): Plugin => {
       }
 
       const leftOver = Object.keys(bundle).filter(
-        (fileName) => /\.(js|css)$/.test(fileName) && !inlined.has(fileName),
+        (fileName) => /\.(js|css)$/.test(fileName) && !inlined.has(fileName)
       );
 
       if (leftOver.length > 0) {

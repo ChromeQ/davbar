@@ -13,20 +13,20 @@ const NO_TEMPERATURE = -0x8000; // 0x8000 read as a signed value
 // Advertisement section type for manufacturer data.
 const MANUFACTURER_DATA = 0xff;
 
-export type LaserMode = "smart" | "session" | "liveStream" | "ultraLowPower";
+export type LaserMode = 'smart' | 'session' | 'liveStream' | 'ultraLowPower';
 
 const MODES: Record<number, LaserMode> = {
-  1: "smart",
-  2: "session",
-  3: "liveStream",
-  4: "ultraLowPower",
+  1: 'smart',
+  2: 'session',
+  3: 'liveStream',
+  4: 'ultraLowPower',
 };
 
 export const LASER_MODE_NAMES: Record<LaserMode, string> = {
-  smart: "Smart",
-  session: "Session",
-  liveStream: "Live Stream",
-  ultraLowPower: "Ultra Low Power",
+  smart: 'Smart',
+  session: 'Session',
+  liveStream: 'Live Stream',
+  ultraLowPower: 'Ultra Low Power',
 };
 
 export type LaserReading = {
@@ -55,11 +55,7 @@ export function decodeLaserPayload(payload: Uint8Array): LaserReading | null {
     return null;
   }
 
-  const view = new DataView(
-    payload.buffer,
-    payload.byteOffset,
-    payload.byteLength,
-  );
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
   const distance = view.getUint16(9, true);
   const battery = view.getUint16(14, true);
   const temperature = view.getInt16(16, true);
@@ -77,9 +73,7 @@ export function decodeLaserPayload(payload: Uint8Array): LaserReading | null {
  * Decodes manufacturer data as Bluetooth libraries report it: the company ID
  * (2 bytes, little-endian), then the payload.
  */
-export function decodeLaserManufacturerData(
-  data: Uint8Array,
-): LaserReading | null {
+export function decodeLaserManufacturerData(data: Uint8Array): LaserReading | null {
   if (data.length < 2 || (data[0]! | (data[1]! << 8)) !== RAPT_COMPANY_ID) {
     return null;
   }
@@ -91,9 +85,7 @@ export function decodeLaserManufacturerData(
  * Decodes a whole raw advertisement, as nRF Connect shows it. An advertisement
  * is a list of sections, each a length byte, a type byte and data.
  */
-export function decodeLaserAdvertisement(
-  advertisement: Uint8Array,
-): LaserReading | null {
+export function decodeLaserAdvertisement(advertisement: Uint8Array): LaserReading | null {
   let offset = 0;
 
   while (offset < advertisement.length) {
@@ -105,7 +97,7 @@ export function decodeLaserAdvertisement(
 
     if (advertisement[offset + 1] === MANUFACTURER_DATA) {
       const reading = decodeLaserManufacturerData(
-        advertisement.subarray(offset + 2, offset + 1 + length),
+        advertisement.subarray(offset + 2, offset + 1 + length)
       );
 
       if (reading) {
@@ -124,19 +116,18 @@ export function decodeLaserAdvertisement(
  * "50-54-a1". Spaces, colons and dashes are ignored.
  */
 export function hexToBytes(hex: string): Uint8Array {
-  const digits = hex.trim().replace(/^0x/i, "").replace(/[\s:-]/g, "");
+  const digits = hex
+    .trim()
+    .replace(/^0x/i, '')
+    .replace(/[\s:-]/g, '');
 
   if (digits.length % 2 !== 0 || !/^[0-9a-f]*$/i.test(digits)) {
     throw new Error(`Invalid hex: ${hex}`);
   }
 
-  return Uint8Array.from(digits.match(/../g) ?? [], (pair) =>
-    parseInt(pair, 16),
-  );
+  return Uint8Array.from(digits.match(/../g) ?? [], (pair) => parseInt(pair, 16));
 }
 
 function formatAddress(bytes: Uint8Array): string {
-  return [...bytes]
-    .map((byte) => byte.toString(16).padStart(2, "0").toUpperCase())
-    .join(":");
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0').toUpperCase()).join(':');
 }

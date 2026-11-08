@@ -160,7 +160,11 @@ h2 {
     linear-gradient(-45deg, #e3e0d8 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #e3e0d8 75%),
     linear-gradient(-45deg, transparent 75%, #e3e0d8 75%);
-  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
   background-size: 12px 12px;
   box-shadow: 0 14px 34px rgba(43, 40, 31, 0.1);
 }

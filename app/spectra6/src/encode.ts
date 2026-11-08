@@ -1,4 +1,4 @@
-import { nearestColour, clamp } from "./dither.js";
+import { nearestColour, clamp } from './dither.js';
 
 export type Spectra6Image = {
   // Raw framebuffer for the ESP32
@@ -7,25 +7,14 @@ export type Spectra6Image = {
   height: number;
 };
 
-export function encodeSpectra6(
-  pixels: Uint8Array,
-  width: number,
-  height: number,
-): Spectra6Image {
+export function encodeSpectra6(pixels: Uint8Array, width: number, height: number): Spectra6Image {
   if ((width * height) % 2 !== 0) {
-    throw new Error("Width*height must be even");
+    throw new Error('Width*height must be even');
   }
 
   const working = new Float32Array(width * height * 3);
   const output = new Uint8Array((width * height) / 2);
-  const addError = (
-    x: number,
-    y: number,
-    r: number,
-    g: number,
-    b: number,
-    factor: number,
-  ) => {
+  const addError = (x: number, y: number, r: number, g: number, b: number, factor: number) => {
     if (x < 0 || x >= width || y < 0 || y >= height) {
       return;
     }
