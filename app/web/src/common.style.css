@@ -25,8 +25,7 @@ body {
   min-height: 100vh;
   background:
     linear-gradient(rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 240px),
-    repeating-linear-gradient(90deg, transparent 0 79px, rgba(31, 30, 25, 0.035) 80px),
-    #e7e4dc;
+    repeating-linear-gradient(90deg, transparent 0 79px, rgba(31, 30, 25, 0.035) 80px), #e7e4dc;
 }
 
 button,

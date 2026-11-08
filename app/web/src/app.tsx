@@ -437,7 +437,7 @@ const App = () => {
       const decoded = decodeSpectra6(encoded.bytes, DISPLAY_WIDTH, DISPLAY_HEIGHT);
       const rgba = new Uint8ClampedArray(DISPLAY_WIDTH * DISPLAY_HEIGHT * 4);
 
-      for (let sourceOffset = 0, targetOffset = 0; sourceOffset < decoded.pixels.length; ) {
+      for (let sourceOffset = 0, targetOffset = 0; sourceOffset < decoded.pixels.length;) {
         rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
         rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
         rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;

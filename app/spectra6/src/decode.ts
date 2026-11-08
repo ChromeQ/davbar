@@ -1,4 +1,4 @@
-import { SPECTRA6_PALETTE } from "./palette.js";
+import { SPECTRA6_PALETTE } from './palette.js';
 
 export type DecodedSpectra6 = {
   pixels: Uint8Array;
@@ -6,17 +6,11 @@ export type DecodedSpectra6 = {
   height: number;
 };
 
-export function decodeSpectra6(
-  bytes: Uint8Array,
-  width: number,
-  height: number,
-): DecodedSpectra6 {
+export function decodeSpectra6(bytes: Uint8Array, width: number, height: number): DecodedSpectra6 {
   const expected = (width * height) / 2;
 
   if (bytes.length !== expected) {
-    throw new Error(
-      `Invalid buffer length. Expected ${expected}, got ${bytes.length}`,
-    );
+    throw new Error(`Invalid buffer length. Expected ${expected}, got ${bytes.length}`);
   }
 
   const pixels = new Uint8Array(width * height * 3);

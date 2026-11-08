@@ -1,6 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export type DeviceConfig = {
   brandName: string;
@@ -16,58 +16,42 @@ export type DeviceConfig = {
   connectTitle: string;
 };
 
-type DeviceConfigInput = Pick<
-  DeviceConfig,
-  "brandName" | "deviceName" | "deviceId" | "hostname"
->;
+type DeviceConfigInput = Pick<DeviceConfig, 'brandName' | 'deviceName' | 'deviceId' | 'hostname'>;
 
-const appDirectory = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
-export const repositoryDirectory = path.resolve(appDirectory, "..");
+const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const repositoryDirectory = path.resolve(appDirectory, '..');
 // The device commands require a profile; the web dev server falls back to the
 // example.
-export const defaultConfigPath = path.join(
-  repositoryDirectory,
-  "config/example.json",
-);
+export const defaultConfigPath = path.join(repositoryDirectory, 'config/example.json');
 
 const requiredKeys: Array<keyof DeviceConfigInput> = [
-  "brandName",
-  "deviceName",
-  "deviceId",
-  "hostname",
+  'brandName',
+  'deviceName',
+  'deviceId',
+  'hostname',
 ];
 
 const readInput = (configPath: string): DeviceConfigInput => {
   let value: unknown;
 
   try {
-    value = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    value = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Unable to read device config ${configPath}: ${reason}`);
+    throw new Error(`Unable to read device config ${configPath}: ${reason}`, { cause: error });
   }
 
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== 'object' || value === null) {
     throw new Error(`Device config ${configPath} must contain a JSON object.`);
   }
 
   for (const key of requiredKeys) {
-    if (
-      !(key in value) ||
-      typeof value[key as keyof typeof value] !== "string"
-    ) {
-      throw new Error(
-        `Device config ${configPath} must define a string "${key}".`,
-      );
+    if (!(key in value) || typeof value[key as keyof typeof value] !== 'string') {
+      throw new Error(`Device config ${configPath} must define a string "${key}".`);
     }
 
     if ((value[key as keyof typeof value] as string).trim().length === 0) {
-      throw new Error(
-        `Device config ${configPath} must define a non-empty "${key}".`,
-      );
+      throw new Error(`Device config ${configPath} must define a non-empty "${key}".`);
     }
   }
 
@@ -75,27 +59,23 @@ const readInput = (configPath: string): DeviceConfigInput => {
 
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(input.hostname)) {
     throw new Error(
-      `Device config ${configPath} hostname must contain only lowercase letters, numbers, and internal hyphens.`,
+      `Device config ${configPath} hostname must contain only lowercase letters, numbers, and internal hyphens.`
     );
   }
 
   return input;
 };
 
-export const resolveDeviceConfigPath = (
-  selectedPath = process.env.DEVICE_CONFIG,
-): string =>
-  selectedPath
-    ? path.resolve(repositoryDirectory, selectedPath)
-    : defaultConfigPath;
+export const resolveDeviceConfigPath = (selectedPath = process.env.DEVICE_CONFIG): string =>
+  selectedPath ? path.resolve(repositoryDirectory, selectedPath) : defaultConfigPath;
 
 export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
   const configPath = resolveDeviceConfigPath(selectedPath);
   const input = readInput(configPath);
   const outputFileStem = input.brandName
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
   const uploadHost = `${input.hostname}-${input.deviceId}.local`;
   const config: DeviceConfig = {
     ...input,
@@ -103,7 +83,7 @@ export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
     uploadHost,
     uploadUrl: `http://${uploadHost}`,
     defaultText: input.brandName,
-    outputFileName: `${outputFileStem || "display"}-text.bin`,
+    outputFileName: `${outputFileStem || 'display'}-text.bin`,
     appTitle: `${input.brandName} Display | ${input.deviceName}`,
     connectTitle: `${input.brandName} | Set up ${input.deviceName}`,
   };
@@ -112,9 +92,7 @@ export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
 };
 
 export const printDeviceConfig = (config: DeviceConfig, configPath: string) => {
-  console.log(
-    `Device config: ${path.relative(repositoryDirectory, configPath)}`,
-  );
+  console.log(`Device config: ${path.relative(repositoryDirectory, configPath)}`);
   console.log(`Brand: ${config.brandName}`);
   console.log(`Device: ${config.deviceName} (${config.deviceId})`);
   console.log(`Access point: ${config.accessPointName}`);

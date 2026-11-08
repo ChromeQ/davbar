@@ -23,6 +23,7 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@eslint/css": "catalog:",
     "@eslint/js": "catalog:",
     "@types/node": "catalog:",
     "@types/react": "19.3.0",
@@ -31,7 +32,9 @@
     "@vitejs/plugin-react": "6.2.1",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
     "globals": "catalog:",
+    "prettier": "catalog:",
     "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:",
     "vite": "8.3.6"
