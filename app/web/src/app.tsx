@@ -1,4 +1,12 @@
-import { StrictMode, useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react';
+import {
+  StrictMode,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity,
@@ -15,6 +23,7 @@ import {
 } from 'lucide-react';
 
 import { encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import { ColourPicker } from './colour-picker';
 import { deviceConfig } from './device-config';
 import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
 import {
@@ -28,12 +37,18 @@ import {
 import {
   CENTRED,
   drawImageInSquare,
+  fillZoom,
+  FIT_ZOOM,
+  hasGaps,
   IMAGE_SIZE,
+  overflows,
   panBy,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   screenPixels,
-  type ImageFit,
+  zoomFromSlider,
+  zoomSlider,
+  type FitBackground,
   type Pan,
 } from './screen';
 import { drawStrip, STRIP_SIZE } from './strip';
@@ -48,6 +63,7 @@ const DEFAULT_FONT_SIZE = 64;
 const DEFAULT_TEXT_COLOUR = '#171713';
 const DEFAULT_BACKGROUND_COLOUR = '#f7f5ee';
 const DEFAULT_GRADIENT_COLOUR = '#ef2d56';
+const DEFAULT_FIT_COLOUR = '#ffffff';
 
 type SourceFrame = {
   pixels: Uint8ClampedArray;
@@ -258,10 +274,15 @@ const App = () => {
   const [backgroundColour, setBackgroundColour] = useState(DEFAULT_BACKGROUND_COLOUR);
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('solid');
   const [gradientColour, setGradientColour] = useState(DEFAULT_GRADIENT_COLOUR);
-  // The chosen image at its own size, so Fit, Fill and dragging can redraw it.
+  // The chosen image at its own size, so zooming and dragging can redraw it.
   const [image, setImage] = useState<ImageBitmap | null>(null);
-  const [imageFit, setImageFit] = useState<ImageFit>('fit');
+  const [zoom, setZoom] = useState(FIT_ZOOM);
   const [pan, setPan] = useState<Pan>(CENTRED);
+  const [fitBackground, setFitBackground] = useState<FitBackground>('colour');
+  const [fitColour, setFitColour] = useState(DEFAULT_FIT_COLOUR);
+  // After the eyedropper button, in browsers without Chrome's eyedropper: the
+  // next click on the image takes its colour.
+  const [pickingColour, setPickingColour] = useState(false);
   // While dragging a filled image: where the pointer last was.
   const dragFrom = useRef<{ x: number; y: number } | null>(null);
   const [imageFrame, setImageFrame] = useState<SourceFrame | null>(null);
@@ -295,7 +316,18 @@ const App = () => {
   const { strip } = useStripState();
   const stripValues = strip?.values ?? null;
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
-  const canPan = mode === 'image' && image !== null && imageFit === 'fill';
+  const canPan = mode === 'image' && image !== null && overflows(image, zoom);
+  const slider = image ? zoomSlider(image) : null;
+  // A background fills any gaps around the image.
+  const showBackground = mode === 'image' && image !== null && hasGaps(image, zoom);
+  // On a solid colour, the eyedropper can take a colour from the image.
+  const canPickColour = showBackground && fitBackground === 'colour';
+
+  // Picking stops when the colour picker goes away, so it doesn't come back on with it.
+  if (pickingColour && !canPickColour) {
+    setPickingColour(false);
+  }
+
   const isUploading = uploadState === 'uploading';
   const uploadSucceeded = uploadState === 'success';
   const appModalOpen =
@@ -314,6 +346,23 @@ const App = () => {
       .then((laser) => setChosenLaser(laser))
       .catch(() => setChosenLaserFailed(true));
   }, []);
+
+  // Escape stops picking a colour from the image.
+  useEffect(() => {
+    if (!pickingColour) {
+      return;
+    }
+
+    const stopPicking = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPickingColour(false);
+      }
+    };
+
+    document.addEventListener('keydown', stopPicking);
+
+    return () => document.removeEventListener('keydown', stopPicking);
+  }, [pickingColour]);
 
   useEffect(() => {
     if (!modalOpen) {
@@ -431,10 +480,10 @@ const App = () => {
       return;
     }
 
-    drawImageInSquare(context, image, imageFit, pan);
+    drawImageInSquare(context, image, zoom, pan, fitBackground, fitColour);
     setImageFrame({ pixels: context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE).data });
     setUploadState('idle');
-  }, [image, imageFit, mode, pan]);
+  }, [fitBackground, fitColour, image, mode, pan, zoom]);
 
   // Encodes the image for the panel: these are the bytes uploaded.
   useEffect(() => {
@@ -498,6 +547,9 @@ const App = () => {
     try {
       const bitmap = await createImageBitmap(file);
 
+      // A new image starts at Fit, or at Fill if the last one was at Fill.
+      const wasFilled = image !== null && zoom !== FIT_ZOOM && zoom === fillZoom(image);
+      setZoom(wasFilled ? fillZoom(bitmap) : FIT_ZOOM);
       setImage((previous) => {
         previous?.close();
         return bitmap;
@@ -539,9 +591,9 @@ const App = () => {
     void handleFile(event.dataTransfer.files[0]);
   };
 
-  // Dragging a filled image chooses which part of it shows.
+  // Dragging an image bigger than the square chooses which part of it shows.
   const startPan = (event: PointerEvent<HTMLDivElement>) => {
-    if (!canPan) {
+    if (!canPan || pickingColour) {
       return;
     }
 
@@ -562,11 +614,35 @@ const App = () => {
     const dy = (event.clientY - from.y) * scale;
 
     dragFrom.current = { x: event.clientX, y: event.clientY };
-    setPan((previous) => panBy(image, previous, dx, dy));
+    setPan((previous) => panBy(image, zoom, previous, dx, dy));
   };
 
   const endPan = () => {
     dragFrom.current = null;
+  };
+
+  const pickColourFromImage = (event: MouseEvent<HTMLDivElement>) => {
+    const canvas = sourceCanvasRef.current;
+
+    if (!pickingColour || !canvas) {
+      return;
+    }
+
+    const box = canvas.getBoundingClientRect();
+    const x = Math.floor(((event.clientX - box.left) * IMAGE_SIZE) / box.width);
+    const y = Math.floor(((event.clientY - box.top) * IMAGE_SIZE) / box.height);
+    const [red = 0, green = 0, blue = 0] = getCanvasContext(canvas).getImageData(x, y, 1, 1).data;
+
+    setFitColour(
+      `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`
+    );
+    setPickingColour(false);
+  };
+
+  const handleFitBackground = (value: string) => {
+    if (value === 'colour' || value === 'blur') {
+      setFitBackground(value);
+    }
   };
 
   const handleBackgroundMode = (value: string) => {
@@ -932,7 +1008,7 @@ const App = () => {
           </div>
 
           <div
-            className={`canvas-stage image-stage ${sourceFrame ? 'has-image' : ''} ${isDragging ? 'is-dragging' : ''} ${canPan ? 'can-pan' : ''}`}
+            className={`canvas-stage image-stage ${sourceFrame ? 'has-image' : ''} ${isDragging ? 'is-dragging' : ''} ${canPan && !pickingColour ? 'can-pan' : ''} ${pickingColour ? 'can-pick' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -940,6 +1016,7 @@ const App = () => {
             onPointerMove={movePan}
             onPointerUp={endPan}
             onPointerCancel={endPan}
+            onClick={pickColourFromImage}
           >
             <canvas ref={sourceCanvasRef} width={IMAGE_SIZE} height={IMAGE_SIZE} />
             {!image && mode === 'image' && (
@@ -969,26 +1046,70 @@ const App = () => {
                   <div className="fit-row">
                     <div className="mode-switch" aria-label="How the image fills the square">
                       <button
-                        className={imageFit === 'fit' ? 'active' : ''}
+                        className={zoom === FIT_ZOOM ? 'active' : ''}
                         type="button"
-                        onClick={() => setImageFit('fit')}
+                        onClick={() => setZoom(FIT_ZOOM)}
                       >
                         Fit
                       </button>
                       <button
-                        className={imageFit === 'fill' ? 'active' : ''}
+                        className={zoom === fillZoom(image) ? 'active' : ''}
                         type="button"
-                        onClick={() => setImageFit('fill')}
+                        onClick={() => setZoom(fillZoom(image))}
                       >
                         Fill
                       </button>
                     </div>
-                    <p className="fit-hint">
-                      {imageFit === 'fit'
-                        ? 'The whole image, with white in the gaps.'
-                        : 'Cropped to the square. Drag the image to choose what shows.'}
-                    </p>
+                    <label className="text-field zoom-field">
+                      <span>Zoom</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={slider?.max}
+                        step={slider?.step}
+                        value={Math.log(zoom)}
+                        list="zoom-marks"
+                        onChange={(event) =>
+                          setZoom(zoomFromSlider(image, Number(event.target.value)))
+                        }
+                      />
+                      <datalist id="zoom-marks">
+                        <option value={0} />
+                        <option value={slider?.fill} />
+                      </datalist>
+                    </label>
                   </div>
+                )}
+                {showBackground && (
+                  <label className="text-field fit-background-field">
+                    <span>Background</span>
+                    <select
+                      value={fitBackground}
+                      onChange={(event) => handleFitBackground(event.target.value)}
+                    >
+                      <option value="colour">Solid colour</option>
+                      <option value="blur">Blurred image</option>
+                    </select>
+                  </label>
+                )}
+                {canPickColour && (
+                  <>
+                    <ColourPicker
+                      label="Background colour"
+                      value={fitColour}
+                      onChange={setFitColour}
+                      pickingFromImage={pickingColour}
+                      onPickFromImage={setPickingColour}
+                    />
+                    {pickingColour && (
+                      <p className="fit-hint">
+                        Click the image to take a colour from it, or press Escape to stop.
+                      </p>
+                    )}
+                  </>
+                )}
+                {canPan && !pickingColour && (
+                  <p className="fit-hint">Drag the image to choose what shows.</p>
                 )}
               </>
             ) : (
@@ -1044,14 +1165,6 @@ const App = () => {
                     <option value="radial">Radial</option>
                   </select>
                 </label>
-                <label className="colour-field background-colour-field">
-                  <span>{backgroundMode === 'solid' ? 'Colour' : 'Start'}</span>
-                  <input
-                    type="color"
-                    value={backgroundColour}
-                    onChange={(event) => setBackgroundColour(event.target.value)}
-                  />
-                </label>
                 {backgroundMode !== 'solid' && (
                   <>
                     <label className="colour-field gradient-colour-field">
@@ -1073,6 +1186,13 @@ const App = () => {
                     </button>
                   </>
                 )}
+                <div className="wide-field">
+                  <ColourPicker
+                    label={backgroundMode === 'solid' ? 'Background colour' : 'Background start'}
+                    value={backgroundColour}
+                    onChange={setBackgroundColour}
+                  />
+                </div>
               </div>
             )}
             {error && <p className="message error-message">{error}</p>}

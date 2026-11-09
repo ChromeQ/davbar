@@ -191,7 +191,7 @@ h2 {
   aspect-ratio: 1;
 }
 
-/* A filled image can be dragged to choose what shows. */
+/* An image bigger than the square can be dragged to choose what shows. */
 .image-stage.can-pan {
   cursor: grab;
   touch-action: none;
@@ -214,9 +214,108 @@ h2 {
 }
 
 .fit-hint {
-  margin: 0;
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.text-field.zoom-field,
+.text-field.fit-background-field {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.text-field.fit-background-field {
+  margin-top: 14px;
+}
+
+.text-field.fit-background-field select {
+  flex: 1;
+}
+
+.text-field.zoom-field input {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--accent);
+}
+
+/* After the eyedropper button, clicking the image takes a colour from it. */
+.image-stage.can-pick {
+  cursor: crosshair;
+}
+
+.colour-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+  color: #66645c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.text-controls .colour-picker {
+  margin-top: 0;
+}
+
+.colour-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.colour-picker-row input {
+  width: 56px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+.colour-swatch,
+.eyedropper-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+}
+
+.colour-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.eyedropper-button {
+  display: grid;
+  margin-left: 4px;
+  place-items: center;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.eyedropper-button:hover {
+  color: #fff;
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.eyedropper-button[aria-pressed='true'] {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.eyedropper-button[aria-pressed='true']:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
 }
 
 .canvas-placeholder {
@@ -823,7 +922,6 @@ h2 {
 
   .size-field,
   .text-colour-field,
-  .background-colour-field,
   .gradient-colour-field {
     grid-column: span 1;
   }
