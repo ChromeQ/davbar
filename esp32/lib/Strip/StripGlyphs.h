@@ -59,5 +59,7 @@ namespace StripGlyphs
     extern const Icon brain; // Smart mode
     extern const Icon leaf; // Eco (Ultra Low Power) mode
     extern const Icon warning; // the laser is in the other mode
-    extern const Icon noSignal; // nothing heard from the laser
+    extern const Icon warningFill; // the inside of the warning sign, drawn yellow under it
+    extern const Icon noSignal; // nothing heard from the laser: the Bluetooth symbol, drawn blue
+    extern const Icon noSignalStrike; // the line through the Bluetooth symbol, drawn red over it
 }

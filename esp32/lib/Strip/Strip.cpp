@@ -31,6 +31,10 @@ namespace Strip
         constexpr int IconSize = 32;
         constexpr int GroupGap = 10;
 
+        // Around test values. The content keeps Margin from every edge, so the
+        // border never touches it.
+        constexpr int TestBorder = 5;
+
         // The level bar
         constexpr int BarX = Margin;
         constexpr int BarY = 88;
@@ -323,9 +327,11 @@ namespace Strip
             }
             x += BatteryWidth + NubWidth + GroupGap;
 
+            // Bluetooth's blue, crossed out in red.
             if (values.noSignal)
             {
-                drawIcon(canvas, StripGlyphs::noSignal, x, iconY, Red);
+                drawIcon(canvas, StripGlyphs::noSignal, x, iconY, Blue);
+                drawIcon(canvas, StripGlyphs::noSignalStrike, x, iconY, Red);
                 x += IconSize + GroupGap;
             }
 
@@ -333,9 +339,11 @@ namespace Strip
             drawIcon(canvas, mode, x, iconY, Black);
             x += IconSize + GroupGap;
 
+            // Like a road sign: yellow inside, with a black outline and "!".
             if (warning)
             {
-                drawIcon(canvas, StripGlyphs::warning, x, iconY, Orange);
+                drawIcon(canvas, StripGlyphs::warningFill, x, iconY, Yellow);
+                drawIcon(canvas, StripGlyphs::warning, x, iconY, Black);
             }
         }
 
@@ -425,7 +433,8 @@ namespace Strip
             a.hasBattery == b.hasBattery &&
             a.batteryPercent == b.batteryPercent &&
             a.modeWarning == b.modeWarning &&
-            a.noSignal == b.noSignal;
+            a.noSignal == b.noSignal &&
+            a.test == b.test;
     }
 
     void draw(uint8_t* strip, const Values& values)
@@ -450,5 +459,10 @@ namespace Strip
 
         drawTopRow(canvas, values);
         drawBar(canvas, values);
+
+        if (values.test)
+        {
+            canvas.strokeRect(0, 0, Width, Height, TestBorder, Red);
+        }
     }
 }

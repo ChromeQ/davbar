@@ -46,7 +46,18 @@ const fontSpecs: FontSpec[] = [
 // Lucide icons (lucide.dev), drawn at 32px with Lucide's 2px stroke on its 24px grid.
 // ISC License, Copyright (c) 2026 Lucide Icons and Contributors.
 const iconSize = 32;
-const iconSpecs = [
+
+type IconSpec = {
+  name: string;
+  use: string;
+  paths: string[];
+  // Filled instead of outlined, for an icon's inside drawn in another colour.
+  fill?: boolean;
+};
+
+const warningTriangle = 'm21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3';
+
+const iconSpecs: IconSpec[] = [
   {
     name: 'brain',
     use: 'Smart mode',
@@ -72,16 +83,24 @@ const iconSpecs = [
   {
     name: 'warning',
     use: 'the laser is in the other mode',
-    paths: [
-      'm21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3',
-      'M12 9v4',
-      'M12 17h.01',
-    ],
+    paths: [warningTriangle, 'M12 9v4', 'M12 17h.01'],
   },
   {
+    name: 'warningFill',
+    use: 'the inside of the warning sign, drawn yellow under it',
+    paths: [warningTriangle],
+    fill: true,
+  },
+  {
+    // Lucide's bluetooth-off, in two colours: the Bluetooth symbol, then the strike.
     name: 'noSignal',
-    use: 'nothing heard from the laser',
-    paths: ['m17 17-5 5V12l-5 5', 'm2 2 20 20', 'M14.5 9.5 17 7l-5-5v4.5'],
+    use: 'nothing heard from the laser: the Bluetooth symbol, drawn blue',
+    paths: ['m17 17-5 5V12l-5 5', 'M14.5 9.5 17 7l-5-5v4.5'],
+  },
+  {
+    name: 'noSignalStrike',
+    use: 'the line through the Bluetooth symbol, drawn red over it',
+    paths: ['m2 2 20 20'],
   },
 ];
 
@@ -203,9 +222,12 @@ const buildFont = async (roboto: FontkitFont, spec: FontSpec): Promise<Font> => 
   return { ...spec, capHeight, glyphs, kerning };
 };
 
-const buildIcon = async (spec: (typeof iconSpecs)[number]): Promise<Icon> => {
+const buildIcon = async (spec: IconSpec): Promise<Icon> => {
   const paths = spec.paths.map((d) => `<path d="${d}"/>`).join('');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+  const paint = spec.fill
+    ? 'fill="#000" stroke="none"'
+    : 'fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" ${paint}>${paths}</svg>`;
   return { name: spec.name, use: spec.use, ...(await rasterise(svg, iconSize, iconSize)) };
 };
 
