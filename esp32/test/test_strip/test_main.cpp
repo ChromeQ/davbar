@@ -1,0 +1,239 @@
+// Runs on the laptop: pio test -d esp32 -e native
+// Draws strips like the agreed mock-ups and checks the colours in each part.
+// With STRIP_TEST_OUTPUT set to a folder, each strip is also saved there as
+// <name>.bin (400 x 200, 2 pixels a byte) to look at.
+
+#include <Strip.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unity.h>
+
+using Strip::Colour;
+
+static uint8_t strip[Strip::Size];
+
+void setUp() {}
+
+void tearDown() {}
+
+static Strip::Values fullKeg()
+{
+    Strip::Values values = {};
+    values.laserChosen = true;
+    values.laserNumber = 2;
+    values.mode = Strip::Mode::Smart;
+    values.hasLevel = true;
+    values.percent = 62;
+    values.litresTenths = 117;
+    values.hasTemperature = true;
+    values.temperatureTenths = 183;
+    values.hasBattery = true;
+    values.batteryPercent = 100;
+    return values;
+}
+
+static void drawAndSave(const char* name, const Strip::Values& values)
+{
+    Strip::draw(strip, values);
+
+    const char* folder = getenv("STRIP_TEST_OUTPUT");
+    if (!folder)
+    {
+        return;
+    }
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/%s.bin", folder, name);
+    FILE* file = fopen(path, "wb");
+    TEST_ASSERT_NOT_NULL_MESSAGE(file, path);
+    fwrite(strip, 1, sizeof(strip), file);
+    fclose(file);
+}
+
+static uint8_t pixel(int x, int y)
+{
+    uint8_t byte = strip[y * Strip::RowBytes + x / 2];
+    return x % 2 == 0 ? byte >> 4 : byte & 0x0F;
+}
+
+// A bit for each colour found in the area.
+static unsigned coloursIn(int x, int y, int width, int height)
+{
+    unsigned found = 0;
+    for (int j = y; j < y + height; j++)
+    {
+        for (int i = x; i < x + width; i++)
+        {
+            found |= 1u << pixel(i, j);
+        }
+    }
+
+    return found;
+}
+
+static unsigned bit(Colour colour)
+{
+    return 1u << colour;
+}
+
+// The bar's inside is x 20-379 and y 92-179.
+static const int BarInsideX = 20;
+static const int BarInsideY = 92;
+static const int BarInsideWidth = 360;
+static const int BarInsideHeight = 88;
+
+static void testBarTextSplitsAtTheFill()
+{
+    drawAndSave("full-keg", fullKeg());
+
+    int fill = (BarInsideWidth * 62 + 50) / 100;
+    TEST_ASSERT_EQUAL_UINT8(Strip::Black, pixel(16, 88));
+    // The filled part holds the green fill and white text, and no black text.
+    // The empty part holds the white background and black text, and no green.
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::Green) | bit(Strip::White),
+        coloursIn(BarInsideX, BarInsideY, fill, BarInsideHeight)
+    );
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White) | bit(Strip::Black),
+        coloursIn(BarInsideX + fill, BarInsideY, BarInsideWidth - fill, BarInsideHeight)
+    );
+}
+
+static void testOrangeIsTwoRedToOneYellow()
+{
+    Strip::Values values = fullKeg();
+    values.percent = 40;
+    values.litresTenths = 76;
+    drawAndSave("orange", values);
+
+    // Left of the litres, so no text.
+    for (int y = BarInsideY; y < BarInsideY + BarInsideHeight; y++)
+    {
+        for (int x = BarInsideX; x < BarInsideX + 60; x++)
+        {
+            uint8_t expected = (x + y) % 3 == 0 ? Strip::Yellow : Strip::Red;
+            TEST_ASSERT_EQUAL_UINT8(expected, pixel(x, y));
+        }
+    }
+}
+
+static void testRedBarLeavesTheLitresOnWhite()
+{
+    Strip::Values values = fullKeg();
+    values.percent = 15;
+    values.litresTenths = 28;
+    drawAndSave("red", values);
+
+    int fill = (BarInsideWidth * 15 + 50) / 100;
+    TEST_ASSERT_EQUAL_HEX(bit(Strip::Red), coloursIn(BarInsideX, BarInsideY, fill, BarInsideHeight));
+}
+
+static void testLowBatteryIsRedWithItsPercentage()
+{
+    Strip::Values values = fullKeg();
+    values.batteryPercent = 7;
+    values.laserNumber = 3;
+    drawAndSave("low-battery", values);
+
+    // The battery sits at x 160-215 and y 31-56 in the middle group.
+    unsigned colours = coloursIn(160, 31, 56, 26);
+    TEST_ASSERT_TRUE(colours & bit(Strip::Red));
+    TEST_ASSERT_TRUE(colours & bit(Strip::White));
+    TEST_ASSERT_FALSE(colours & bit(Strip::Black));
+    TEST_ASSERT_FALSE(colours & bit(Strip::Green));
+}
+
+static void testNoSignalHidesTheModeWarning()
+{
+    Strip::Values values = fullKeg();
+    values.mode = Strip::Mode::Eco;
+    values.modeWarning = true;
+    drawAndSave("mode-warning", values);
+    TEST_ASSERT_TRUE(coloursIn(0, 0, Strip::Width, 80) & bit(Strip::Yellow));
+
+    values.noSignal = true;
+    drawAndSave("no-signal", values);
+    unsigned colours = coloursIn(0, 0, Strip::Width, 80);
+    TEST_ASSERT_FALSE(colours & bit(Strip::Yellow));
+    TEST_ASSERT_TRUE(colours & bit(Strip::Red));
+}
+
+static void testNoLaserShowsOnlyText()
+{
+    Strip::Values values = {};
+    drawAndSave("no-laser", values);
+
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White) | bit(Strip::Black),
+        coloursIn(0, 0, Strip::Width, Strip::Height)
+    );
+    // No bar outline.
+    TEST_ASSERT_EQUAL_UINT8(Strip::White, pixel(16, 88));
+}
+
+// The first and last rows with anything drawn, in the given columns above the bar.
+static void inkRows(int x, int width, int& top, int& bottom)
+{
+    top = 0;
+    while (top < 88 && coloursIn(x, top, width, 1) == bit(Strip::White))
+    {
+        top++;
+    }
+
+    bottom = 87;
+    while (bottom > 0 && coloursIn(x, bottom, width, 1) == bit(Strip::White))
+    {
+        bottom--;
+    }
+}
+
+// Centred between the image (above y 0) and the bar (from y 88), to within a
+// pixel, as an odd space can't split evenly.
+static void testTopRowIsCentredAboveTheBar()
+{
+    drawAndSave("full-keg", fullKeg());
+
+    // The "62%" on the left, then the middle group.
+    const int columns[][2] = {{0, 130}, {130, 140}};
+    for (const auto& column : columns)
+    {
+        int top;
+        int bottom;
+        inkRows(column[0], column[1], top, bottom);
+        int above = top;
+        int below = 88 - 1 - bottom;
+        TEST_ASSERT_INT_WITHIN(1, above, below);
+    }
+}
+
+static void testWaitingForTheFirstReading()
+{
+    Strip::Values values = {};
+    values.laserChosen = true;
+    values.laserNumber = 1;
+    drawAndSave("waiting", values);
+
+    // An empty bar and no numbers either side of the middle group.
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White),
+        coloursIn(BarInsideX, BarInsideY, BarInsideWidth, BarInsideHeight)
+    );
+    TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(0, 0, 130, 80));
+    TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(270, 0, 130, 80));
+}
+
+int main()
+{
+    UNITY_BEGIN();
+    RUN_TEST(testBarTextSplitsAtTheFill);
+    RUN_TEST(testOrangeIsTwoRedToOneYellow);
+    RUN_TEST(testRedBarLeavesTheLitresOnWhite);
+    RUN_TEST(testLowBatteryIsRedWithItsPercentage);
+    RUN_TEST(testNoSignalHidesTheModeWarning);
+    RUN_TEST(testNoLaserShowsOnlyText);
+    RUN_TEST(testTopRowIsCentredAboveTheBar);
+    RUN_TEST(testWaitingForTheFirstReading);
+    return UNITY_END();
+}

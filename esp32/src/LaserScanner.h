@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <RaptLaser.h>
 
 // Listens for RAPT Laser Level Sensor broadcasts and keeps the latest reading
 // from each laser it hears.
@@ -41,6 +42,24 @@ bool clearLaserChoice();
 
 // Sets "laser" to the chosen laser (number, address and mode), or null.
 void addChosenLaser(JsonObject response);
+
+// This tap's laser and its latest reading, for the strip.
+struct ChosenLaser
+{
+    bool chosen;
+    // Its number in config/lasers.json, or 0 for a laser not in it.
+    uint8_t number;
+    // The mode chosen for it: Eco (Ultra Low Power) or Smart.
+    bool eco;
+    // When it was last heard (millis), even without a reading. 0 when it
+    // hasn't been heard since the tap started.
+    unsigned long lastHeardAt;
+    // The latest broadcast with a distance.
+    bool hasReading;
+    RaptLaser::Reading reading;
+};
+
+ChosenLaser getChosenLaser();
 
 // Adds each laser's latest reading, for the status page.
 void addLaserStatus(JsonArray lasers);
