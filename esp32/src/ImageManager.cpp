@@ -1,5 +1,6 @@
 #include "ImageManager.h"
 
+#include <algorithm>
 #include <esp_crc.h>
 #include <new>
 
@@ -7,13 +8,15 @@
 #include "DeviceLog.h"
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
+#include "Screen.h"
 #include "Storage.h"
 
 static bool imageUpdatePending = false;
 static bool forcedImageUpdatePending = false;
 static const char* imageUpdateReason = "";
 
-static uint8_t imageBuffer[IMAGE_SIZE];
+// The whole screen: the saved image on top, the strip below.
+static uint8_t screenBuffer[SCREEN_SIZE];
 
 static const char* displayedImageCrcPath = "/image.displayed.crc";
 static const char* pendingDisplayedImageCrcPath = "/image.displayed.crc.tmp";
@@ -25,6 +28,8 @@ static void updateDisplay(bool force, const char* reason);
 struct ImageUploadState
 {
     File file;
+    size_t total;
+    size_t bytesReceived;
     size_t bytesWritten;
     ImageUploadError error;
 };
@@ -36,7 +41,7 @@ const char* imageUploadErrorMessage(ImageUploadError error)
         case ImageUploadError::InvalidContentType:
             return "Image must be uploaded as application/octet-stream.";
         case ImageUploadError::InvalidSize:
-            return "Image must contain exactly 120000 bytes.";
+            return "Image must contain exactly 80000 bytes.";
         case ImageUploadError::OpenFailed:
             return "Unable to create the image file.";
         case ImageUploadError::OutOfOrder:
@@ -59,6 +64,8 @@ ImageUploadState* beginImageUpload(
 {
     ImageUploadState* state = new (std::nothrow) ImageUploadState {
         File(),
+        total,
+        0,
         0,
         ImageUploadError::None
     };
@@ -75,7 +82,9 @@ ImageUploadState* beginImageUpload(
         return state;
     }
 
-    if (total != IMAGE_SIZE)
+    // Until step 5b, the web app still sends the whole 400 x 600 screen. Its
+    // top 400 rows are kept and the rest is dropped.
+    if (total != IMAGE_SIZE && total != SCREEN_SIZE)
     {
         state->error = ImageUploadError::InvalidSize;
         return state;
@@ -105,16 +114,29 @@ void writeImageUploadChunk(
         return;
     }
 
-    if (index != state->bytesWritten)
+    if (index != state->bytesReceived)
     {
         state->error = ImageUploadError::OutOfOrder;
         return;
     }
 
-    size_t written = state->file.write(data, len);
+    state->bytesReceived += len;
+
+    // Only the first IMAGE_SIZE bytes are the image. In a full screen upload,
+    // the bytes after them are where the strip goes.
+    size_t keep = index < IMAGE_SIZE
+        ? std::min(len, static_cast<size_t>(IMAGE_SIZE - index))
+        : 0;
+
+    if (keep == 0)
+    {
+        return;
+    }
+
+    size_t written = state->file.write(data, keep);
     state->bytesWritten += written;
 
-    if (written != len)
+    if (written != keep)
     {
         state->error = ImageUploadError::WriteFailed;
     }
@@ -131,11 +153,15 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
         ? state->error
         : ImageUploadError::OpenFailed;
 
-    if (error == ImageUploadError::None && state->bytesWritten != IMAGE_SIZE)
+    if (
+        error == ImageUploadError::None &&
+        (state->bytesReceived != state->total || state->bytesWritten != IMAGE_SIZE)
+    )
     {
         error = ImageUploadError::InvalidSize;
     }
 
+    bool fullScreen = state && state->total == SCREEN_SIZE;
     delete state;
 
     if (error != ImageUploadError::None)
@@ -168,7 +194,10 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     removeDataFile("/image.previous");
 
-    logEvent("image uploaded", String(IMAGE_SIZE) + " bytes");
+    logEvent(
+        "image uploaded",
+        fullScreen ? "400 x 600, kept the top 400 rows" : "400 x 400"
+    );
 
     requestImageUpdate("upload");
 
@@ -298,13 +327,21 @@ static void updateDisplay(bool force, const char* reason)
 
     Serial.println("Loading image...");
 
-    if (!loadImage(imageBuffer))
+    if (!loadImage(screenBuffer))
     {
         logEvent("redraw failed", String(reason) + ", unable to load the image");
         return;
     }
 
-    uint32_t imageCrc = esp_crc32_le(0, imageBuffer, IMAGE_SIZE);
+    // The strip is white until the firmware draws it.
+    memset(
+        screenBuffer + IMAGE_SIZE,
+        (EPD_4IN0E_WHITE << 4) | EPD_4IN0E_WHITE,
+        SCREEN_SIZE - IMAGE_SIZE
+    );
+
+    // Covers the strip too, so a change to it redraws the screen.
+    uint32_t imageCrc = esp_crc32_le(0, screenBuffer, SCREEN_SIZE);
     if (!force && displayedImageCrcMatches(imageCrc))
     {
         logEvent("redraw skipped", String(reason) + ", image already displayed");
@@ -321,7 +358,7 @@ static void updateDisplay(bool force, const char* reason)
 
     Serial.println("Displaying image...");
 
-    EPD_4IN0E_Display(imageBuffer);
+    EPD_4IN0E_Display(screenBuffer);
 
     EPD_4IN0E_Sleep();
 

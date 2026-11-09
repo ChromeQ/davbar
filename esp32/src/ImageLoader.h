@@ -3,10 +3,10 @@
 
 #include <Arduino.h>
 
-#define IMAGE_WIDTH 400
-#define IMAGE_HEIGHT 600
-#define IMAGE_SIZE ((IMAGE_WIDTH * IMAGE_HEIGHT) / 2)
+#include "Screen.h"
 
+// Reads the saved 400 x 400 image into the first IMAGE_SIZE bytes of buffer,
+// the top 400 rows of the screen.
 bool loadImage(uint8_t *buffer);
 
 #endif

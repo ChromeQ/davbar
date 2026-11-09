@@ -250,10 +250,10 @@ Force refresh in the settings menu still redraws on demand.
 - **Status dialog:** add the sensor address, chosen and actual mode, last reading,
   signal strength and time since the last reading.
 - **Screen image and strip (step 5a):** the stored image becomes 400 x 400 (80,000
-  bytes), drawn above the strip, which the firmware draws itself. At boot, a stored
-  image of any other size (the old 400 x 600 test images) is deleted. Until step 5b,
+  bytes), drawn above the strip, which the firmware draws itself. Until step 5b,
   uploads of a full 400 x 600 screen (120,000 bytes, what the web app sends today)
-  are still accepted and only the top 400 rows are kept; 5b removes this.
+  are still accepted and only the top 400 rows are kept; 5b removes this. Tap 1's
+  old 400 x 600 test image was deleted once at boot; taps 2 and 3 never had one.
 - **Test values:** a route sets the strip's percentage, temperature and battery for
   "Show on device". The tap shows them for 5 minutes, or until "Back to live", then
   goes back to its real readings, so a tap is never left showing made-up numbers.
