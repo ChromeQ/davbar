@@ -8,6 +8,7 @@
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
+#include <atomic>
 #include <esp_timer.h>
 #include <time.h>
 
@@ -61,11 +62,22 @@ static unsigned long connectionStartedAt = 0;
 static uint32_t failuresBeforeTest = 0;
 static String connectionFailureMessage;
 
+// While a web app update rewrites the filesystem the pages are on, they can't
+// be read: opening one then crashed the tap. Set from the loop, read by web
+// requests.
+static std::atomic<bool> webAppUpdating{false};
+
 // Each page is one gzipped file with its script and styles inside (see
 // app/web/single-file-page.ts): every file a browser downloads at once costs
 // 12-20 KB of memory, so a page load is a single download.
 static void sendPage(AsyncWebServerRequest* request, const char* path)
 {
+    if (webAppUpdating)
+    {
+        request->send(503, "text/plain", "The web app is updating. Try again in a minute.");
+        return;
+    }
+
     AsyncWebServerResponse* response = request->beginResponse(
         LittleFS,
         path,
@@ -667,6 +679,10 @@ static void startOverTheAirUpdates()
 
             if (webApp)
             {
+                webAppUpdating = true;
+                // Lets a page that was already being sent finish before its
+                // file goes.
+                delay(500);
                 LittleFS.end();
             }
         }
@@ -691,6 +707,7 @@ static void startOverTheAirUpdates()
             if (ArduinoOTA.getCommand() == U_SPIFFS)
             {
                 LittleFS.begin();
+                webAppUpdating = false;
             }
         }
     );
