@@ -1,5 +1,6 @@
 #include "ImageManager.h"
 
+#include <Strip.h>
 #include <algorithm>
 #include <esp_crc.h>
 #include <new>
@@ -10,6 +11,7 @@
 #include "ImageLoader.h"
 #include "Screen.h"
 #include "Storage.h"
+#include "StripManager.h"
 
 static bool imageUpdatePending = false;
 static bool forcedImageUpdatePending = false;
@@ -17,6 +19,8 @@ static const char* imageUpdateReason = "";
 
 // The whole screen: the saved image on top, the strip below.
 static uint8_t screenBuffer[SCREEN_SIZE];
+
+static_assert(Strip::Size == SCREEN_SIZE - IMAGE_SIZE, "The strip fills the rows below the image");
 
 static const char* displayedImageCrcPath = "/image.displayed.crc";
 static const char* pendingDisplayedImageCrcPath = "/image.displayed.crc.tmp";
@@ -333,12 +337,7 @@ static void updateDisplay(bool force, const char* reason)
         return;
     }
 
-    // The strip is white until the firmware draws it.
-    memset(
-        screenBuffer + IMAGE_SIZE,
-        (EPD_4IN0E_WHITE << 4) | EPD_4IN0E_WHITE,
-        SCREEN_SIZE - IMAGE_SIZE
-    );
+    drawStrip(screenBuffer + IMAGE_SIZE);
 
     // Covers the strip too, so a change to it redraws the screen.
     uint32_t imageCrc = esp_crc32_le(0, screenBuffer, SCREEN_SIZE);

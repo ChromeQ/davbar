@@ -704,6 +704,36 @@ void addChosenLaser(JsonObject response)
     xSemaphoreGive(lasersMutex);
 }
 
+ChosenLaser getChosenLaser()
+{
+    ChosenLaser result = {};
+    if (!lasersMutex)
+    {
+        return result;
+    }
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+
+    if (laserChosen)
+    {
+        result.chosen = true;
+        result.number = laserNumber(chosenAddress);
+        result.eco = chosenMode == ChosenMode::Eco;
+
+        const LaserState* laser = findLaser(chosenAddress);
+        if (laser)
+        {
+            result.lastHeardAt = laser->lastHeardAt;
+            result.hasReading = laser->hasReading;
+            result.reading = laser->reading;
+        }
+    }
+
+    xSemaphoreGive(lasersMutex);
+
+    return result;
+}
+
 // The caller holds lasersMutex. A laser not heard yet has nulls.
 static void addLaserItem(JsonArray list, const uint8_t address[6], const LaserState* laser, unsigned long now)
 {
