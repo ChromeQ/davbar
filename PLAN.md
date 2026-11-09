@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 and 5a done, step 5b in progress (part 1 of 6 done). Last updated 2026-11-10.
+Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 and 2 of 6 done). Last updated 2026-11-10.
 
 ## Goal
 
@@ -254,9 +254,9 @@ Force refresh in the settings menu still redraws on demand.
   signal strength and time since the last reading.
 - **Screen image and strip (step 5a):** the stored image becomes 400 x 400 (80,000
   bytes), drawn above the strip, which the firmware draws itself. Until step 5b,
-  uploads of a full 400 x 600 screen (120,000 bytes, what the web app sends today)
-  are still accepted and only the top 400 rows are kept; 5b removes this. Tap 1's
-  old 400 x 600 test image was deleted once at boot; taps 2 and 3 never had one.
+  uploads of a full 400 x 600 screen (120,000 bytes) were still accepted and only
+  the top 400 rows kept; part 1 of 5b removed this. Tap 1's old 400 x 600 test image
+  was deleted once at boot; taps 2 and 3 never had one.
 - **Test values:** a route sets the strip's percentage, temperature and battery for
   "Show on device". The tap shows them for 5 minutes, or until "Back to live", then
   goes back to its real readings, so a tap is never left showing made-up numbers.
@@ -268,10 +268,15 @@ Force refresh in the settings menu still redraws on demand.
 
 ## Web app changes
 
-- The image area is 400 x 400. Image mode takes an image of any size and fits it into
-  the square: Fit (the whole image, with a background in the gaps) or Fill (cropped to
-  a square, drag to choose which part shows). Text mode renders at 400 x 400. Uploads
-  become 80,000 bytes. Ways to give it an image:
+- The image area is 400 x 400. Image mode takes an image of any size and zooms it
+  into the square. Fit (the whole image, with a background in the gaps) and Fill
+  (covering the square) are buttons, and a Zoom slider goes between them and on to 3
+  times Fill. The slider moves on a log scale, has marks at Fit and Fill, and snaps to
+  them within 3%. Where the image is bigger than the square, dragging it chooses which
+  part shows; zooming keeps the same point in the middle. A new image starts at Fit,
+  or at Fill if the last one was at Fill. Text mode renders at 400 x 400. Uploads are
+  80,000 bytes. Done in part 2 of 5b, apart from the address and pasting (part 3).
+  Ways to give it an image:
   - Choose file, as now.
   - An "Image address" text field next to it. Pasting an address loads the image
     straight away. On a laptop: right-click the image, Copy Image Address.
@@ -279,14 +284,15 @@ Force refresh in the settings menu still redraws on demand.
     in step 5 whether a picture copied on a phone pastes too; if not, Save to Photos
     and Choose file still works, without the resizing.
 
-  Fit's Background dropdown (only shown with Fit, as Fill has no gaps):
-  - White, the default, which suits KegLand's product shots.
-  - Colour: a colour picker; tapping the image picks a colour from it (on a phone
-    too), and desktop Chrome's built-in eyedropper picks from anywhere on screen. The
-    screen's 6 colours are offered as swatches, as they come out clean while other
-    colours are dithered. Shares its controls with text mode's background.
-  - Blurred image: the same image filling the square, heavily blurred, behind the
-    fitted one. Judge on the real screen whether the dithered blur looks good.
+  The Background dropdown, shown whenever the image leaves gaps (below Fill):
+  - Solid colour, the default, starting on white, which suits KegLand's product
+    shots. The screen's 6 colours are swatches, white first, as they come out clean
+    while other colours are dithered. The eyedropper button opens desktop Chrome's
+    own eyedropper, which picks from anywhere on screen. In browsers without it, the
+    button turns on picking from the image: the next click on the image takes its
+    colour, and Escape or the button stops it. Text mode's background shares the
+    swatches and Chrome's eyedropper.
+  - Blurred image: the same image filling the square, heavily blurred, behind it.
 
   KegLand's images (Shopify) let other pages read them, but their product pages
   don't. Pasting a product page link, or an image from a site that blocks it, would
@@ -375,10 +381,11 @@ Each step ends with something visible to check.
      and mode icon), the redraw rules (with the mode warning and no signal icon), the
      strip's values kept over a restart, and the test values route, tuned on tap 1's
      real screen. Done, tested on tap 1 with real pours, a refill and a power cut.
-   - 5b, web app: the 400 x 400 image area (any image size with Fit and its
-     Background, or Fill; pasting an image address or an image), the full-screen
-     preview with the strip, developer mode with "Show on device", Roboto built into
-     both pages, and the tap switcher.
+   - 5b, web app, in 6 parts: (1) the 400 x 400 image area and the full-screen
+     preview with the strip; (2) zoom between Fit and Fill, with the Background for
+     the gaps; (3) pasting an image address or an image; (4) developer mode with
+     "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. Parts
+     1 and 2 done, tested on tap 1.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once,
    the prompt when full and the keg states. Test by sending a beer on one tap and
    picking it on another.
