@@ -61,4 +61,7 @@ namespace Strip
 
     // Draws the whole strip into strip, which must hold Size bytes.
     void draw(uint8_t* strip, const Values& values);
+
+    // Whether two sets of values draw the same strip.
+    bool sameValues(const Values& a, const Values& b);
 }

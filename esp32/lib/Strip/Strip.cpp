@@ -412,6 +412,22 @@ namespace Strip
         }
     }
 
+    bool sameValues(const Values& a, const Values& b)
+    {
+        return a.laserChosen == b.laserChosen &&
+            a.laserNumber == b.laserNumber &&
+            a.mode == b.mode &&
+            a.hasLevel == b.hasLevel &&
+            a.percent == b.percent &&
+            a.litresTenths == b.litresTenths &&
+            a.hasTemperature == b.hasTemperature &&
+            a.temperatureTenths == b.temperatureTenths &&
+            a.hasBattery == b.hasBattery &&
+            a.batteryPercent == b.batteryPercent &&
+            a.modeWarning == b.modeWarning &&
+            a.noSignal == b.noSignal;
+    }
+
     void draw(uint8_t* strip, const Values& values)
     {
         memset(strip, (White << 4) | White, Size);

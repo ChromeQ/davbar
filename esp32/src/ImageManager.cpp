@@ -28,6 +28,7 @@ static const char* pendingDisplayedImageCrcPath = "/image.displayed.crc.tmp";
 static bool displayedImageCrcMatches(uint32_t imageCrc);
 static bool saveDisplayedImageCrc(uint32_t imageCrc);
 static void updateDisplay(bool force, const char* reason);
+static void drawScreen(bool force, const char* reason, const Strip::Values& strip);
 
 struct ImageUploadState
 {
@@ -323,6 +324,14 @@ static void updateDisplay(bool force, const char* reason)
 {
     Serial.println("Updating display");
 
+    // Every redraw shows the strip's latest values, whatever its reason.
+    Strip::Values strip = stripValues();
+    drawScreen(force, reason, strip);
+    stripShown(strip);
+}
+
+static void drawScreen(bool force, const char* reason, const Strip::Values& strip)
+{
     if (!DataFS.exists("/image.bin"))
     {
         logEvent("redraw skipped", String(reason) + ", no image saved");
@@ -337,7 +346,7 @@ static void updateDisplay(bool force, const char* reason)
         return;
     }
 
-    drawStrip(screenBuffer + IMAGE_SIZE);
+    Strip::draw(screenBuffer + IMAGE_SIZE, strip);
 
     // Covers the strip too, so a change to it redraws the screen.
     uint32_t imageCrc = esp_crc32_le(0, screenBuffer, SCREEN_SIZE);
@@ -370,6 +379,7 @@ static void updateDisplay(bool force, const char* reason)
 
     logEvent(
         "redraw",
-        String(reason) + ", " + String((millis() - startedAt) / 1000.0, 1) + " s"
+        String(reason) + ", " + String((millis() - startedAt) / 1000.0, 1) + " s, " +
+            stripDescription(strip)
     );
 }
