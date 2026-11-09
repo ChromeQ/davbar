@@ -472,6 +472,13 @@ static void handleStripTest(AsyncWebServerRequest* request)
     sendJson(request, 200, doc);
 }
 
+static void handleStrip(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    addStripStatus(doc.to<JsonObject>());
+    sendJson(request, 200, doc);
+}
+
 static void handleStripLive(AsyncWebServerRequest* request)
 {
     showLiveValues();
@@ -1009,6 +1016,12 @@ void startWebServer()
         "/laser",
         HTTP_POST,
         handleChooseLaser
+    );
+
+    server.on(
+        "/strip",
+        HTTP_GET,
+        handleStrip
     );
 
     server.on(

@@ -1,6 +1,7 @@
 // The tap's lasers: GET /lasers lists them (and makes the tap ask every laser
 // for the next minute), POST /laser chooses this tap's laser, and GET /status
 // includes the chosen one without searching.
+import { developmentDelay, isNumberOrNull, isObject, readDeviceJson } from './device-json';
 
 export type ChosenMode = 'smart' | 'eco';
 
@@ -37,12 +38,6 @@ export type LaserList = {
 // every laser for another minute.
 export const LASER_POLL_MS = 3000;
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null;
-
-const isNumberOrNull = (value: unknown): value is number | null =>
-  typeof value === 'number' || value === null;
-
 const isLaserReading = (value: unknown): value is LaserReading =>
   isObject(value) &&
   typeof value.mode === 'string' &&
@@ -65,28 +60,6 @@ export const isChosenLaser = (value: unknown): value is ChosenLaser =>
   isNumberOrNull(value.number) &&
   typeof value.address === 'string' &&
   (value.mode === 'smart' || value.mode === 'eco');
-
-const readDeviceJson = async (response: Response): Promise<Record<string, unknown>> => {
-  const body = await response.text();
-
-  if (!body) {
-    throw new Error('The device closed the connection without returning a response.');
-  }
-
-  let result: unknown;
-
-  try {
-    result = JSON.parse(body);
-  } catch {
-    throw new Error('The device returned an invalid response.');
-  }
-
-  if (!isObject(result)) {
-    throw new Error('The device returned an invalid response.');
-  }
-
-  return result;
-};
 
 const readChosenLaser = (value: unknown): ChosenLaser | null => {
   if (value === null) {
@@ -140,8 +113,6 @@ let developmentChoice: ChosenLaser | null = {
   address: 'AA:00:00:00:00:02',
   mode: 'smart',
 };
-
-const developmentDelay = () => new Promise((resolve) => window.setTimeout(resolve, 300));
 
 export const fetchLasers = async (): Promise<LaserList> => {
   if (import.meta.env.DEV) {
