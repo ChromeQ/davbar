@@ -13,7 +13,7 @@
     "lint:fix": "eslint --fix .",
     "prepreview": "pnpm run build",
     "preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 0",
+    "test": "vitest run",
     "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
     "prettier": "catalog:",
     "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:",
-    "vite": "8.3.6"
+    "vite": "8.3.6",
+    "vitest": "catalog:"
   }
 }

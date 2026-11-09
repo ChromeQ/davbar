@@ -255,6 +255,101 @@ static void testWaitingForTheFirstReading()
     TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(270, 0, 130, 80));
 }
 
+// CRC-32, the same as zlib's, which the web app's test uses.
+static uint32_t crc32(const uint8_t* data, size_t length)
+{
+    uint32_t crc = 0xFFFFFFFF;
+    for (size_t i = 0; i < length; i++)
+    {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; bit++)
+        {
+            crc = (crc >> 1) ^ (0xEDB88320u & (0u - (crc & 1)));
+        }
+    }
+
+    return ~crc;
+}
+
+// The web app draws the strip too, for its preview (app/web/src/strip.ts). It
+// draws these same strips in app/web/src/strip.test.ts and checks them against
+// the same CRC-32s, so the preview matches the screen. After changing how the
+// strip looks, update the numbers in both tests.
+static void testMatchesTheWebAppsPreview()
+{
+    struct Case
+    {
+        const char* name;
+        Strip::Values values;
+        uint32_t crc;
+    };
+
+    Strip::Values full = fullKeg();
+
+    Strip::Values orange = full;
+    orange.percent = 40;
+    orange.litresTenths = 76;
+
+    Strip::Values red = full;
+    red.percent = 15;
+    red.litresTenths = 28;
+
+    Strip::Values lowBattery = full;
+    lowBattery.laserNumber = 3;
+    lowBattery.batteryPercent = 7;
+
+    Strip::Values modeWarning = full;
+    modeWarning.mode = Strip::Mode::Eco;
+    modeWarning.modeWarning = true;
+
+    Strip::Values noSignal = modeWarning;
+    noSignal.noSignal = true;
+
+    Strip::Values fullAndCold = full;
+    fullAndCold.laserNumber = 1;
+    fullAndCold.percent = 100;
+    fullAndCold.litresTenths = 190;
+    fullAndCold.temperatureTenths = -15;
+    fullAndCold.batteryPercent = 55;
+
+    Strip::Values test = full;
+    test.test = true;
+
+    Strip::Values noLaser = {};
+
+    Strip::Values waiting = {};
+    waiting.laserChosen = true;
+    waiting.laserNumber = 1;
+
+    const Case cases[] = {
+        {"full keg", full, 0x8A974B40},
+        {"orange", orange, 0x5BBB82C2},
+        {"red", red, 0x50AAE884},
+        {"low battery", lowBattery, 0x53E20D63},
+        {"mode warning", modeWarning, 0x2889C7DD},
+        {"no signal", noSignal, 0x9381743A},
+        {"full and cold", fullAndCold, 0xA4FD7742},
+        {"test values", test, 0x227369F7},
+        {"no laser", noLaser, 0x15D02483},
+        {"waiting", waiting, 0xB024E814},
+    };
+
+    // All printed first (pio test -v shows them), then checked.
+    const size_t count = sizeof(cases) / sizeof(cases[0]);
+    uint32_t crcs[count];
+    for (size_t i = 0; i < count; i++)
+    {
+        Strip::draw(strip, cases[i].values);
+        crcs[i] = crc32(strip, Strip::Size);
+        printf("%s: 0x%08X\n", cases[i].name, crcs[i]);
+    }
+
+    for (size_t i = 0; i < count; i++)
+    {
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(cases[i].crc, crcs[i], cases[i].name);
+    }
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -267,5 +362,6 @@ int main()
     RUN_TEST(testTopRowIsCentredAboveTheBar);
     RUN_TEST(testTestValuesHaveARedBorder);
     RUN_TEST(testWaitingForTheFirstReading);
+    RUN_TEST(testMatchesTheWebAppsPreview);
     return UNITY_END();
 }

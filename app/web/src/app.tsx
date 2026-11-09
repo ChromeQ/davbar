@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
+import { StrictMode, useEffect, useRef, useState, type DragEvent, type PointerEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity,
@@ -14,7 +14,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
-import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import { encodeSpectra6 } from '@chromeq/davbar-spectra6';
 import { deviceConfig } from './device-config';
 import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
 import {
@@ -25,11 +25,22 @@ import {
   type ChosenLaser,
   type LaserItem,
 } from './lasers';
+import {
+  CENTRED,
+  drawImageInSquare,
+  IMAGE_SIZE,
+  panBy,
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  screenPixels,
+  type ImageFit,
+  type Pan,
+} from './screen';
+import { drawStrip, STRIP_SIZE } from './strip';
+import { useStripState } from './strip-values';
 import './common.style.css';
 import './app.style.css';
 
-const DISPLAY_WIDTH = 400;
-const DISPLAY_HEIGHT = 600;
 const IMAGE_UPLOAD_URL = '/image';
 const DEFAULT_TEXT = deviceConfig.defaultText;
 const DEFAULT_FONT_FAMILY = 'Roboto';
@@ -247,6 +258,12 @@ const App = () => {
   const [backgroundColour, setBackgroundColour] = useState(DEFAULT_BACKGROUND_COLOUR);
   const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('solid');
   const [gradientColour, setGradientColour] = useState(DEFAULT_GRADIENT_COLOUR);
+  // The chosen image at its own size, so Fit, Fill and dragging can redraw it.
+  const [image, setImage] = useState<ImageBitmap | null>(null);
+  const [imageFit, setImageFit] = useState<ImageFit>('fit');
+  const [pan, setPan] = useState<Pan>(CENTRED);
+  // While dragging a filled image: where the pointer last was.
+  const dragFrom = useRef<{ x: number; y: number } | null>(null);
   const [imageFrame, setImageFrame] = useState<SourceFrame | null>(null);
   const [textFrame, setTextFrame] = useState<SourceFrame | null>(null);
   const [binary, setBinary] = useState<Uint8Array | null>(null);
@@ -275,7 +292,10 @@ const App = () => {
   // undefined until loaded; null when no laser is chosen.
   const [chosenLaser, setChosenLaser] = useState<ChosenLaser | null | undefined>(undefined);
   const [chosenLaserFailed, setChosenLaserFailed] = useState(false);
+  const { strip } = useStripState();
+  const stripValues = strip?.values ?? null;
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
+  const canPan = mode === 'image' && image !== null && imageFit === 'fill';
   const isUploading = uploadState === 'uploading';
   const uploadSucceeded = uploadState === 'success';
   const appModalOpen =
@@ -343,21 +363,21 @@ const App = () => {
     const context = getCanvasContext(canvas);
     const lines = text.split('\n');
     const lineHeight = fontSize * 1.2;
-    const firstBaseline = DISPLAY_HEIGHT / 2 - ((lines.length - 1) * lineHeight) / 2;
+    const firstBaseline = IMAGE_SIZE / 2 - ((lines.length - 1) * lineHeight) / 2;
 
     if (backgroundMode === 'linear') {
-      const gradient = context.createLinearGradient(0, 0, 0, DISPLAY_HEIGHT);
+      const gradient = context.createLinearGradient(0, 0, 0, IMAGE_SIZE);
       gradient.addColorStop(0, backgroundColour);
       gradient.addColorStop(1, gradientColour);
       context.fillStyle = gradient;
     } else if (backgroundMode === 'radial') {
       const gradient = context.createRadialGradient(
-        DISPLAY_WIDTH / 2,
-        DISPLAY_HEIGHT / 2,
+        IMAGE_SIZE / 2,
+        IMAGE_SIZE / 2,
         0,
-        DISPLAY_WIDTH / 2,
-        DISPLAY_HEIGHT / 2,
-        Math.hypot(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2)
+        IMAGE_SIZE / 2,
+        IMAGE_SIZE / 2,
+        Math.hypot(IMAGE_SIZE / 2, IMAGE_SIZE / 2)
       );
       gradient.addColorStop(0, backgroundColour);
       gradient.addColorStop(1, gradientColour);
@@ -366,17 +386,17 @@ const App = () => {
       context.fillStyle = backgroundColour;
     }
 
-    context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
     context.fillStyle = textColour;
     context.font = `${fontSize}px ${fontFamily}`;
     context.textAlign = 'center';
     context.textBaseline = 'middle';
 
     lines.forEach((line, index) => {
-      context.fillText(line, DISPLAY_WIDTH / 2, firstBaseline + index * lineHeight, 360);
+      context.fillText(line, IMAGE_SIZE / 2, firstBaseline + index * lineHeight, 360);
     });
 
-    const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    const imageData = context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE);
 
     setTextFrame({ pixels: imageData.data });
     setError('');
@@ -404,58 +424,56 @@ const App = () => {
 
     const context = getCanvasContext(canvas);
 
-    if (imageFrame) {
-      context.putImageData(
-        new ImageData(new Uint8ClampedArray(imageFrame.pixels), DISPLAY_WIDTH, DISPLAY_HEIGHT),
-        0,
-        0
-      );
-    } else {
-      context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    if (!image) {
+      context.clearRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+      setImageFrame(null);
+
+      return;
     }
-  }, [imageFrame, mode]);
 
+    drawImageInSquare(context, image, imageFit, pan);
+    setImageFrame({ pixels: context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE).data });
+    setUploadState('idle');
+  }, [image, imageFit, mode, pan]);
+
+  // Encodes the image for the panel: these are the bytes uploaded.
   useEffect(() => {
-    const previewCanvas = previewCanvasRef.current;
-
-    if (!sourceFrame || !previewCanvas) {
-      if (previewCanvas) {
-        getCanvasContext(previewCanvas).clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      }
-
+    if (!sourceFrame) {
       setBinary(null);
 
       return;
     }
 
     try {
-      const encoded = encodeSpectra6(
-        new Uint8Array(sourceFrame.pixels),
-        DISPLAY_WIDTH,
-        DISPLAY_HEIGHT
-      );
-      const decoded = decodeSpectra6(encoded.bytes, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      const rgba = new Uint8ClampedArray(DISPLAY_WIDTH * DISPLAY_HEIGHT * 4);
-
-      for (let sourceOffset = 0, targetOffset = 0; sourceOffset < decoded.pixels.length;) {
-        rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
-        rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
-        rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
-        rgba[targetOffset++] = 255;
-      }
-
-      getCanvasContext(previewCanvas).putImageData(
-        new ImageData(rgba, DISPLAY_WIDTH, DISPLAY_HEIGHT),
-        0,
-        0
-      );
-      setBinary(encoded.bytes);
+      setBinary(encodeSpectra6(new Uint8Array(sourceFrame.pixels), IMAGE_SIZE, IMAGE_SIZE).bytes);
       setError('');
     } catch (encodingError) {
       setBinary(null);
       setError(encodingError instanceof Error ? encodingError.message : 'Preview failed.');
     }
   }, [sourceFrame]);
+
+  // The whole screen: the encoded image above the strip as the tap would draw it
+  // now, so new strip values redraw the preview without encoding again.
+  useEffect(() => {
+    const previewCanvas = previewCanvasRef.current;
+
+    if (!previewCanvas) {
+      return;
+    }
+
+    const context = getCanvasContext(previewCanvas);
+
+    if (!binary) {
+      context.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+      return;
+    }
+
+    // Until the tap answers, the strip is left white (two white pixels a byte).
+    const stripBytes = stripValues ? drawStrip(stripValues) : new Uint8Array(STRIP_SIZE).fill(0x11);
+    context.putImageData(screenPixels(binary, stripBytes), 0, 0);
+  }, [binary, stripValues]);
 
   const selectMode = (nextMode: SourceMode) => {
     if (nextMode === mode) {
@@ -478,36 +496,15 @@ const App = () => {
     setUploadState('idle');
 
     try {
-      const image = await createImageBitmap(file);
+      const bitmap = await createImageBitmap(file);
 
-      if (image.width !== DISPLAY_WIDTH || image.height !== DISPLAY_HEIGHT) {
-        image.close();
-        setImageFrame(null);
-        setFileName('');
-        setError(`Image must be exactly ${DISPLAY_WIDTH} × ${DISPLAY_HEIGHT}px.`);
-
-        return;
-      }
-
-      const canvas = sourceCanvasRef.current;
-      if (!canvas) {
-        image.close();
-
-        return;
-      }
-
-      const context = getCanvasContext(canvas);
-      context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      context.drawImage(image, 0, 0);
-      image.close();
-
-      const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-
-      setImageFrame({ pixels: imageData.data });
+      setImage((previous) => {
+        previous?.close();
+        return bitmap;
+      });
+      setPan(CENTRED);
       setFileName(file.name);
     } catch {
-      setImageFrame(null);
-      setFileName('');
       setError('That file could not be read as an image.');
     } finally {
       if (fileInputRef.current) {
@@ -542,6 +539,36 @@ const App = () => {
     void handleFile(event.dataTransfer.files[0]);
   };
 
+  // Dragging a filled image chooses which part of it shows.
+  const startPan = (event: PointerEvent<HTMLDivElement>) => {
+    if (!canPan) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragFrom.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const movePan = (event: PointerEvent<HTMLDivElement>) => {
+    const from = dragFrom.current;
+
+    if (!from || !image) {
+      return;
+    }
+
+    // The canvas is shown smaller than its 400 pixels, so scale the movement up.
+    const scale = IMAGE_SIZE / event.currentTarget.clientWidth;
+    const dx = (event.clientX - from.x) * scale;
+    const dy = (event.clientY - from.y) * scale;
+
+    dragFrom.current = { x: event.clientX, y: event.clientY };
+    setPan((previous) => panBy(image, previous, dx, dy));
+  };
+
+  const endPan = () => {
+    dragFrom.current = null;
+  };
+
   const handleBackgroundMode = (value: string) => {
     if (value === 'solid' || value === 'linear' || value === 'radial') {
       setBackgroundMode(value);
@@ -559,7 +586,11 @@ const App = () => {
     setPendingReset(null);
 
     if (targetMode === 'image') {
-      setImageFrame(null);
+      setImage((previous) => {
+        previous?.close();
+        return null;
+      });
+      setPan(CENTRED);
       setFileName('');
 
       if (fileInputRef.current) {
@@ -588,7 +619,7 @@ const App = () => {
       backgroundMode !== 'solid' ||
       gradientColour !== DEFAULT_GRADIENT_COLOUR;
 
-    if (mode === 'image' && imageFrame) {
+    if (mode === 'image' && image) {
       setPendingReset('image');
 
       return;
@@ -901,16 +932,20 @@ const App = () => {
           </div>
 
           <div
-            className={`canvas-stage ${sourceFrame ? 'has-image' : ''} ${isDragging ? 'is-dragging' : ''}`}
+            className={`canvas-stage image-stage ${sourceFrame ? 'has-image' : ''} ${isDragging ? 'is-dragging' : ''} ${canPan ? 'can-pan' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onPointerDown={startPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
           >
-            <canvas ref={sourceCanvasRef} width={DISPLAY_WIDTH} height={DISPLAY_HEIGHT} />
-            {!imageFrame && mode === 'image' && (
+            <canvas ref={sourceCanvasRef} width={IMAGE_SIZE} height={IMAGE_SIZE} />
+            {!image && mode === 'image' && (
               <label className="canvas-placeholder upload-placeholder" htmlFor="image-file">
                 <span>+</span>
-                <p>Click or drag a 400 × 600px image here</p>
+                <p>Click or drag an image here</p>
               </label>
             )}
           </div>
@@ -930,6 +965,31 @@ const App = () => {
                   <span>{fileName || 'Choose image'}</span>
                   <strong>Browse</strong>
                 </label>
+                {image && (
+                  <div className="fit-row">
+                    <div className="mode-switch" aria-label="How the image fills the square">
+                      <button
+                        className={imageFit === 'fit' ? 'active' : ''}
+                        type="button"
+                        onClick={() => setImageFit('fit')}
+                      >
+                        Fit
+                      </button>
+                      <button
+                        className={imageFit === 'fill' ? 'active' : ''}
+                        type="button"
+                        onClick={() => setImageFit('fill')}
+                      >
+                        Fill
+                      </button>
+                    </div>
+                    <p className="fit-hint">
+                      {imageFit === 'fit'
+                        ? 'The whole image, with white in the gaps.'
+                        : 'Cropped to the square. Drag the image to choose what shows.'}
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <div className="text-controls">
@@ -1030,7 +1090,7 @@ const App = () => {
           </div>
 
           <div className={`canvas-stage preview-stage ${binary ? 'has-image' : ''}`}>
-            <canvas ref={previewCanvasRef} width={DISPLAY_WIDTH} height={DISPLAY_HEIGHT} />
+            <canvas ref={previewCanvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
             {!binary && (
               <div className="canvas-placeholder preview-placeholder">
                 <span className="pixel-mark" aria-hidden="true">

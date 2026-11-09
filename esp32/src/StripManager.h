@@ -44,5 +44,6 @@ bool showTestValues(
 // Goes back to the laser's values, if test values are showing.
 void showLiveValues();
 
-// Sets "testSecondsLeft" to how long test values have left, or null.
+// Sets "values" to what the strip would show now, for the web app's preview,
+// and "testSecondsLeft" to how long test values have left, or null.
 void addStripStatus(JsonObject strip);

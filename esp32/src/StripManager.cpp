@@ -45,16 +45,18 @@ static unsigned long testStartedAt = 0;
 static Strip::Values testValues = {};
 
 // Web requests arrive in the web server's task; the loop picks them up, so
-// only the loop changes what the strip shows.
+// only the loop changes what the strip shows. The loop also publishes what the
+// strip would show now, for the web app's preview. sharedLock guards these.
 enum class TestRequest : uint8_t
 {
     None,
     Show,
     Live,
 };
-static portMUX_TYPE testLock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE sharedLock = portMUX_INITIALIZER_UNLOCKED;
 static TestRequest testRequest = TestRequest::None;
 static Strip::Values requestedValues = {};
+static Strip::Values publishedValues = {};
 
 // Whole seconds since the tap started, which never wrap around like millis().
 static int32_t uptimeSeconds()
@@ -186,14 +188,16 @@ void startStripManager()
     // or after a minute without it.
 }
 
+static Strip::Values currentValues();
+
 // Starts or ends test values when the web app asks, or when time is up.
 static void updateTest()
 {
-    portENTER_CRITICAL(&testLock);
+    portENTER_CRITICAL(&sharedLock);
     TestRequest request = testRequest;
     Strip::Values values = requestedValues;
     testRequest = TestRequest::None;
-    portEXIT_CRITICAL(&testLock);
+    portEXIT_CRITICAL(&sharedLock);
 
     if (request == TestRequest::Show)
     {
@@ -226,6 +230,11 @@ void processStripManager()
 
     poll();
 
+    Strip::Values current = currentValues();
+    portENTER_CRITICAL(&sharedLock);
+    publishedValues = current;
+    portEXIT_CRITICAL(&sharedLock);
+
     // While test values show, the laser's changes wait for going back to live.
     if (redrawRequested || testing)
     {
@@ -240,9 +249,9 @@ void processStripManager()
     }
 }
 
-Strip::Values stripValues()
+// The tracker's values, or test values while they show. The caller polls first.
+static Strip::Values currentValues()
 {
-    poll();
     Strip::Values live = tracker.values(uptimeSeconds());
 
     if (!testing)
@@ -257,6 +266,12 @@ Strip::Values stripValues()
     values.mode = live.mode;
     values.test = true;
     return values;
+}
+
+Strip::Values stripValues()
+{
+    poll();
+    return currentValues();
 }
 
 void stripShown(const Strip::Values& values)
@@ -404,23 +419,62 @@ bool showTestValues(
     values.modeWarning = modeWarning == "true";
     values.noSignal = noSignal == "true";
 
-    portENTER_CRITICAL(&testLock);
+    portENTER_CRITICAL(&sharedLock);
     requestedValues = values;
     testRequest = TestRequest::Show;
-    portEXIT_CRITICAL(&testLock);
+    portEXIT_CRITICAL(&sharedLock);
 
     return true;
 }
 
 void showLiveValues()
 {
-    portENTER_CRITICAL(&testLock);
+    portENTER_CRITICAL(&sharedLock);
     testRequest = TestRequest::Live;
-    portEXIT_CRITICAL(&testLock);
+    portEXIT_CRITICAL(&sharedLock);
 }
 
 void addStripStatus(JsonObject strip)
 {
+    portENTER_CRITICAL(&sharedLock);
+    Strip::Values values = publishedValues;
+    portEXIT_CRITICAL(&sharedLock);
+
+    // The same names as app/web/src/strip.ts. Values not known yet are null.
+    JsonObject shown = strip["values"].to<JsonObject>();
+    shown["laserChosen"] = values.laserChosen;
+    shown["laserNumber"] = values.laserNumber;
+    shown["mode"] = values.mode == Strip::Mode::Eco ? "eco" : "smart";
+    if (values.hasLevel)
+    {
+        shown["percent"] = values.percent;
+        shown["litresTenths"] = values.litresTenths;
+    }
+    else
+    {
+        shown["percent"] = nullptr;
+        shown["litresTenths"] = nullptr;
+    }
+    if (values.hasTemperature)
+    {
+        shown["temperatureTenths"] = values.temperatureTenths;
+    }
+    else
+    {
+        shown["temperatureTenths"] = nullptr;
+    }
+    if (values.hasBattery)
+    {
+        shown["batteryPercent"] = values.batteryPercent;
+    }
+    else
+    {
+        shown["batteryPercent"] = nullptr;
+    }
+    shown["modeWarning"] = values.modeWarning;
+    shown["noSignal"] = values.noSignal;
+    shown["test"] = values.test;
+
     // Read from the web server's task; a moment out is fine for a countdown.
     bool showing = testing;
     unsigned long elapsed = millis() - testStartedAt;

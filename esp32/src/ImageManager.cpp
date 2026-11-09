@@ -1,7 +1,6 @@
 #include "ImageManager.h"
 
 #include <Strip.h>
-#include <algorithm>
 #include <esp_crc.h>
 #include <new>
 
@@ -33,8 +32,6 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
 struct ImageUploadState
 {
     File file;
-    size_t total;
-    size_t bytesReceived;
     size_t bytesWritten;
     ImageUploadError error;
 };
@@ -69,8 +66,6 @@ ImageUploadState* beginImageUpload(
 {
     ImageUploadState* state = new (std::nothrow) ImageUploadState {
         File(),
-        total,
-        0,
         0,
         ImageUploadError::None
     };
@@ -87,9 +82,7 @@ ImageUploadState* beginImageUpload(
         return state;
     }
 
-    // Until step 5b, the web app still sends the whole 400 x 600 screen. Its
-    // top 400 rows are kept and the rest is dropped.
-    if (total != IMAGE_SIZE && total != SCREEN_SIZE)
+    if (total != IMAGE_SIZE)
     {
         state->error = ImageUploadError::InvalidSize;
         return state;
@@ -119,29 +112,16 @@ void writeImageUploadChunk(
         return;
     }
 
-    if (index != state->bytesReceived)
+    if (index != state->bytesWritten)
     {
         state->error = ImageUploadError::OutOfOrder;
         return;
     }
 
-    state->bytesReceived += len;
-
-    // Only the first IMAGE_SIZE bytes are the image. In a full screen upload,
-    // the bytes after them are where the strip goes.
-    size_t keep = index < IMAGE_SIZE
-        ? std::min(len, static_cast<size_t>(IMAGE_SIZE - index))
-        : 0;
-
-    if (keep == 0)
-    {
-        return;
-    }
-
-    size_t written = state->file.write(data, keep);
+    size_t written = state->file.write(data, len);
     state->bytesWritten += written;
 
-    if (written != keep)
+    if (written != len)
     {
         state->error = ImageUploadError::WriteFailed;
     }
@@ -158,15 +138,11 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
         ? state->error
         : ImageUploadError::OpenFailed;
 
-    if (
-        error == ImageUploadError::None &&
-        (state->bytesReceived != state->total || state->bytesWritten != IMAGE_SIZE)
-    )
+    if (error == ImageUploadError::None && state->bytesWritten != IMAGE_SIZE)
     {
         error = ImageUploadError::InvalidSize;
     }
 
-    bool fullScreen = state && state->total == SCREEN_SIZE;
     delete state;
 
     if (error != ImageUploadError::None)
@@ -199,10 +175,7 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     removeDataFile("/image.previous");
 
-    logEvent(
-        "image uploaded",
-        fullScreen ? "400 x 600, kept the top 400 rows" : "400 x 400"
-    );
+    logEvent("image uploaded", "400 x 400");
 
     requestImageUpdate("upload");
 

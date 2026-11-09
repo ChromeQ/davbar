@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 and 5a done, step 5b next. Last updated 2026-11-09.
+Status: steps 0 to 4 and 5a done, step 5b in progress (part 1 of 6 done). Last updated 2026-11-10.
 
 ## Goal
 
@@ -408,6 +408,14 @@ Each step ends with something visible to check.
 10. **Later:** RAPT cloud upload.
 
 ## Open questions and later ideas
+
+- **The phone can't open the tap's page (2026-11-10):** on ChromeQ (192.168.0.72), the
+  phone gets "This site can't be reached" for the tap and even the router
+  (192.168.0.1), while the laptop reaches the tap, the router and the phone over
+  Wi-Fi. So the network is fine and something on the phone blocks its browser from
+  local addresses. A work profile, Chrome's local network permission and VPN settings
+  were checked. Look again later (restart, another browser, Private DNS, security
+  apps); the laptop is fine for now.
 
 - **Smart or Eco, a per-tap choice (2026-11-02):** default Smart, because the screen
   stays a few minutes behind a pour and a silent sensor can be flagged. Eco (Ultra

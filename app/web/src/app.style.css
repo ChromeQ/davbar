@@ -186,6 +186,39 @@ h2 {
   height: 100%;
 }
 
+/* The image is square; the preview shows the whole 400 x 600 screen. */
+.image-stage {
+  aspect-ratio: 1;
+}
+
+/* A filled image can be dragged to choose what shows. */
+.image-stage.can-pan {
+  cursor: grab;
+  touch-action: none;
+}
+
+.image-stage.can-pan:active {
+  cursor: grabbing;
+}
+
+.fit-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.fit-row .mode-switch {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.fit-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
 .canvas-placeholder {
   position: absolute;
   inset: 0;
@@ -227,7 +260,7 @@ h2 {
 }
 
 .source-controls {
-  margin: auto auto 0;
+  margin: 0 auto;
 }
 
 .upload-row {
@@ -753,7 +786,6 @@ h2 {
   }
 
   .panel {
-    min-height: 780px;
     padding-right: 16px;
     padding-left: 16px;
   }
