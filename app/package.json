@@ -18,18 +18,23 @@
     "lint:fix": "eslint --fix . && pnpm -r --parallel --aggregate-output run lint:fix",
     "outdated": "pnpm -r --parallel --aggregate-output run outdated",
     "preview": "pnpm --dir web preview",
+    "strip:glyphs": "tsx scripts/strip-glyphs.ts",
     "test": "pnpm -r --parallel --aggregate-output run test"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
+    "@fontsource/roboto": "5.3.0",
+    "@types/fontkit": "2.0.9",
     "@types/node": "catalog:",
     "@typescript/native": "catalog:typescript",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "eslint-plugin-prettier": "catalog:",
+    "fontkit": "2.0.4",
     "globals": "catalog:",
     "jiti": "2.7.0",
     "prettier": "catalog:",
+    "sharp": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:"
