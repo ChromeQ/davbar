@@ -411,6 +411,7 @@ static void handleStatus(AsyncWebServerRequest* request)
     doc["memory"]["lowest"] = ESP.getMinFreeHeap();
     addChosenLaser(doc.as<JsonObject>());
     addLaserStatus(doc["lasers"].to<JsonArray>());
+    addStripStatus(doc["strip"].to<JsonObject>());
 
     sendJson(request, 200, doc);
 }
@@ -441,6 +442,43 @@ static void handleChooseLaser(AsyncWebServerRequest* request)
 
     response["success"] = true;
     addChosenLaser(response);
+    sendJson(request, 200, doc);
+}
+
+static void handleStripTest(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    JsonObject response = doc.to<JsonObject>();
+    String error;
+
+    if (!showTestValues(
+        request->arg("percent"),
+        request->arg("temperature"),
+        request->arg("battery"),
+        request->arg("modeWarning"),
+        request->arg("noSignal"),
+        error
+    ))
+    {
+        response["success"] = false;
+        response["message"] = error;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    response["success"] = true;
+    response["message"] = "Showing the test values for 5 minutes.";
+    sendJson(request, 200, doc);
+}
+
+static void handleStripLive(AsyncWebServerRequest* request)
+{
+    showLiveValues();
+
+    JsonDocument doc;
+    doc["success"] = true;
+    doc["message"] = "Showing the laser's values.";
     sendJson(request, 200, doc);
 }
 
@@ -971,6 +1009,18 @@ void startWebServer()
         "/laser",
         HTTP_POST,
         handleChooseLaser
+    );
+
+    server.on(
+        "/strip/test",
+        HTTP_POST,
+        handleStripTest
+    );
+
+    server.on(
+        "/strip/live",
+        HTTP_POST,
+        handleStripLive
     );
 
     server.onNotFound(

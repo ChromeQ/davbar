@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 done, step 5a in progress. Last updated 2026-11-09.
+Status: steps 0 to 4 and 5a done, step 5b next. Last updated 2026-11-09.
 
 ## Goal
 
@@ -156,16 +156,17 @@ from real kegs at the next keg change.
     The brain is recognisable at 32px on the real screen.
   - Text in Roboto, the web app's font. The firmware holds just the characters the
     strip needs, at the sizes it uses, and the web preview uses the same font.
-  - Mode warning: an amber warning triangle next to the mode icon once the laser has
-    been in the other mode for over an hour. Session Mode and Live Stream never count.
+  - Mode warning: a warning sign (yellow inside, with a black outline and "!") next
+    to the mode icon once the laser has been in the other mode for over an hour. Session Mode and Live Stream never count.
     Double-tapping the laser's Bluetooth button switches between the two. A battery
     change or restart puts the laser back in Smart Mode.
 - **Special states:**
   - No laser chosen: the strip shows "No laser".
   - Nothing heard from the laser: keep showing the last values. With Smart chosen,
     the laser broadcasts constantly, so silence for over 10 minutes (set in step 3)
-    is a real problem: show a no signal icon (a crossed-out Bluetooth symbol)
-    next to the battery icon. One redraw when it appears, one when it clears. With Eco
+    is a real problem: show a no signal icon (a blue Bluetooth symbol crossed out in
+    red) next to the battery icon. It replaces the mode warning, as the laser's mode
+    isn't known while it's silent. One redraw when it appears, one when it clears. With Eco
     chosen, a steady keg is silent for 10+ hours, so there is no warning. Either way,
     flat batteries, the likely failure, show as the red battery icon first. No "last
     updated" time on screen: it would be frozen at the last redraw. The web app's
@@ -259,6 +260,11 @@ Force refresh in the settings menu still redraws on demand.
 - **Test values:** a route sets the strip's percentage, temperature and battery for
   "Show on device". The tap shows them for 5 minutes, or until "Back to live", then
   goes back to its real readings, so a tap is never left showing made-up numbers.
+  `POST /strip/test` takes percent, temperature, battery and optionally modeWarning
+  and noSignal ("true"); `POST /strip/live` goes back early; `/status` gives
+  `strip.testSecondsLeft`. Test values have a 5px red border inside the strip's edge,
+  clear of the content. They're never saved, so a restart comes back live. Done in
+  step 5a.
 
 ## Web app changes
 
@@ -368,7 +374,7 @@ Each step ends with something visible to check.
    - 5a, firmware: the 400 x 400 image, the strip drawn in Roboto (with the laser dots
      and mode icon), the redraw rules (with the mode warning and no signal icon), the
      strip's values kept over a restart, and the test values route, tuned on tap 1's
-     real screen.
+     real screen. Done, tested on tap 1 with real pours, a refill and a power cut.
    - 5b, web app: the 400 x 400 image area (any image size with Fit and its
      Background, or Fill; pasting an image address or an image), the full-screen
      preview with the strip, developer mode with "Show on device", Roboto built into
@@ -378,14 +384,28 @@ Each step ends with something visible to check.
    picking it on another.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
    planned here, were done in step 5a.
-8. **Wrap up,** the last commits on `keg-level` before merging into master: move the
+8. **Fit the enclosure,** once the case parts are printed and the last screens arrive.
+   The case's frame may cover a few pixels of each screen, and more on one side
+   than the other. Each tap gets its own visible area (how much each edge loses),
+   set in the web app with "Show on device" to check it: the strip centres in the
+   visible area, the test values' red border moves in with it, and the preview
+   shades what the frame hides, so images can be framed to match. The screen won't
+   move once it's screwed in, so a factory reset keeps it: it's saved in the tap's
+   settings (NVS), which updates and uploads don't touch, and the factory reset
+   leaves it out (its dialog says so). Tuning needs no flashing: the saved fit takes
+   effect straight away. Once it looks right, `pnpm device:save-fit --config
+   config/tap-1.json` reads the tap's fit over Wi-Fi and writes it into that tap's
+   profile, to commit. The firmware uses the profile's fit only when the saved one
+   is missing, such as after erasing the whole chip or swapping in a new ESP32
+   behind the same screen.
+9. **Wrap up,** the last commits on `keg-level` before merging into master: move the
    lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
    the display behaves into the READMEs), then move this plan to
    `docs/plans/2026-11-keg-level.md` with a line at the top saying it is done and
    when it was merged. After that the archived plan is never edited; fixes go in the
    docs. Ideas still marked Later stay listed there, and each gets its own new plan
    file when picked up.
-9. **Later:** RAPT cloud upload.
+10. **Later:** RAPT cloud upload.
 
 ## Open questions and later ideas
 

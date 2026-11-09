@@ -157,6 +157,8 @@ static void testNoSignalHidesTheModeWarning()
     drawAndSave("no-signal", values);
     unsigned colours = coloursIn(0, 0, Strip::Width, 80);
     TEST_ASSERT_FALSE(colours & bit(Strip::Yellow));
+    // A blue Bluetooth symbol with a red line through it.
+    TEST_ASSERT_TRUE(colours & bit(Strip::Blue));
     TEST_ASSERT_TRUE(colours & bit(Strip::Red));
 }
 
@@ -208,6 +210,35 @@ static void testTopRowIsCentredAboveTheBar()
     }
 }
 
+static void testTestValuesHaveARedBorder()
+{
+    Strip::Values values = fullKeg();
+    Strip::draw(strip, values);
+    static uint8_t live[Strip::Size];
+    memcpy(live, strip, sizeof(live));
+
+    values.test = true;
+    drawAndSave("test-values", values);
+
+    for (int y = 0; y < Strip::Height; y++)
+    {
+        for (int x = 0; x < Strip::Width; x++)
+        {
+            bool border = x < 5 || x >= Strip::Width - 5 || y < 5 || y >= Strip::Height - 5;
+            if (border)
+            {
+                TEST_ASSERT_EQUAL_UINT8(Strip::Red, pixel(x, y));
+            }
+            else
+            {
+                // Everything inside is exactly as it was.
+                uint8_t byte = live[y * Strip::RowBytes + x / 2];
+                TEST_ASSERT_EQUAL_UINT8(x % 2 == 0 ? byte >> 4 : byte & 0x0F, pixel(x, y));
+            }
+        }
+    }
+}
+
 static void testWaitingForTheFirstReading()
 {
     Strip::Values values = {};
@@ -234,6 +265,7 @@ int main()
     RUN_TEST(testNoSignalHidesTheModeWarning);
     RUN_TEST(testNoLaserShowsOnlyText);
     RUN_TEST(testTopRowIsCentredAboveTheBar);
+    RUN_TEST(testTestValuesHaveARedBorder);
     RUN_TEST(testWaitingForTheFirstReading);
     return UNITY_END();
 }

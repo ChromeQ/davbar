@@ -57,6 +57,9 @@ namespace Strip
         // Nothing heard from the laser for too long. Hides the mode warning,
         // as the laser's mode isn't known then.
         bool noSignal;
+        // Test values from the web app's "Show on device", not the laser's:
+        // drawn with a red border inside the strip's edge.
+        bool test;
     };
 
     // Draws the whole strip into strip, which must hold Size bytes.
