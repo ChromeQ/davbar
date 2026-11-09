@@ -15,7 +15,7 @@
     "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
   },
   "dependencies": {
-    "sharp": "0.35.5"
+    "sharp": "catalog:"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",

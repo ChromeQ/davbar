@@ -24,6 +24,13 @@ also checks the code (and the web app's CSS) against Prettier's format, using
 `pnpm lint:fix` rewrites them. The Prettier settings are in `.prettierrc`, shared by
 every package.
 
+`pnpm strip:glyphs` turns Roboto Bold and the strip's Lucide icons into 1-bit pixel
+tables for the firmware (`../esp32/lib/Strip/StripGlyphs.cpp`) and the web app
+(`web/src/strip-glyphs.ts`), so both draw the keg strip with the same pixels. Run it
+after changing a size, a character or an icon in `scripts/strip-glyphs.ts`, and
+commit the generated files. `--preview <file.png>` also saves an enlarged picture of
+them.
+
 Device branding and identity come from the shared profiles under `../config`. Use
 `pnpm device:build`, `pnpm device:upload`, or `pnpm device:upload:fs` so the web app
 and firmware use the same profile. See the [project README](../README.md) for the
