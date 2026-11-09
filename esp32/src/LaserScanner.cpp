@@ -30,6 +30,8 @@ struct LaserState
     // The latest broadcast with a distance. Empty broadcasts don't replace it.
     bool hasReading;
     RaptLaser::Reading reading;
+    // Counts new readings, so the strip can tell when there's another.
+    uint32_t readingCount;
     int8_t rssi;
     unsigned long lastHeardAt;
     bool readingChanged;
@@ -175,6 +177,7 @@ class ScanCallbacks : public NimBLEScanCallbacks
             {
                 laser->hasReading = true;
                 laser->reading = reading;
+                laser->readingCount++;
                 laser->readingChanged = true;
             }
         }
@@ -717,6 +720,7 @@ ChosenLaser getChosenLaser()
     if (laserChosen)
     {
         result.chosen = true;
+        memcpy(result.address, chosenAddress, sizeof(result.address));
         result.number = laserNumber(chosenAddress);
         result.eco = chosenMode == ChosenMode::Eco;
 
@@ -726,6 +730,7 @@ ChosenLaser getChosenLaser()
             result.lastHeardAt = laser->lastHeardAt;
             result.hasReading = laser->hasReading;
             result.reading = laser->reading;
+            result.readingCount = laser->readingCount;
         }
     }
 

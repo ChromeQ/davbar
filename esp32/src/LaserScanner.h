@@ -47,6 +47,7 @@ void addChosenLaser(JsonObject response);
 struct ChosenLaser
 {
     bool chosen;
+    uint8_t address[6];
     // Its number in config/lasers.json, or 0 for a laser not in it.
     uint8_t number;
     // The mode chosen for it: Eco (Ultra Low Power) or Smart.
@@ -54,9 +55,11 @@ struct ChosenLaser
     // When it was last heard (millis), even without a reading. 0 when it
     // hasn't been heard since the tap started.
     unsigned long lastHeardAt;
-    // The latest broadcast with a distance.
+    // The latest broadcast with a distance, and how many readings there have
+    // been, which goes up with each new one.
     bool hasReading;
     RaptLaser::Reading reading;
+    uint32_t readingCount;
 };
 
 ChosenLaser getChosenLaser();

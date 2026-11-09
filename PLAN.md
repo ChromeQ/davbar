@@ -183,9 +183,11 @@ something shown changes.
 
 | Value | Rule |
 | --- | --- |
-| Level | 1% steps, rounded down. Only goes down; a rise of 5 points or more is a refill. Either change waits until the level has stayed the same for 1 minute (a debounce), so a pour or refill redraws once, after it has finished. In Ultra Low Power Mode this just delays the redraw by a minute. |
+| Level | 1% steps, rounded down. Only goes down, and a drop redraws as soon as the laser reports it, so a pour shows straight away. If the laser measured mid-pour, its next reading (about 35s later in Session Mode) redraws again with the final level; a redraw can't be cut short, as stopping the panel part-way can leave lasting ghosting. A rise of 5 points or more is a refill, shown once the level has stayed within 1 point for 1 minute, as a keg change involves a lot of moving; it then shows the lowest reading in that minute. Within 1 point, as a reading on the line between two percentages flickers between them. Smaller rises never show. |
 | Battery | Use the highest reading from the last hour, to ignore sags while the laser fires. That value only goes down; a large rise (new batteries) shows immediately. |
 | Temperature | Updated whenever the screen redraws. On its own, it triggers a redraw only if it has moved 0.5° or more and the last redraw was at least an hour ago. |
+
+Every redraw shows the latest of everything, so a pour's redraw also brings the temperature up to date. A battery or temperature redraw waits while a rise might still become a refill (up to a minute), so they come together.
 
 Force refresh in the settings menu still redraws on demand.
 
@@ -294,6 +296,10 @@ Force refresh in the settings menu still redraws on demand.
   - When this tap is full, Send opens the same grid to choose what to remove, or
     "Send without saving". Nothing is ever removed automatically, because the oldest
     beers may be the ones made most often.
+  - Two keg states always in the grid, which can't be removed: "Keg empty" and "Keg
+    ready" (cleaned and ready to fill). Sending one adds the date, for example "Keg
+    ready · 9 Nov", as a reminder of when the keg was emptied or cleaned. The strip
+    still shows the laser's reading. Nothing switches to them automatically.
 - The preview shows the whole screen, including a close copy of the strip with the
   tap's live readings and the chosen mode's icon.
 - Developer mode, a switch in Settings (off by default, remembered by each browser),
@@ -360,16 +366,18 @@ Each step ends with something visible to check.
    both parts tested on tap 1, including the setup page after a factory reset.
 5. **New layout,** in two parts:
    - 5a, firmware: the 400 x 400 image, the strip drawn in Roboto (with the laser dots
-     and mode icon) and the test values route, tuned on tap 1's real screen.
+     and mode icon), the redraw rules (with the mode warning and no signal icon), the
+     strip's values kept over a restart, and the test values route, tuned on tap 1's
+     real screen.
    - 5b, web app: the 400 x 400 image area (any image size with Fit and its
      Background, or Fill; pasting an image address or an image), the full-screen
      preview with the strip, developer mode with "Show on device", Roboto built into
      both pages, and the tap switcher.
-6. **Beer library:** storage on each tap, the shared grid, removing several at once
-   and the prompt when full. Test by sending a beer on one tap and picking it on
-   another.
-7. **Redraw rules,** special states (including the mode warning and no signal icon)
-   and the setup help screen.
+6. **Beer library:** storage on each tap, the shared grid, removing several at once,
+   the prompt when full and the keg states. Test by sending a beer on one tap and
+   picking it on another.
+7. **Setup help screen.** The redraw rules and the strip's special states, first
+   planned here, were done in step 5a.
 8. **Wrap up,** the last commits on `keg-level` before merging into master: move the
    lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
    the display behaves into the READMEs), then move this plan to

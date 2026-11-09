@@ -5,6 +5,7 @@
 #include "ImageManager.h"
 #include "LaserScanner.h"
 #include "Storage.h"
+#include "StripManager.h"
 #include "WifiManager.h"
 
 void setup()
@@ -31,7 +32,7 @@ void setup()
 
     startLaserScanner();
 
-    requestImageUpdate("boot");
+    startStripManager();
 
     Serial.println("Ready");
 }
@@ -43,6 +44,8 @@ void loop()
     processImageManager();
 
     processLaserScanner();
+
+    processStripManager();
 
     processDeviceLog();
 }

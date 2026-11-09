@@ -17,6 +17,7 @@
 #include "LaserScanner.h"
 #include "Settings.h"
 #include "Storage.h"
+#include "StripManager.h"
 
 static AsyncWebServer server(80);
 
@@ -283,7 +284,11 @@ static void handleFactoryReset(AsyncWebServerRequest* request)
 {
     bool clearLog = request->arg("clearLog") == "1";
 
-    bool cleared = clearWifiSettings() && clearLaserChoice() && clearScreenImage();
+    bool cleared =
+        clearWifiSettings() &&
+        clearLaserChoice() &&
+        clearScreenImage() &&
+        clearStripValues();
     if (clearLog)
     {
         cleared = clearDeviceLog() && cleared;
