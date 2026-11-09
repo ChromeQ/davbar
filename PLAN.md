@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 done, step 5 next. Last updated 2026-11-08.
+Status: steps 0 to 4 done, step 5a in progress. Last updated 2026-11-09.
 
 ## Goal
 
@@ -134,20 +134,28 @@ from real kegs at the next keg change.
 
 - **Top 400 x 400:** the uploaded image.
 - **Bottom 400 x 200 strip,** drawn by the ESP32:
-  - Top row: temperature on the left (`2.6°`), battery icon in the centre, litres on
-    the right (`14.9L`).
-  - Below: a horizontal bar with a black outline. Fill is green from 100% to 50%,
-    orange from 49% to 25% and red at 24% and below. Orange is a red and yellow
-    dither, tuned on the real screen. The percentage is centred in the bar in colours
-    that contrast with whatever is behind each part of the text.
+  - Top row, 40px bold: the percentage on the left (`87%`), read first because the
+    strip is about the keg's level, the temperature on the right (`2.6°`), and the
+    laser dots, battery icon and mode icon in the middle. The middle group is centred
+    on the screen, so the icons line up across the taps.
+  - Below: a 368 x 96 bar with a black outline. Fill is green from 100% to 50%,
+    orange from 49% to 25% and red at 24% and below. The screen has no orange, so
+    orange is a fixed pattern of 2 red pixels to 1 yellow, the mix the web app's
+    encoder makes of `#FF5500`, which looked most orange on the real screen. The litres
+    (`16.5L`, 64px bold) are centred in the bar. Each pixel of the text is white over
+    the green or red fill and black over orange and the empty part, so a character the
+    fill's edge crosses is split in two colours.
   - Battery icon: black outline, always shown. At 10% or more it has a green fill in
-    10% steps and no number. Below 10% it turns red and shows the number inside, in
-    1% steps.
-  - Laser dots: 1-3 dots matching the label on the laser's lid, so it is clear which
-    laser the tap is showing. Position to be tuned on the real screen.
+    10% steps and no number. Below 10% the outline turns red, with a red fill and the
+    percentage inside (`7%`), both in 1% steps.
+  - Laser dots: 1-3 filled dots matching the label on the laser's lid, so it is clear
+    which laser the tap is showing. Stacked vertically to the left of the battery, so
+    the group is the same width on every tap.
   - Mode icon, always shown next to the battery icon: a simple outline brain for
     Smart or leaf for Eco (Ultra Low Power), matching the mode chosen for this tap.
-    Check it is recognisable on the real screen.
+    The brain is recognisable at 32px on the real screen.
+  - Text in Roboto, the web app's font. The firmware holds just the characters the
+    strip needs, at the sizes it uses, and the web preview uses the same font.
   - Mode warning: an amber warning triangle next to the mode icon once the laser has
     been in the other mode for over an hour. Session Mode and Live Stream never count.
     Double-tapping the laser's Bluetooth button switches between the two. A battery
@@ -241,19 +249,36 @@ Force refresh in the settings menu still redraws on demand.
   password's hash. Done in step 2c.
 - **Status dialog:** add the sensor address, chosen and actual mode, last reading,
   signal strength and time since the last reading.
+- **Screen image and strip (step 5a):** the stored image becomes 400 x 400 (80,000
+  bytes), drawn above the strip, which the firmware draws itself. At boot, a stored
+  image of any other size (the old 400 x 600 test images) is deleted. Until step 5b,
+  uploads of a full 400 x 600 screen (120,000 bytes, what the web app sends today)
+  are still accepted and only the top 400 rows are kept; 5b removes this.
+- **Test values:** a route sets the strip's percentage, temperature and battery for
+  "Show on device". The tap shows them for 5 minutes, or until "Back to live", then
+  goes back to its real readings, so a tap is never left showing made-up numbers.
 
 ## Web app changes
 
 - The image area is 400 x 400. Image mode takes an image of any size and fits it into
-  the square: Fit (the whole image, padded with white, which suits KegLand's product
-  shots) or Fill (cropped to a square, drag to choose which part shows). Text mode
-  renders at 400 x 400. Uploads become 80,000 bytes. Ways to give it an image:
+  the square: Fit (the whole image, with a background in the gaps) or Fill (cropped to
+  a square, drag to choose which part shows). Text mode renders at 400 x 400. Uploads
+  become 80,000 bytes. Ways to give it an image:
   - Choose file, as now.
   - An "Image address" text field next to it. Pasting an address loads the image
     straight away. On a laptop: right-click the image, Copy Image Address.
   - Pasting a picture (Ctrl+V, or Copy Image on a laptop) into the same field. Check
     in step 5 whether a picture copied on a phone pastes too; if not, Save to Photos
     and Choose file still works, without the resizing.
+
+  Fit's Background dropdown (only shown with Fit, as Fill has no gaps):
+  - White, the default, which suits KegLand's product shots.
+  - Colour: a colour picker; tapping the image picks a colour from it (on a phone
+    too), and desktop Chrome's built-in eyedropper picks from anywhere on screen. The
+    screen's 6 colours are offered as swatches, as they come out clean while other
+    colours are dithered. Shares its controls with text mode's background.
+  - Blurred image: the same image filling the square, heavily blurred, behind the
+    fitted one. Judge on the real screen whether the dithered blur looks good.
 
   KegLand's images (Shopify) let other pages read them, but their product pages
   don't. Pasting a product page link, or an image from a site that blocks it, would
@@ -269,10 +294,16 @@ Force refresh in the settings menu still redraws on demand.
   - When this tap is full, Send opens the same grid to choose what to remove, or
     "Send without saving". Nothing is ever removed automatically, because the oldest
     beers may be the ones made most often.
-- The preview shows the whole screen, including a close copy of the strip, with
-  controls for percentage (slider and number input), temperature and battery, and
-  the chosen mode's icon.
-- "Show on device" sends the preview values to the device for testing.
+- The preview shows the whole screen, including a close copy of the strip with the
+  tap's live readings and the chosen mode's icon.
+- Developer mode, a switch in Settings (off by default, remembered by each browser),
+  adds controls to the preview for percentage (slider and number input),
+  temperature and battery, and "Show on device", which sends them to the tap to
+  check the strip on the real screen (see Test values above).
+- Roboto is built into both pages rather than loaded from Google Fonts, so the setup
+  page (whose phone has no internet) and text mode always have it: one variable font
+  file trimmed to weights 400-700 and to ASCII, Latin-1 and common punctuation,
+  about 25 KB a page (Google's file is 43 KB). The unused 800 weight is dropped.
 - A laser picker next to Send, and on the setup page below the Wi-Fi settings, as
   it's optional there and can be changed later in the app. It lists every laser in
   the shared list with its dots and, when heard recently, its reading, mode and when
@@ -327,10 +358,13 @@ Each step ends with something visible to check.
 
    The dots and mode icon on screen moved to step 5, which draws the strip. Done,
    both parts tested on tap 1, including the setup page after a factory reset.
-5. **New layout:** the 400 x 400 image area (any image size with Fit or Fill, pasting
-   an image address or an image) and full-screen preview with controls in the web
-   app, the strip drawn by the firmware (with the laser dots and mode icon), "Show on
-   device" and the tap switcher.
+5. **New layout,** in two parts:
+   - 5a, firmware: the 400 x 400 image, the strip drawn in Roboto (with the laser dots
+     and mode icon) and the test values route, tuned on tap 1's real screen.
+   - 5b, web app: the 400 x 400 image area (any image size with Fit and its
+     Background, or Fill; pasting an image address or an image), the full-screen
+     preview with the strip, developer mode with "Show on device", Roboto built into
+     both pages, and the tap switcher.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once
    and the prompt when full. Test by sending a beer on one tap and picking it on
    another.
@@ -424,7 +458,6 @@ Each step ends with something visible to check.
   box, with the bottom of the housing about 70 mm above the table. So the housing
   hangs about 15 mm below the lid, and a full keg can't read much less than that.
   Every reading has the same offset, so the constants already include it.
-- **Orange:** tune the dither on the real screen.
 - **Signal margin:** watch signal strength in step 3 and move the antenna if readings
   are missed.
 - **RAPT cloud:** the public API has no level device type. External Devices (paid
