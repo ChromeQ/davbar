@@ -596,6 +596,130 @@ h2 {
   white-space: nowrap;
 }
 
+/* Developer mode's test values, under the preview */
+.test-values {
+  display: grid;
+  width: min(100%, 500px);
+  margin: 24px auto 0;
+  padding: 18px;
+  gap: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.test-values-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.test-values h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.test-values-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.test-values .message {
+  margin: 0;
+}
+
+.test-values-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 88px;
+  gap: 10px;
+}
+
+/* The percentage and its litres on the first row, then temperature and battery */
+.test-percent-field {
+  grid-column: span 2;
+}
+
+.test-percent-field > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.test-percent-field input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--accent);
+}
+
+.test-percent-field input[type='number'] {
+  width: 68px;
+}
+
+.test-values-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.test-values .checkbox-option {
+  margin: 0;
+}
+
+.test-values-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.test-countdown {
+  margin: 0 auto 0 0;
+  font-size: 0.78rem;
+}
+
+.test-countdown strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The developer mode switch in Settings */
+.settings-list .settings-switch {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: 10px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+
+.settings-list .settings-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.settings-list [aria-checked='true'] .settings-switch {
+  background: var(--accent);
+}
+
+.settings-list [aria-checked='true'] .settings-switch::after {
+  transform: translateX(14px);
+}
+
 .laser-modal {
   width: min(100%, 480px);
   max-height: calc(100vh - 40px);
@@ -709,6 +833,10 @@ h2 {
   color: var(--accent);
   border-color: var(--accent);
   background: rgba(239, 45, 86, 0.06);
+}
+
+.settings-list svg {
+  flex: none;
 }
 
 .settings-list span {
@@ -904,6 +1032,14 @@ h2 {
 
   .laser-button {
     margin-left: 0;
+  }
+
+  .test-values-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .test-percent-field {
+    grid-column: 1 / -1;
   }
 }
 

@@ -465,6 +465,7 @@ static void handleStripTest(AsyncWebServerRequest* request)
 
     if (!showTestValues(
         request->arg("percent"),
+        request->arg("litres"),
         request->arg("temperature"),
         request->arg("battery"),
         request->arg("modeWarning"),

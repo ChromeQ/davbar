@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 to 3 of 6 done). Last updated 2026-11-10.
+Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 to 4 of 6 done). Last updated 2026-11-10.
 
 ## Goal
 
@@ -260,11 +260,12 @@ Force refresh in the settings menu still redraws on demand.
 - **Test values:** a route sets the strip's percentage, temperature and battery for
   "Show on device". The tap shows them for 5 minutes, or until "Back to live", then
   goes back to its real readings, so a tap is never left showing made-up numbers.
-  `POST /strip/test` takes percent, temperature, battery and optionally modeWarning
-  and noSignal ("true"); `POST /strip/live` goes back early; `/status` gives
+  `POST /strip/test` takes percent, temperature, battery and optionally litres
+  (otherwise worked out from percent for a 19 L keg), modeWarning and noSignal
+  ("true"); `POST /strip/live` goes back early; `/status` gives
   `strip.testSecondsLeft`. Test values have a 5px red border inside the strip's edge,
   clear of the content. They're never saved, so a restart comes back live. Done in
-  step 5a.
+  step 5a; litres added in part 4 of 5b.
 
 ## Web app changes
 
@@ -288,8 +289,8 @@ Force refresh in the settings menu still redraws on demand.
   - A failed address keeps the current image and says why: the site doesn't let
     other pages read its images, the address is a page rather than an image, or the
     status the site answered with.
-  - Still to check once phones can reach the taps: whether a picture copied on a
-    phone pastes. If not, Save to Photos and Browse still works.
+  - A picture copied on a phone pastes too: checked with Chrome on Android, on
+    tap 1.
 
   The Background tool, shown whenever the image leaves gaps (below Fill). Text mode
   uses the same tool for its background, without Blurred image, and each mode keeps
@@ -327,10 +328,19 @@ Force refresh in the settings menu still redraws on demand.
     still shows the laser's reading. Nothing switches to them automatically.
 - The preview shows the whole screen, including a close copy of the strip with the
   tap's live readings and the chosen mode's icon.
-- Developer mode, a switch in Settings (off by default, remembered by each browser),
-  adds controls to the preview for percentage (slider and number input),
-  temperature and battery, and "Show on device", which sends them to the tap to
-  check the strip on the real screen (see Test values above).
+- Developer mode, a switch in Settings (off by default, remembered by each browser;
+  each tap's page is its own site to the browser, so each tap remembers it
+  separately), adds Test values under the preview: percentage (slider and number
+  input) and litres, temperature, battery, and the Mode warning and No signal icons.
+  The percentage and litres are linked: a percentage gives the litres the tap works
+  out for it, and typed litres give the percentage a real reading would show with
+  them (11.8 L gives 62%, a pair no percentage alone makes). The
+  preview shows them, with the red border, and "Show on device" sends them to the
+  tap to check the strip on the real screen (see Test values above). While the tap
+  shows test values, a countdown and "Back to live" show under the preview, with or
+  without developer mode. The tap takes a request between redraws, so for a minute
+  after one the page trusts the request until the tap's answers show it. Done in
+  part 4 of 5b, tested on tap 1.
 - Roboto is built into both pages rather than loaded from Google Fonts, so the setup
   page (whose phone has no internet) and text mode always have it: one variable font
   file trimmed to weights 400-700 and to ASCII, Latin-1 and common punctuation,
@@ -398,7 +408,7 @@ Each step ends with something visible to check.
      preview with the strip; (2) zoom between Fit and Fill, with the Background for
      the gaps; (3) pasting an image address or an image; (4) developer mode with
      "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. Parts
-     1 to 3 done, tested on tap 1.
+     1 to 4 done, tested on tap 1.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once,
    the prompt when full and the keg states. Test by sending a beer on one tap and
    picking it on another.
@@ -429,13 +439,16 @@ Each step ends with something visible to check.
 
 ## Open questions and later ideas
 
-- **The phone can't open the tap's page (2026-11-10):** on ChromeQ (192.168.0.72), the
-  phone gets "This site can't be reached" for the tap and even the router
-  (192.168.0.1), while the laptop reaches the tap, the router and the phone over
-  Wi-Fi. So the network is fine and something on the phone blocks its browser from
-  local addresses. A work profile, Chrome's local network permission and VPN settings
-  were checked. Look again later (restart, another browser, Private DNS, security
-  apps); the laptop is fine for now.
+- **The phone can't open the tap's page (2026-11-10), fixed:** on ChromeQ
+  (192.168.0.72), the phone got "This site can't be reached" for the tap and even the
+  router (192.168.0.1), while the laptop reached them all. On the phone's hotspot it
+  failed the same way by address, with ERR_TOO_MANY_RETRIES. The cause was Android
+  17's local network permission, which Settings calls Nearby devices: Chrome had it,
+  but it wasn't in effect (Settings warned it was set for an older Android version).
+  Turning it off and on again fixed it. The phone that hosts the hotspot can't look up
+  the taps' `.local` names, so it uses the tap's address there. Still to check at home:
+  the phone on ChromeQ reaching a tap on ChromeQ_2.4 (the same router's 2.4 GHz
+  band), by name and by address.
 
 - **Smart or Eco, a per-tap choice (2026-11-02):** default Smart, because the screen
   stays a few minutes behind a pour and a silent sensor can be flagged. Eco (Ultra

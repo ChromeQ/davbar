@@ -377,6 +377,7 @@ static bool parseTenths(const String& text, long min, long max, long& tenths)
 
 bool showTestValues(
     const String& percent,
+    const String& litres,
     const String& temperature,
     const String& battery,
     const String& modeWarning,
@@ -385,12 +386,25 @@ bool showTestValues(
 )
 {
     long percentValue = 0;
+    long litresTenths = 0;
     long temperatureTenths = 0;
     long batteryValue = 0;
+    const long kegTenths = RaptLaser::Corny19L.capacityTenthsLitres;
 
     if (!parseWhole(percent, 0, 100, percentValue))
     {
         error = "The percentage must be a whole number from 0 to 100.";
+        return false;
+    }
+
+    if (litres.isEmpty())
+    {
+        // The litres of a full keg's percentage, rounded down like the laser's.
+        litresTenths = kegTenths * percentValue / 100;
+    }
+    else if (!parseTenths(litres, 0, kegTenths, litresTenths))
+    {
+        error = "The litres must be a number from 0 to 19.";
         return false;
     }
 
@@ -410,8 +424,7 @@ bool showTestValues(
     values.laserChosen = true;
     values.hasLevel = true;
     values.percent = percentValue;
-    // The litres of a full keg's percentage, rounded down like the laser's.
-    values.litresTenths = RaptLaser::Corny19L.capacityTenthsLitres * percentValue / 100;
+    values.litresTenths = litresTenths;
     values.hasTemperature = true;
     values.temperatureTenths = temperatureTenths;
     values.hasBattery = true;
