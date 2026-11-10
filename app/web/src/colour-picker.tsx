@@ -1,4 +1,5 @@
 import { Pipette } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 // The screen's own 6 colours. These come out clean on the screen, while any
 // other colour is mixed from dots of these.
@@ -25,6 +26,8 @@ type ColourPickerProps = {
   // eyedropper, the button turns picking from the image on and off instead.
   pickingFromImage?: boolean;
   onPickFromImage?: (picking: boolean) => void;
+  // More buttons at the end of the row.
+  children?: ReactNode;
 };
 
 // A colour input, the screen's colours as swatches and an eyedropper button.
@@ -34,6 +37,7 @@ export const ColourPicker = ({
   onChange,
   pickingFromImage = false,
   onPickFromImage,
+  children,
 }: ColourPickerProps) => {
   const pick = async () => {
     if (pickingFromImage || !EyeDropper) {
@@ -91,6 +95,7 @@ export const ColourPicker = ({
             <Pipette size={16} aria-hidden="true" />
           </button>
         )}
+        {children}
       </div>
     </div>
   );
