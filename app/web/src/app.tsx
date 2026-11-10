@@ -67,6 +67,7 @@ import {
 } from './screen';
 import { drawStrip, STRIP_SIZE } from './strip';
 import { showLiveValues, showTestValues, useStripState } from './strip-values';
+import { fetchTapImage } from './tap-image';
 import {
   DEFAULT_TEST_INPUTS,
   readTestInputs,
@@ -359,6 +360,10 @@ const App = () => {
   const testEnd = testEndsAt(strip, testRequest);
   // In developer mode the preview shows the test values; otherwise what the tap shows.
   const stripValues = developerMode ? test.strip : (strip?.values ?? null);
+  // The image the tap has stored, or null if it has none or couldn't send it.
+  const [tapImage, setTapImage] = useState<Uint8Array | null>(null);
+  // Until something new is composed, the preview shows what the screen shows.
+  const previewImage = binary ?? tapImage;
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const canPan = mode === 'image' && image !== null && overflows(image, zoom);
   const slider = image ? zoomSlider(image) : null;
@@ -390,6 +395,10 @@ const App = () => {
     fetchChosenLaser()
       .then((laser) => setChosenLaser(laser))
       .catch(() => setChosenLaserFailed(true));
+    // Without it, the preview waits for something to be composed.
+    fetchTapImage()
+      .then((image) => setTapImage(image))
+      .catch(() => setTapImage(null));
   }, []);
 
   // Escape stops picking a colour from the image.
@@ -517,8 +526,9 @@ const App = () => {
     }
   }, [sourceFrame]);
 
-  // The whole screen: the encoded image above the strip as the tap would draw it
-  // now, so new strip values redraw the preview without encoding again.
+  // The whole screen: the encoded image, or the tap's own until something is
+  // composed, above the strip as the tap would draw it now, so new strip values
+  // redraw the preview without encoding again.
   useEffect(() => {
     const previewCanvas = previewCanvasRef.current;
 
@@ -528,7 +538,7 @@ const App = () => {
 
     const context = getCanvasContext(previewCanvas);
 
-    if (!binary) {
+    if (!previewImage) {
       context.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
       return;
@@ -536,8 +546,8 @@ const App = () => {
 
     // Until the tap answers, the strip is left white (two white pixels a byte).
     const stripBytes = stripValues ? drawStrip(stripValues) : new Uint8Array(STRIP_SIZE).fill(0x11);
-    context.putImageData(screenPixels(binary, stripBytes), 0, 0);
-  }, [binary, stripValues]);
+    context.putImageData(screenPixels(previewImage, stripBytes), 0, 0);
+  }, [previewImage, stripValues]);
 
   const selectMode = (nextMode: SourceMode) => {
     if (nextMode === mode) {
@@ -1278,13 +1288,13 @@ const App = () => {
               <h2>Preview</h2>
             </div>
             <span className={`preview-state ${binary ? 'ready' : ''}`}>
-              {binary ? 'Ready' : 'Waiting'}
+              {binary ? 'Ready' : tapImage ? 'On the tap' : 'Waiting'}
             </span>
           </div>
 
-          <div className={`canvas-stage preview-stage ${binary ? 'has-image' : ''}`}>
+          <div className={`canvas-stage preview-stage ${previewImage ? 'has-image' : ''}`}>
             <canvas ref={previewCanvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
-            {!binary && (
+            {!previewImage && (
               <div className="canvas-placeholder preview-placeholder">
                 <span className="pixel-mark" aria-hidden="true">
                   <span />

@@ -502,6 +502,23 @@ static void handleStripLive(AsyncWebServerRequest* request)
     sendJson(request, 200, doc);
 }
 
+// The stored image, so the web app's preview can show what the screen shows
+// before anything new is composed. Streamed from the file, 404 when there's none.
+static void handleImage(AsyncWebServerRequest* request)
+{
+    // Checked first, because opening a missing file logs an error.
+    if (!DataFS.exists("/image.bin"))
+    {
+        request->send(404, "text/plain", "No image");
+        return;
+    }
+
+    AsyncWebServerResponse* response =
+        request->beginResponse(DataFS, "/image.bin", "application/octet-stream");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
+}
+
 static void handleImageUpload(
     AsyncWebServerRequest* request,
     uint8_t* data,
@@ -996,6 +1013,12 @@ void startWebServer()
         "/log",
         HTTP_GET,
         handleLog
+    );
+
+    server.on(
+        "/image",
+        HTTP_GET,
+        handleImage
     );
 
     server.on(

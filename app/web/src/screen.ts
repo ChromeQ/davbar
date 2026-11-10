@@ -6,6 +6,8 @@ export const SCREEN_WIDTH = 400;
 export const SCREEN_HEIGHT = 600;
 // The image is square: this is its width and its height.
 export const IMAGE_SIZE = 400;
+// The image as uploaded and stored on the tap: 2 pixels a byte.
+export const IMAGE_BYTES = (IMAGE_SIZE * IMAGE_SIZE) / 2;
 
 // An image's size in its own pixels. An ImageBitmap is one.
 export type ImageSize = { width: number; height: number };
