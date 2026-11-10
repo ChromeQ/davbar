@@ -30,10 +30,12 @@ bool clearStripValues();
 // For the web app's "Show on device": shows these values instead of the
 // laser's, with a red border, for 5 minutes or until showLiveValues(). Each is
 // a form field: percent (0-100), temperature (°C, -20 to 50), battery (0-100),
-// and optionally modeWarning and noSignal ("true"). Returns false with a
-// message for the web app if one is missing or out of range.
+// and optionally litres (0-19; otherwise worked out from percent), modeWarning
+// and noSignal ("true"). Returns false with a message for the web app if one is
+// missing or out of range.
 bool showTestValues(
     const String& percent,
+    const String& litres,
     const String& temperature,
     const String& battery,
     const String& modeWarning,

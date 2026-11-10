@@ -1,9 +1,10 @@
 // What the tap's strip shows: GET /strip gives the values it would draw now, for
 // the preview, and how long test values from "Show on device" have left.
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { developmentDelay, isNumberOrNull, isObject, readDeviceJson } from './device-json';
 import type { StripValues } from './strip';
+import { TEST_SECONDS, testForm } from './test-values';
 
 // How often the preview asks. The strip changes every few minutes at most.
 export const STRIP_POLL_MS = 15000;
@@ -44,10 +45,26 @@ const developmentState: StripState = {
   testSecondsLeft: null,
 };
 
+// Test values on the made-up tap, and when they end.
+let developmentTest: { values: StripValues; endsAt: number } | null = null;
+
+const developmentStrip = (): StripState => {
+  if (developmentTest && Date.now() >= developmentTest.endsAt) {
+    developmentTest = null;
+  }
+
+  return developmentTest
+    ? {
+        values: { ...developmentTest.values, test: true },
+        testSecondsLeft: Math.ceil((developmentTest.endsAt - Date.now()) / 1000),
+      }
+    : developmentState;
+};
+
 export const fetchStrip = async (): Promise<StripState> => {
   if (import.meta.env.DEV) {
     await developmentDelay();
-    return developmentState;
+    return developmentStrip();
   }
 
   const response = await fetch('/strip', { cache: 'no-store' });
@@ -65,27 +82,79 @@ export const fetchStrip = async (): Promise<StripState> => {
   return { values: result.values, testSecondsLeft: result.testSecondsLeft };
 };
 
-// The strip's values, asked for every STRIP_POLL_MS while the page is showing.
-// strip is null until the first answer; error says why the last one failed.
+// Sends a POST to the tap, throwing its message if it turns the request down.
+const postToTap = async (path: string, body?: URLSearchParams) => {
+  const response = await fetch(path, { method: 'POST', body });
+  const result = await readDeviceJson(response);
+
+  if (!response.ok || result.success !== true) {
+    throw new Error(
+      typeof result.message === 'string' && result.message
+        ? result.message
+        : `The device answered with status ${response.status}.`
+    );
+  }
+};
+
+// "Show on device": the tap shows these test values for TEST_SECONDS.
+export const showTestValues = async (values: StripValues) => {
+  const form = testForm(values);
+
+  if (!form) {
+    throw new Error('The test values are not complete.');
+  }
+
+  if (import.meta.env.DEV) {
+    await developmentDelay();
+    developmentTest = { values, endsAt: Date.now() + TEST_SECONDS * 1000 };
+    return;
+  }
+
+  await postToTap('/strip/test', form);
+};
+
+// "Back to live": the tap goes back to the laser's values.
+export const showLiveValues = async () => {
+  if (import.meta.env.DEV) {
+    await developmentDelay();
+    developmentTest = null;
+    return;
+  }
+
+  await postToTap('/strip/live');
+};
+
+// The strip's values, asked for every STRIP_POLL_MS while the page is showing, and
+// straight away by refresh(). strip is null until the first answer, and
+// receivedAt is when that answer arrived; error says why the last one failed.
 export const useStripState = () => {
-  const [strip, setStrip] = useState<StripState | null>(null);
+  const [strip, setStrip] = useState<(StripState & { receivedAt: number }) | null>(null);
   const [error, setError] = useState('');
+  const pollNow = useRef(() => {});
 
   useEffect(() => {
     let stopped = false;
     let timer: number | undefined;
+    // Counts polls, so when refresh() starts one while another is waiting, only
+    // the newer one's answer is used and only it carries on polling.
+    let pollCount = 0;
 
     const poll = async () => {
+      const thisPoll = ++pollCount;
+      const isLatest = () => !stopped && thisPoll === pollCount;
+
+      window.clearTimeout(timer);
+
       if (document.visibilityState !== 'hidden') {
         try {
           const next = await fetchStrip();
 
-          if (!stopped) {
-            setStrip(next);
+          if (isLatest()) {
+            setStrip({ ...next, receivedAt: Date.now() });
             setError('');
           }
         } catch (fetchError) {
-          if (!stopped) {
+          if (isLatest()) {
             setError(
               fetchError instanceof Error ? fetchError.message : 'Unable to read the strip.'
             );
@@ -93,18 +162,22 @@ export const useStripState = () => {
         }
       }
 
-      if (!stopped) {
+      if (isLatest()) {
         timer = window.setTimeout(() => void poll(), STRIP_POLL_MS);
       }
     };
 
+    pollNow.current = () => void poll();
     void poll();
 
     return () => {
       stopped = true;
       window.clearTimeout(timer);
+      pollNow.current = () => {};
     };
   }, []);
 
-  return { strip, error };
+  const refresh = useCallback(() => pollNow.current(), []);
+
+  return { strip, error, refresh };
 };

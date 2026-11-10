@@ -2,6 +2,7 @@ import {
   StrictMode,
   useEffect,
   useEffectEvent,
+  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -14,6 +15,7 @@ import {
   CheckCircle2,
   CircleAlert,
   Download,
+  FlaskConical,
   Gauge,
   LoaderCircle,
   Power,
@@ -64,7 +66,15 @@ import {
   type Pan,
 } from './screen';
 import { drawStrip, STRIP_SIZE } from './strip';
-import { useStripState } from './strip-values';
+import { showLiveValues, showTestValues, useStripState } from './strip-values';
+import {
+  DEFAULT_TEST_INPUTS,
+  readTestInputs,
+  testEndsAt,
+  type TestInputs,
+  type TestRequest,
+} from './test-values';
+import { loadDeveloperMode, saveDeveloperMode, TestValuesPanel } from './test-values-panel';
 import './common.style.css';
 import './app.style.css';
 
@@ -333,8 +343,22 @@ const App = () => {
   // undefined until loaded; null when no laser is chosen.
   const [chosenLaser, setChosenLaser] = useState<ChosenLaser | null | undefined>(undefined);
   const [chosenLaserFailed, setChosenLaserFailed] = useState(false);
-  const { strip } = useStripState();
-  const stripValues = strip?.values ?? null;
+  const { strip, refresh: refreshStrip } = useStripState();
+  const [developerMode, setDeveloperMode] = useState(loadDeveloperMode);
+  const [testInputs, setTestInputs] = useState<TestInputs>(DEFAULT_TEST_INPUTS);
+  const [testRequest, setTestRequest] = useState<TestRequest | null>(null);
+  const [sendingTest, setSendingTest] = useState<TestRequest['kind'] | null>(null);
+  const [testError, setTestError] = useState('');
+  const tapLaserNumber = strip?.values.laserNumber ?? 0;
+  const tapMode = strip?.values.mode ?? 'smart';
+  // The test values keep the tap's own laser dots and mode icon, as the tap does.
+  const test = useMemo(
+    () => readTestInputs(testInputs, { laserNumber: tapLaserNumber, mode: tapMode }),
+    [testInputs, tapLaserNumber, tapMode]
+  );
+  const testEnd = testEndsAt(strip, testRequest);
+  // In developer mode the preview shows the test values; otherwise what the tap shows.
+  const stripValues = developerMode ? test.strip : (strip?.values ?? null);
   const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const canPan = mode === 'image' && image !== null && overflows(image, zoom);
   const slider = image ? zoomSlider(image) : null;
@@ -826,6 +850,34 @@ const App = () => {
     setFactoryResetDialogOpen(true);
   };
 
+  const toggleDeveloperMode = () => {
+    setDeveloperMode(!developerMode);
+    saveDeveloperMode(!developerMode);
+    setTestError('');
+  };
+
+  // "Show on device" and "Back to live". The tap's answers may take a redraw to
+  // show the request, so the request counts until they do (see testEndsAt).
+  const sendTest = async (kind: TestRequest['kind']) => {
+    setSendingTest(kind);
+    setTestError('');
+
+    try {
+      await (kind === 'show' ? showTestValues(test.strip) : showLiveValues());
+      setTestRequest({ kind, at: Date.now() });
+      refreshStrip();
+    } catch (sendError) {
+      const action = kind === 'show' ? 'shown' : 'stopped';
+      setTestError(
+        `The test values weren't ${action}: ${
+          sendError instanceof Error ? sendError.message : 'the device did not answer.'
+        }`
+      );
+    } finally {
+      setSendingTest(null);
+    }
+  };
+
   const downloadLog = () => {
     setSettingsOpen(false);
 
@@ -1285,6 +1337,21 @@ const App = () => {
               {uploadState === 'uploading' ? 'Uploading…' : 'Upload to display'}
             </button>
           </div>
+
+          {(developerMode || testEnd !== null) && (
+            <TestValuesPanel
+              developerMode={developerMode}
+              inputs={testInputs}
+              onInputsChange={setTestInputs}
+              errors={test.errors}
+              endsAt={testEnd}
+              sending={sendingTest}
+              sendError={testError}
+              onShow={() => void sendTest('show')}
+              onLive={() => void sendTest('live')}
+              onEnd={refreshStrip}
+            />
+          )}
         </article>
       </section>
 
@@ -1458,6 +1525,19 @@ const App = () => {
                   <strong>Factory reset</strong>
                   <small>Clear the WiFi, laser, and screen image, then return to setup mode</small>
                 </span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={developerMode}
+                onClick={toggleDeveloperMode}
+              >
+                <FlaskConical size={19} aria-hidden="true" />
+                <span>
+                  <strong>Developer mode</strong>
+                  <small>Try made-up values in the strip, and show them on the device</small>
+                </span>
+                <span className="settings-switch" aria-hidden="true" />
               </button>
             </div>
             <div className="modal-actions">
