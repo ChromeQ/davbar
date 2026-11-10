@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 
 import { encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import { BackgroundPicker } from './background-picker';
 import { ColourPicker } from './colour-picker';
 import { deviceConfig } from './device-config';
 import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
@@ -35,6 +36,7 @@ import {
   type LaserItem,
 } from './lasers';
 import {
+  backgroundColours,
   CENTRED,
   drawImageInSquare,
   fillZoom,
@@ -42,13 +44,15 @@ import {
   hasGaps,
   IMAGE_SIZE,
   overflows,
+  paintBackground,
   panBy,
   SCREEN_HEIGHT,
   SCREEN_WIDTH,
   screenPixels,
   zoomFromSlider,
   zoomSlider,
-  type FitBackground,
+  type Background,
+  type BackgroundColour,
   type Pan,
 } from './screen';
 import { drawStrip, STRIP_SIZE } from './strip';
@@ -60,17 +64,23 @@ const IMAGE_UPLOAD_URL = '/image';
 const DEFAULT_TEXT = deviceConfig.defaultText;
 const DEFAULT_FONT_FAMILY = 'Roboto';
 const DEFAULT_FONT_SIZE = 64;
-const DEFAULT_TEXT_COLOUR = '#171713';
-const DEFAULT_BACKGROUND_COLOUR = '#f7f5ee';
-const DEFAULT_GRADIENT_COLOUR = '#ef2d56';
-const DEFAULT_FIT_COLOUR = '#ffffff';
+const DEFAULT_TEXT_COLOUR = '#000000';
+// Both modes start on white, with black as a gradient's end: both are clean on the
+// screen, and white suits KegLand's product shots.
+const DEFAULT_BACKGROUND: Background = {
+  style: 'solid',
+  colour: '#ffffff',
+  endColour: '#000000',
+};
+
+const sameBackground = (one: Background, other: Background) =>
+  one.style === other.style && one.colour === other.colour && one.endColour === other.endColour;
 
 type SourceFrame = {
   pixels: Uint8ClampedArray;
 };
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
-type BackgroundMode = 'solid' | 'linear' | 'radial';
 type SourceMode = 'image' | 'text';
 type ApiResult = {
   success: boolean;
@@ -271,18 +281,16 @@ const App = () => {
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [textColour, setTextColour] = useState(DEFAULT_TEXT_COLOUR);
-  const [backgroundColour, setBackgroundColour] = useState(DEFAULT_BACKGROUND_COLOUR);
-  const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('solid');
-  const [gradientColour, setGradientColour] = useState(DEFAULT_GRADIENT_COLOUR);
+  const [textBackground, setTextBackground] = useState(DEFAULT_BACKGROUND);
   // The chosen image at its own size, so zooming and dragging can redraw it.
   const [image, setImage] = useState<ImageBitmap | null>(null);
   const [zoom, setZoom] = useState(FIT_ZOOM);
   const [pan, setPan] = useState<Pan>(CENTRED);
-  const [fitBackground, setFitBackground] = useState<FitBackground>('colour');
-  const [fitColour, setFitColour] = useState(DEFAULT_FIT_COLOUR);
-  // After the eyedropper button, in browsers without Chrome's eyedropper: the
-  // next click on the image takes its colour.
-  const [pickingColour, setPickingColour] = useState(false);
+  // Each mode keeps its own background: the image's fills its gaps.
+  const [imageBackground, setImageBackground] = useState(DEFAULT_BACKGROUND);
+  // After an eyedropper button, in browsers without Chrome's eyedropper: the next
+  // click on the image takes the colour for this one of the background's colours.
+  const [pickingColour, setPickingColour] = useState<BackgroundColour | null>(null);
   // While dragging a filled image: where the pointer last was.
   const dragFrom = useRef<{ x: number; y: number } | null>(null);
   const [imageFrame, setImageFrame] = useState<SourceFrame | null>(null);
@@ -320,12 +328,13 @@ const App = () => {
   const slider = image ? zoomSlider(image) : null;
   // A background fills any gaps around the image.
   const showBackground = mode === 'image' && image !== null && hasGaps(image, zoom);
-  // On a solid colour, the eyedropper can take a colour from the image.
-  const canPickColour = showBackground && fitBackground === 'colour';
 
-  // Picking stops when the colour picker goes away, so it doesn't come back on with it.
-  if (pickingColour && !canPickColour) {
-    setPickingColour(false);
+  // Picking stops when its colour picker goes away, so it doesn't come back on with it.
+  if (
+    pickingColour &&
+    !(showBackground && backgroundColours(imageBackground.style).includes(pickingColour))
+  ) {
+    setPickingColour(null);
   }
 
   const isUploading = uploadState === 'uploading';
@@ -355,7 +364,7 @@ const App = () => {
 
     const stopPicking = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setPickingColour(false);
+        setPickingColour(null);
       }
     };
 
@@ -414,28 +423,7 @@ const App = () => {
     const lineHeight = fontSize * 1.2;
     const firstBaseline = IMAGE_SIZE / 2 - ((lines.length - 1) * lineHeight) / 2;
 
-    if (backgroundMode === 'linear') {
-      const gradient = context.createLinearGradient(0, 0, 0, IMAGE_SIZE);
-      gradient.addColorStop(0, backgroundColour);
-      gradient.addColorStop(1, gradientColour);
-      context.fillStyle = gradient;
-    } else if (backgroundMode === 'radial') {
-      const gradient = context.createRadialGradient(
-        IMAGE_SIZE / 2,
-        IMAGE_SIZE / 2,
-        0,
-        IMAGE_SIZE / 2,
-        IMAGE_SIZE / 2,
-        Math.hypot(IMAGE_SIZE / 2, IMAGE_SIZE / 2)
-      );
-      gradient.addColorStop(0, backgroundColour);
-      gradient.addColorStop(1, gradientColour);
-      context.fillStyle = gradient;
-    } else {
-      context.fillStyle = backgroundColour;
-    }
-
-    context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+    paintBackground(context, textBackground);
     context.fillStyle = textColour;
     context.font = `${fontSize}px ${fontFamily}`;
     context.textAlign = 'center';
@@ -450,16 +438,7 @@ const App = () => {
     setTextFrame({ pixels: imageData.data });
     setError('');
     setUploadState('idle');
-  }, [
-    backgroundColour,
-    backgroundMode,
-    fontFamily,
-    fontSize,
-    gradientColour,
-    mode,
-    text,
-    textColour,
-  ]);
+  }, [fontFamily, fontSize, mode, text, textBackground, textColour]);
 
   useEffect(() => {
     if (mode !== 'image') {
@@ -480,10 +459,10 @@ const App = () => {
       return;
     }
 
-    drawImageInSquare(context, image, zoom, pan, fitBackground, fitColour);
+    drawImageInSquare(context, image, zoom, pan, imageBackground);
     setImageFrame({ pixels: context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE).data });
     setUploadState('idle');
-  }, [fitBackground, fitColour, image, mode, pan, zoom]);
+  }, [image, imageBackground, mode, pan, zoom]);
 
   // Encodes the image for the panel: these are the bytes uploaded.
   useEffect(() => {
@@ -633,27 +612,11 @@ const App = () => {
     const y = Math.floor(((event.clientY - box.top) * IMAGE_SIZE) / box.height);
     const [red = 0, green = 0, blue = 0] = getCanvasContext(canvas).getImageData(x, y, 1, 1).data;
 
-    setFitColour(
-      `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`
-    );
-    setPickingColour(false);
-  };
+    const picked = `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+    const colour = pickingColour;
 
-  const handleFitBackground = (value: string) => {
-    if (value === 'colour' || value === 'blur') {
-      setFitBackground(value);
-    }
-  };
-
-  const handleBackgroundMode = (value: string) => {
-    if (value === 'solid' || value === 'linear' || value === 'radial') {
-      setBackgroundMode(value);
-    }
-  };
-
-  const reverseGradient = () => {
-    setBackgroundColour(gradientColour);
-    setGradientColour(backgroundColour);
+    setImageBackground((previous) => ({ ...previous, [colour]: picked }));
+    setPickingColour(null);
   };
 
   const resetMode = (targetMode: SourceMode) => {
@@ -680,9 +643,7 @@ const App = () => {
     setFontFamily(DEFAULT_FONT_FAMILY);
     setFontSize(DEFAULT_FONT_SIZE);
     setTextColour(DEFAULT_TEXT_COLOUR);
-    setBackgroundColour(DEFAULT_BACKGROUND_COLOUR);
-    setBackgroundMode('solid');
-    setGradientColour(DEFAULT_GRADIENT_COLOUR);
+    setTextBackground(DEFAULT_BACKGROUND);
   };
 
   const requestReset = () => {
@@ -691,9 +652,7 @@ const App = () => {
       fontFamily !== DEFAULT_FONT_FAMILY ||
       fontSize !== DEFAULT_FONT_SIZE ||
       textColour !== DEFAULT_TEXT_COLOUR ||
-      backgroundColour !== DEFAULT_BACKGROUND_COLOUR ||
-      backgroundMode !== 'solid' ||
-      gradientColour !== DEFAULT_GRADIENT_COLOUR;
+      !sameBackground(textBackground, DEFAULT_BACKGROUND);
 
     if (mode === 'image' && image) {
       setPendingReset('image');
@@ -1081,32 +1040,13 @@ const App = () => {
                   </div>
                 )}
                 {showBackground && (
-                  <label className="text-field fit-background-field">
-                    <span>Background</span>
-                    <select
-                      value={fitBackground}
-                      onChange={(event) => handleFitBackground(event.target.value)}
-                    >
-                      <option value="colour">Solid colour</option>
-                      <option value="blur">Blurred image</option>
-                    </select>
-                  </label>
-                )}
-                {canPickColour && (
-                  <>
-                    <ColourPicker
-                      label="Background colour"
-                      value={fitColour}
-                      onChange={setFitColour}
-                      pickingFromImage={pickingColour}
-                      onPickFromImage={setPickingColour}
-                    />
-                    {pickingColour && (
-                      <p className="fit-hint">
-                        Click the image to take a colour from it, or press Escape to stop.
-                      </p>
-                    )}
-                  </>
+                  <BackgroundPicker
+                    value={imageBackground}
+                    onChange={setImageBackground}
+                    forImage
+                    picking={pickingColour}
+                    onPick={setPickingColour}
+                  />
                 )}
                 {canPan && !pickingColour && (
                   <p className="fit-hint">Drag the image to choose what shows.</p>
@@ -1146,52 +1086,11 @@ const App = () => {
                     onChange={(event) => setFontSize(Number(event.target.value))}
                   />
                 </label>
-                <label className="colour-field text-colour-field">
-                  <span>Text</span>
-                  <input
-                    type="color"
-                    value={textColour}
-                    onChange={(event) => setTextColour(event.target.value)}
-                  />
-                </label>
-                <label className="text-field gradient-mode-field">
-                  <span>Background style</span>
-                  <select
-                    value={backgroundMode}
-                    onChange={(event) => handleBackgroundMode(event.target.value)}
-                  >
-                    <option value="solid">Solid</option>
-                    <option value="linear">Linear</option>
-                    <option value="radial">Radial</option>
-                  </select>
-                </label>
-                {backgroundMode !== 'solid' && (
-                  <>
-                    <label className="colour-field gradient-colour-field">
-                      <span>End</span>
-                      <input
-                        type="color"
-                        value={gradientColour}
-                        onChange={(event) => setGradientColour(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="reverse-gradient-button"
-                      type="button"
-                      aria-label="Reverse gradient colours"
-                      title="Reverse gradient colours"
-                      onClick={reverseGradient}
-                    >
-                      ⇄
-                    </button>
-                  </>
-                )}
                 <div className="wide-field">
-                  <ColourPicker
-                    label={backgroundMode === 'solid' ? 'Background colour' : 'Background start'}
-                    value={backgroundColour}
-                    onChange={setBackgroundColour}
-                  />
+                  <ColourPicker label="Text colour" value={textColour} onChange={setTextColour} />
+                </div>
+                <div className="wide-field">
+                  <BackgroundPicker value={textBackground} onChange={setTextBackground} />
                 </div>
               </div>
             )}

@@ -284,15 +284,21 @@ Force refresh in the settings menu still redraws on demand.
     in step 5 whether a picture copied on a phone pastes too; if not, Save to Photos
     and Choose file still works, without the resizing.
 
-  The Background dropdown, shown whenever the image leaves gaps (below Fill):
-  - Solid colour, the default, starting on white, which suits KegLand's product
-    shots. The screen's 6 colours are swatches, white first, as they come out clean
-    while other colours are dithered. The eyedropper button opens desktop Chrome's
-    own eyedropper, which picks from anywhere on screen. In browsers without it, the
-    button turns on picking from the image: the next click on the image takes its
-    colour, and Escape or the button stops it. Text mode's background shares the
-    swatches and Chrome's eyedropper.
+  The Background tool, shown whenever the image leaves gaps (below Fill). Text mode
+  uses the same tool for its background, without Blurred image, and each mode keeps
+  its own settings:
+  - Solid colour, the default, starting on white in both modes, which suits
+    KegLand's product shots. A gradient's end colour starts on black.
+  - Linear gradient (top to bottom) or Radial gradient (out from the middle), from a
+    start colour to an end colour, with a button to swap them.
   - Blurred image: the same image filling the square, heavily blurred, behind it.
+
+  Each colour has the screen's 6 colours as swatches, white first, as they come out
+  clean while other colours are dithered. Its eyedropper button opens desktop
+  Chrome's own eyedropper, which picks from anywhere on screen. In browsers without
+  it, the button turns on picking from the image: the next click on the image takes
+  that colour, and Escape or the button stops it. Text mode's text colour uses the
+  same colour picker, and text mode starts as black text on white.
 
   KegLand's images (Shopify) let other pages read them, but their product pages
   don't. Pasting a product page link, or an image from a site that blocks it, would

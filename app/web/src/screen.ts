@@ -104,9 +104,53 @@ export const panBy = (image: ImageSize, zoom: number, pan: Pan, dx: number, dy: 
   return { x: move(pan.x, width, dx), y: move(pan.y, height, dy) };
 };
 
-// What fills the gaps around the image: a colour (white to start with), or the
-// same image blurred behind it.
-export type FitBackground = 'colour' | 'blur';
+// What fills the square behind the text, or the gaps around an image: a colour,
+// a gradient from colour to endColour (top to bottom, or out from the middle), or,
+// for an image, the same image blurred behind it.
+export type BackgroundStyle = 'solid' | 'linear' | 'radial' | 'blur';
+
+export type Background = { style: BackgroundStyle; colour: string; endColour: string };
+
+// Which of the background's colours its style uses.
+export type BackgroundColour = 'colour' | 'endColour';
+
+export const backgroundColours = (style: BackgroundStyle): BackgroundColour[] => {
+  if (style === 'blur') {
+    return [];
+  }
+
+  return style === 'solid' ? ['colour'] : ['colour', 'endColour'];
+};
+
+export const isGradient = (style: BackgroundStyle) => style === 'linear' || style === 'radial';
+
+// Fills the square with the background. A blurred image is drawn over white by
+// drawImageInSquare.
+export const paintBackground = (context: CanvasRenderingContext2D, background: Background) => {
+  const middle = IMAGE_SIZE / 2;
+
+  if (isGradient(background.style)) {
+    const gradient =
+      background.style === 'linear'
+        ? context.createLinearGradient(0, 0, 0, IMAGE_SIZE)
+        : context.createRadialGradient(
+            middle,
+            middle,
+            0,
+            middle,
+            middle,
+            Math.hypot(middle, middle)
+          );
+
+    gradient.addColorStop(0, background.colour);
+    gradient.addColorStop(1, background.endColour);
+    context.fillStyle = gradient;
+  } else {
+    context.fillStyle = background.style === 'solid' ? background.colour : '#ffffff';
+  }
+
+  context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+};
 
 // How blurred the blurred background is, in the square's pixels.
 const BLUR = 24;
@@ -116,16 +160,14 @@ export const drawImageInSquare = (
   image: ImageBitmap,
   zoom: number,
   pan: Pan,
-  background: FitBackground,
-  colour: string
+  background: Background
 ) => {
   const place = placeImage(image, zoom, pan);
 
   context.imageSmoothingQuality = 'high';
-  context.fillStyle = background === 'colour' ? colour : '#ffffff';
-  context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+  paintBackground(context, background);
 
-  if (background === 'blur' && hasGaps(image, zoom)) {
+  if (background.style === 'blur' && hasGaps(image, zoom)) {
     // The image filling the square around the same point, blurred. Drawn bigger
     // than that, so the blur's faded edges fall outside the square.
     const cover = placeImage(image, fillZoom(image), pan);

@@ -220,18 +220,23 @@ h2 {
 }
 
 .text-field.zoom-field,
-.text-field.fit-background-field {
+.text-field.background-style-field {
   flex: 1;
   flex-direction: row;
   align-items: center;
   gap: 10px;
 }
 
-.text-field.fit-background-field {
+.background-picker {
   margin-top: 14px;
 }
 
-.text-field.fit-background-field select {
+.text-controls > .wide-field > .colour-picker,
+.text-controls .background-picker {
+  margin-top: 4px;
+}
+
+.text-field.background-style-field select {
   flex: 1;
 }
 
@@ -260,10 +265,6 @@ h2 {
   text-transform: uppercase;
 }
 
-.text-controls .colour-picker {
-  margin-top: 0;
-}
-
 .colour-picker-row {
   display: flex;
   flex-wrap: wrap;
@@ -281,7 +282,8 @@ h2 {
 }
 
 .colour-swatch,
-.eyedropper-button {
+.eyedropper-button,
+.reverse-gradient-button {
   width: 36px;
   height: 36px;
   padding: 0;
@@ -293,15 +295,20 @@ h2 {
   outline-offset: 2px;
 }
 
-.eyedropper-button {
+.eyedropper-button,
+.reverse-gradient-button {
   display: grid;
-  margin-left: 4px;
   place-items: center;
   color: var(--ink);
   background: var(--paper);
 }
 
-.eyedropper-button:hover {
+.eyedropper-button {
+  margin-left: 4px;
+}
+
+.eyedropper-button:hover,
+.reverse-gradient-button:hover {
   color: #fff;
   border-color: var(--ink);
   background: var(--ink);
@@ -399,12 +406,11 @@ h2 {
 
 .text-controls {
   display: grid;
-  grid-template-columns: minmax(105px, 1.4fr) 74px 66px 66px 42px;
+  grid-template-columns: minmax(0, 1fr) 74px;
   gap: 10px;
 }
 
-.text-field,
-.colour-field {
+.text-field {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -417,14 +423,6 @@ h2 {
 
 .wide-field {
   grid-column: 1 / -1;
-}
-
-.font-family-field {
-  grid-column: span 2;
-}
-
-.gradient-mode-field {
-  grid-column: span 2;
 }
 
 .text-field input,
@@ -442,33 +440,6 @@ h2 {
 
 .text-field textarea {
   resize: vertical;
-}
-
-.colour-field input {
-  width: 100%;
-  height: 42px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--paper);
-}
-
-.reverse-gradient-button {
-  align-self: end;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  background: var(--paper);
-  font-size: 1.2rem;
-  line-height: 1;
-}
-
-.reverse-gradient-button:hover {
-  color: #fff;
-  border-color: var(--ink);
-  background: var(--ink);
 }
 
 .preview-state {
@@ -902,32 +873,6 @@ h2 {
 
   .mode-switch button {
     min-width: 58px;
-  }
-
-  .text-controls {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-  }
-
-  .wide-field {
-    grid-column: 1 / -1;
-  }
-
-  .font-family-field {
-    grid-column: span 5;
-  }
-
-  .gradient-mode-field {
-    grid-column: span 4;
-  }
-
-  .size-field,
-  .text-colour-field,
-  .gradient-colour-field {
-    grid-column: span 1;
-  }
-
-  .reverse-gradient-button {
-    width: 100%;
   }
 
   .upload-row {
