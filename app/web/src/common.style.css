@@ -1,4 +1,13 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700;800&display=swap');
+/* Roboto, trimmed to weights 400-700 and the characters the pages use by
+   app/scripts/roboto-subset.ts, and built into each page, so the setup page has it
+   on a phone with no internet. Licensed under the SIL Open Font License. */
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: block;
+  src: url('./fonts/roboto.woff2') format('woff2');
+}
 
 :root {
   color: #1a1a17;

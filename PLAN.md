@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 to 4 of 6 done). Last updated 2026-11-10.
+Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 to 5 of 6 done). Last updated 2026-11-10.
 
 ## Goal
 
@@ -347,6 +347,15 @@ Force refresh in the settings menu still redraws on demand.
   page (whose phone has no internet) and text mode always have it: one variable font
   file trimmed to weights 400-700 and to ASCII, Latin-1 and common punctuation,
   about 25 KB a page (Google's file is 43 KB). The unused 800 weight is dropped.
+  Done in part 5 of 5b: `pnpm roboto:subset` makes `web/src/fonts/roboto.woff2`
+  (26 KB, keeping the font's copyright and license entries), and each gzipped page
+  grows by about 28 KB. The build now puts every file inside its page and fails if
+  anything is left over. Text mode waits for its font before drawing, as the canvas
+  wouldn't redraw when it arrived. Checked with Google's font servers blocked: both
+  pages on the laptop, and the app page on tap 1, load nothing from outside and draw
+  in Roboto.
+  Each page also declares a blank icon, as browsers asked for /favicon.ico and the
+  tap answered with the whole page again, a second download on every load.
 - A laser picker next to Send, and on the setup page below the Wi-Fi settings, as
   it's optional there and can be changed later in the app. It lists every laser in
   the shared list with its dots and, when heard recently, its reading, mode and when
@@ -410,7 +419,7 @@ Each step ends with something visible to check.
      preview with the strip; (2) zoom between Fit and Fill, with the Background for
      the gaps; (3) pasting an image address or an image; (4) developer mode with
      "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. Parts
-     1 to 4 done, tested on tap 1.
+     1 to 5 done, tested on tap 1.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once,
    the prompt when full and the keg states. Test by sending a beer on one tap and
    picking it on another.
