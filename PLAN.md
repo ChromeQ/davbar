@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done, step 6 (beer library) next. Last updated 2026-11-10.
+Status: steps 0 to 5 done, step 6 (beer library) in progress (6a of 4 parts done). Last updated 2026-11-10.
 
 ## Goal
 
@@ -221,13 +221,32 @@ Force refresh in the settings menu still redraws on demand.
   in step 3.
 - **Beer library:** up to 30 beers per tap in the data partition, so uploads and
   firmware updates keep them. Each is the cropped 400 x 400 picture as a JPEG of at
-  most 70 KB, plus a thumbnail and when it was last shown on a tap. The web app does
-  all the image work; the firmware only stores, lists and deletes them, and uses the
-  checksum it already keeps for the screen image to spot duplicates. Other taps'
-  pages can read and delete them (CORS headers).
+  most 70 KB, plus a thumbnail of at most 16 KB and when it was last shown on a tap.
+  The web app does all the image work; the firmware only stores, lists and deletes
+  them. A beer's ID is its JPEG's CRC-32, so a copy sent on from another tap keeps
+  its ID and the grid shows it once (the screen image's checksum, first planned,
+  would change when another tap re-dithers the picture). Sending a beer a tap has
+  only marks it shown now. Pages on the local network, such as other taps', can
+  read and delete them: CORS answers only `.local` names, localhost and private
+  addresses. Done in 6a (`esp32/src/LibraryManager.cpp`, rules in
+  `esp32/lib/BeerLibrary` with laptop tests), tested on tap 1:
+  - `GET /library` lists the beers, last shown first; `GET /library/<id>.jpg` and
+    `<id>.thumb.jpg` serve the files, cached by browsers for good; `POST /library`
+    takes `image.jpg` and `thumbnail.jpg`, answering 409 when full;
+    `POST /library/remove` takes up to 10 IDs.
+  - LittleFS is slow with many files in a folder (listing 28 beers by opening their
+    files took 3.9s), so the tap keeps the list in memory, with the times in one
+    index file, and reads only file names at boot. Listing takes 20ms and a file
+    about 0.09s; removing one takes about 0.2s.
+  - The web server's task restarts the tap if one request holds it for 5s, which
+    is why removals come at most 10 at a time (about 2s).
+  - One upload at a time; a second waits with "try again". A cut-off upload is
+    cleaned up, and boot removes any leftover files.
+  - `/status` gives the library's count. The Status dialog shows it, and factory
+    reset has "Also clear this tap's beer library".
 - **Factory reset** replaces Forget Wi-Fi. It clears Wi-Fi, sensor and image, then
   reboots into setup. It keeps the log and the beer library unless asked to clear
-  them too. Done in step 2b, apart from the sensor (step 4) and library (step 6).
+  them too. Done in step 2b, apart from the sensor (step 4) and library (6a).
   The screen keeps the last picture until the setup help screen arrives in step 7.
 - **Lasers:** a shared list, `config/lasers.json` (laser number and address), is
   built into every tap. Each tap stores which laser it shows and which mode it
@@ -381,8 +400,8 @@ Force refresh in the settings menu still redraws on demand.
   will be cleared (Wi-Fi, laser and screen image) and that the device restarts in
   setup, with two checkboxes, unticked by default:
   - Also clear the log. Done in step 2b, with Download log.
-  - Also clear this tap's beer library (step 6). Copies on other taps stay, so those
-    beers still show in the library.
+  - Also clear this tap's beer library. Copies on other taps stay, so those beers
+    still show in the library. Done in 6a.
 
 ## Steps
 
@@ -425,7 +444,10 @@ Each step ends with something visible to check.
      done, tested on tap 1.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once,
    the prompt when full and the keg states. Test by sending a beer on one tap and
-   picking it on another.
+   picking it on another. In four parts: (6a) the firmware's storage and routes, with
+   the factory reset option; (6b) saving on Send and the Library grid from all taps;
+   (6c) removing several and the prompt when full; (6d) the keg states. 6a done,
+   tested on tap 1.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
    planned here, were done in step 5a.
 8. **Fit the enclosure,** once the case parts are printed and the last screens arrive.

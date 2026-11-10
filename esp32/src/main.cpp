@@ -4,6 +4,7 @@
 #include "DeviceLog.h"
 #include "ImageManager.h"
 #include "LaserScanner.h"
+#include "LibraryManager.h"
 #include "Storage.h"
 #include "StripManager.h"
 #include "WifiManager.h"
@@ -23,6 +24,8 @@ void setup()
     {
         logEvent("storage error", "a filesystem failed to mount, see the serial output");
     }
+
+    startLibrary();
 
     Serial.println("Starting WiFi...");
     startWifi();

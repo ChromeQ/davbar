@@ -970,6 +970,17 @@ h2 {
   cursor: pointer;
 }
 
+/* Several options, such as the factory reset's */
+.checkbox-options {
+  display: grid;
+  margin: -6px 0 24px;
+  gap: 12px;
+}
+
+.checkbox-options .checkbox-option {
+  margin: 0;
+}
+
 .checkbox-option input {
   width: 18px;
   height: 18px;
