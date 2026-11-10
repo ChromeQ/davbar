@@ -1,6 +1,7 @@
 import {
   StrictMode,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type DragEvent,
@@ -26,6 +27,13 @@ import { encodeSpectra6 } from '@chromeq/davbar-spectra6';
 import { BackgroundPicker } from './background-picker';
 import { ColourPicker } from './colour-picker';
 import { deviceConfig } from './device-config';
+import {
+  fetchImage,
+  imageAddress,
+  imageFile,
+  isImageAddress,
+  NOT_AN_IMAGE_ADDRESS,
+} from './image-source';
 import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
 import {
   byLaserNumber,
@@ -296,7 +304,11 @@ const App = () => {
   const [imageFrame, setImageFrame] = useState<SourceFrame | null>(null);
   const [textFrame, setTextFrame] = useState<SourceFrame | null>(null);
   const [binary, setBinary] = useState<Uint8Array | null>(null);
-  const [fileName, setFileName] = useState('');
+  // The image field: the chosen file's name, or an address being typed or loaded.
+  const [imageSource, setImageSource] = useState('');
+  const [loadingImage, setLoadingImage] = useState(false);
+  // Counts loads, so of several at once the last one asked for wins.
+  const loadCount = useRef(0);
   const [error, setError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>('idle');
@@ -514,17 +526,28 @@ const App = () => {
     setError('');
   };
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file) {
-      return;
-    }
+  // Shows a new image from a file, a paste or an address. name goes in the image
+  // field; notAnImage is the error when it can't be read as an image.
+  const loadImage = async (load: () => Promise<Blob>, name: string, notAnImage: string) => {
+    const thisLoad = ++loadCount.current;
 
     setError('');
-    setBinary(null);
-    setUploadState('idle');
+    setLoadingImage(true);
 
     try {
-      const bitmap = await createImageBitmap(file);
+      const blob = await load();
+      let bitmap: ImageBitmap;
+
+      try {
+        bitmap = await createImageBitmap(blob);
+      } catch {
+        throw new Error(notAnImage);
+      }
+
+      if (thisLoad !== loadCount.current) {
+        bitmap.close();
+        return;
+      }
 
       // A new image starts at Fit, or at Fill if the last one was at Fill.
       const wasFilled = image !== null && zoom !== FIT_ZOOM && zoom === fillZoom(image);
@@ -534,15 +557,89 @@ const App = () => {
         return bitmap;
       });
       setPan(CENTRED);
-      setFileName(file.name);
-    } catch {
-      setError('That file could not be read as an image.');
+      setImageSource(name);
+    } catch (loadError) {
+      if (thisLoad === loadCount.current) {
+        setError(loadError instanceof Error ? loadError.message : notAnImage);
+      }
     } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+      if (thisLoad === loadCount.current) {
+        setLoadingImage(false);
       }
     }
   };
+
+  const handleFile = (file: File | undefined) => {
+    // Cleared, so choosing the same file again loads it again.
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    if (file) {
+      void loadImage(
+        () => Promise.resolve(file),
+        file.name,
+        'That file could not be read as an image.'
+      );
+    }
+  };
+
+  const loadAddress = (address: string) => {
+    setImageSource(address);
+
+    if (!isImageAddress(address)) {
+      setError('Paste an image, or an image address starting with https://.');
+      return;
+    }
+
+    void loadImage(() => fetchImage(address), address, NOT_AN_IMAGE_ADDRESS);
+  };
+
+  // A pasted or dropped picture or image address. Returns whether there was one.
+  const takeImage = (transfer: DataTransfer) => {
+    const file = imageFile(transfer);
+
+    if (file) {
+      void loadImage(
+        () => Promise.resolve(file),
+        file.name === 'image.png' ? 'Pasted image' : file.name,
+        'That picture could not be read as an image.'
+      );
+      return true;
+    }
+
+    const address = imageAddress(transfer);
+
+    if (address) {
+      loadAddress(address);
+      return true;
+    }
+
+    return false;
+  };
+
+  // Ctrl+V anywhere on the page, outside a text field, in image mode.
+  const pasteOnPage = useEffectEvent((event: ClipboardEvent) => {
+    const target = event.target;
+    const inField =
+      target instanceof HTMLElement &&
+      (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
+    if (!inField && !modalOpen && event.clipboardData && takeImage(event.clipboardData)) {
+      event.preventDefault();
+    }
+  });
+
+  useEffect(() => {
+    if (mode !== 'image') {
+      return;
+    }
+
+    const listener = (event: ClipboardEvent) => pasteOnPage(event);
+    document.addEventListener('paste', listener);
+
+    return () => document.removeEventListener('paste', listener);
+  }, [mode]);
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (mode !== 'image') {
@@ -567,7 +664,11 @@ const App = () => {
 
     event.preventDefault();
     setIsDragging(false);
-    void handleFile(event.dataTransfer.files[0]);
+
+    // A file, or an image dragged from another tab, which comes as its address.
+    if (!takeImage(event.dataTransfer)) {
+      setError('That was not an image. Drop an image file, or an image from another tab.');
+    }
   };
 
   // Dragging an image bigger than the square chooses which part of it shows.
@@ -630,7 +731,7 @@ const App = () => {
         return null;
       });
       setPan(CENTRED);
-      setFileName('');
+      setImageSource('');
 
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -981,7 +1082,7 @@ const App = () => {
             {!image && mode === 'image' && (
               <label className="canvas-placeholder upload-placeholder" htmlFor="image-file">
                 <span>+</span>
-                <p>Click or drag an image here</p>
+                <p>Click, drag or paste an image here</p>
               </label>
             )}
           </div>
@@ -995,12 +1096,33 @@ const App = () => {
                   className="visually-hidden"
                   type="file"
                   accept="image/*"
-                  onChange={(event) => void handleFile(event.target.files?.[0])}
+                  onChange={(event) => handleFile(event.target.files?.[0])}
                 />
-                <label className="file-picker" htmlFor="image-file">
-                  <span>{fileName || 'Choose image'}</span>
-                  <strong>Browse</strong>
-                </label>
+                <div className="file-picker" aria-busy={loadingImage}>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    aria-label="Image address"
+                    placeholder="Paste an image or its address"
+                    value={imageSource}
+                    onChange={(event) => setImageSource(event.target.value)}
+                    onFocus={(event) => event.target.select()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        loadAddress(imageSource.trim());
+                      }
+                    }}
+                    onPaste={(event) => {
+                      if (takeImage(event.clipboardData)) {
+                        event.preventDefault();
+                      }
+                    }}
+                  />
+                  <label className="browse-button" htmlFor="image-file">
+                    Browse
+                  </label>
+                </div>
+                {loadingImage && <p className="fit-hint">Loading the image…</p>}
                 {image && (
                   <div className="fit-row">
                     <div className="mode-switch" aria-label="How the image fills the square">
