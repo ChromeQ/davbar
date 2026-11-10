@@ -327,7 +327,9 @@ Force refresh in the settings menu still redraws on demand.
     ready · 9 Nov", as a reminder of when the keg was emptied or cleaned. The strip
     still shows the laser's reading. Nothing switches to them automatically.
 - The preview shows the whole screen, including a close copy of the strip with the
-  tap's live readings and the chosen mode's icon.
+  tap's live readings and the chosen mode's icon. Until something new is composed,
+  it shows the tap's stored image (`GET /image`, labelled "On the tap"), so the page
+  opens on what the screen shows; Reset goes back to it. Added in part 4 of 5b.
 - Developer mode, a switch in Settings (off by default, remembered by each browser;
   each tap's page is its own site to the browser, so each tap remembers it
   separately), adds Test values under the preview: percentage (slider and number
