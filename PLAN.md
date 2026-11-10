@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 and 2 of 6 done). Last updated 2026-11-10.
+Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 to 3 of 6 done). Last updated 2026-11-10.
 
 ## Goal
 
@@ -275,14 +275,21 @@ Force refresh in the settings menu still redraws on demand.
   them within 3%. Where the image is bigger than the square, dragging it chooses which
   part shows; zooming keeps the same point in the middle. A new image starts at Fit,
   or at Fill if the last one was at Fill. Text mode renders at 400 x 400. Uploads are
-  80,000 bytes. Done in part 2 of 5b, apart from the address and pasting (part 3).
+  80,000 bytes. Done in parts 2 and 3 of 5b, tested on tap 1.
   Ways to give it an image:
-  - Choose file, as now.
-  - An "Image address" text field next to it. Pasting an address loads the image
-    straight away. On a laptop: right-click the image, Copy Image Address.
-  - Pasting a picture (Ctrl+V, or Copy Image on a laptop) into the same field. Check
-    in step 5 whether a picture copied on a phone pastes too; if not, Save to Photos
-    and Choose file still works, without the resizing.
+  - Browse for a file, or drop one on the image, as before.
+  - One field, "Paste an image or its address", beside Browse. Pasting an image's
+    address loads it straight away (on a laptop: right-click the image, Copy Image
+    Address), and so does typing one and pressing Enter. Pasting a picture (Copy
+    Image, or a screenshot) loads it too. The field then shows the file's name, the
+    address, or "Pasted image".
+  - Ctrl+V anywhere on the page in image mode, outside a text field, does the same,
+    and an image dragged from another tab can be dropped on the image.
+  - A failed address keeps the current image and says why: the site doesn't let
+    other pages read its images, the address is a page rather than an image, or the
+    status the site answered with.
+  - Still to check once phones can reach the taps: whether a picture copied on a
+    phone pastes. If not, Save to Photos and Browse still works.
 
   The Background tool, shown whenever the image leaves gaps (below Fill). Text mode
   uses the same tool for its background, without Blurred image, and each mode keeps
@@ -391,7 +398,7 @@ Each step ends with something visible to check.
      preview with the strip; (2) zoom between Fit and Fill, with the Background for
      the gaps; (3) pasting an image address or an image; (4) developer mode with
      "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. Parts
-     1 and 2 done, tested on tap 1.
+     1 to 3 done, tested on tap 1.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once,
    the prompt when full and the keg states. Test by sending a beer on one tap and
    picking it on another.
