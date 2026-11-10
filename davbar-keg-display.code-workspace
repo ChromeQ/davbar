@@ -1,15 +1,11 @@
 {
-  "folders": [
-    {
-      "path": ".",
-    },
-    {
-      "path": "esp32",
-    },
-  ],
-  "settings": {
-    "chat.tools.terminal.autoApprove": {
-      "printf": true,
-    },
-  },
+	"folders": [
+		{
+			"path": "esp32"
+		},
+		{
+			"path": "."
+		}
+	],
+	"settings": {}
 }
