@@ -457,7 +457,7 @@ const Connect = () => {
               {laserPicker.saving ? 'Saving laser' : 'Connecting'}
             </>
           ) : (
-            'Save'
+            'Save and Reboot'
           )}
         </button>
         {laserPicker.saveError && (
