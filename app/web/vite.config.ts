@@ -49,6 +49,8 @@ export default defineConfig(({ mode }) => {
     build: {
       // The connect build adds its page next to the app's.
       emptyOutDir: page === 'app',
+      // Every file goes inside its page, such as the Roboto font.
+      assetsInlineLimit: () => true,
       rollupOptions: {
         input: path.resolve(currentDirectory, pages[page]),
       },

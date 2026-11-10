@@ -19,10 +19,12 @@
     "outdated": "pnpm -r --parallel --aggregate-output run outdated",
     "preview": "pnpm --dir web preview",
     "strip:glyphs": "tsx scripts/strip-glyphs.ts",
+    "roboto:subset": "tsx scripts/roboto-subset.ts",
     "test": "pnpm -r --parallel --aggregate-output run test"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
+    "@fontsource-variable/roboto": "5.3.0",
     "@fontsource/roboto": "5.3.0",
     "@types/fontkit": "2.0.9",
     "@types/node": "catalog:",
@@ -35,6 +37,7 @@
     "jiti": "2.7.0",
     "prettier": "catalog:",
     "sharp": "catalog:",
+    "subset-font": "2.9.0",
     "tsx": "catalog:",
     "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:"

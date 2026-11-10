@@ -92,8 +92,10 @@ export const singleFilePage = (): Plugin => {
         delete bundle[page.fileName];
       }
 
+      // Anything else, such as a font or image too big to inline, would be a file
+      // the tap never serves.
       const leftOver = Object.keys(bundle).filter(
-        (fileName) => /\.(js|css)$/.test(fileName) && !inlined.has(fileName)
+        (fileName) => !fileName.endsWith('.gz') && !inlined.has(fileName)
       );
 
       if (leftOver.length > 0) {

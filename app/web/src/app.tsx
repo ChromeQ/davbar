@@ -464,25 +464,42 @@ const App = () => {
     }
 
     const context = getCanvasContext(canvas);
-    const lines = text.split('\n');
-    const lineHeight = fontSize * 1.2;
-    const firstBaseline = IMAGE_SIZE / 2 - ((lines.length - 1) * lineHeight) / 2;
+    const font = `${fontSize}px ${fontFamily}`;
+    let stopped = false;
 
-    paintBackground(context, textBackground);
-    context.fillStyle = textColour;
-    context.font = `${fontSize}px ${fontFamily}`;
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
+    const draw = () => {
+      if (stopped) {
+        return;
+      }
 
-    lines.forEach((line, index) => {
-      context.fillText(line, IMAGE_SIZE / 2, firstBaseline + index * lineHeight, 360);
-    });
+      const lines = text.split('\n');
+      const lineHeight = fontSize * 1.2;
+      const firstBaseline = IMAGE_SIZE / 2 - ((lines.length - 1) * lineHeight) / 2;
 
-    const imageData = context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+      paintBackground(context, textBackground);
+      context.fillStyle = textColour;
+      context.font = font;
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
 
-    setTextFrame({ pixels: imageData.data });
-    setError('');
-    setUploadState('idle');
+      lines.forEach((line, index) => {
+        context.fillText(line, IMAGE_SIZE / 2, firstBaseline + index * lineHeight, 360);
+      });
+
+      const imageData = context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+
+      setTextFrame({ pixels: imageData.data });
+      setError('');
+      setUploadState('idle');
+    };
+
+    // Drawn once the font has loaded: the canvas wouldn't redraw itself when it
+    // arrived, and would keep a fallback font.
+    document.fonts.load(font).then(draw, draw);
+
+    return () => {
+      stopped = true;
+    };
   }, [fontFamily, fontSize, mode, text, textBackground, textColour]);
 
   useEffect(() => {
