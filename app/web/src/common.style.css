@@ -81,10 +81,14 @@ h1 {
   letter-spacing: 0;
 }
 
-/* Which tap this is, beside each page's heading. */
+/* Which tap this is, beside each page's heading. Roboto's line height leaves much
+   more room above the capitals than below the "p" of "Tap", so the line is cut to
+   1 and the room goes below, centring the letters from the top of the "T" to the
+   bottom of the "p" at the same height. */
 .tap-badge {
   display: inline-block;
-  padding: 0 12px;
+  padding: 0.03em 12px 0.15em;
+  line-height: 1;
   border-radius: 4px;
   color: var(--paper);
   background: var(--ink);
