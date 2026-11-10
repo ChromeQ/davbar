@@ -68,6 +68,7 @@ import {
 import { drawStrip, STRIP_SIZE } from './strip';
 import { showLiveValues, showTestValues, useStripState } from './strip-values';
 import { fetchTapImage } from './tap-image';
+import { TapSwitcher } from './tap-switcher';
 import {
   DEFAULT_TEST_INPUTS,
   readTestInputs,
@@ -1104,9 +1105,14 @@ const App = () => {
             <Settings size={20} aria-hidden="true" />
           </button>
         </div>
-        <h1>
-          Keg Display Studio <span className="tap-badge">{deviceConfig.deviceName}</span>
-        </h1>
+        <div className="app-title">
+          <h1>Keg Display Studio</h1>
+          <TapSwitcher
+            deviceName={deviceConfig.deviceName}
+            deviceId={deviceConfig.deviceId}
+            taps={deviceConfig.taps}
+          />
+        </div>
         <div className="display-spec">
           <span className="status-dot" />
           400 × 600 Spectra 6

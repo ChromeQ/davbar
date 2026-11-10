@@ -2,6 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// A tap the web app's tap switcher links to.
+export type TapLink = {
+  deviceName: string;
+  deviceId: string;
+  url: string;
+};
+
 export type DeviceConfig = {
   brandName: string;
   deviceName: string;
@@ -14,6 +21,8 @@ export type DeviceConfig = {
   outputFileName: string;
   appTitle: string;
   connectTitle: string;
+  // Every tap with a profile next to this one, this tap included.
+  taps: TapLink[];
 };
 
 type DeviceConfigInput = Pick<DeviceConfig, 'brandName' | 'deviceName' | 'deviceId' | 'hostname'>;
@@ -66,6 +75,43 @@ const readInput = (configPath: string): DeviceConfigInput => {
   return input;
 };
 
+const tapHost = (input: DeviceConfigInput) => `${input.hostname}-${input.deviceId}.local`;
+
+// The taps with a profile next to this one, such as config/tap-2.json, that share
+// its brand and hostname. That leaves out the example, the laser list and anything
+// else that isn't a tap's profile; the secrets file is never read.
+const readTapList = (configPath: string, input: DeviceConfigInput): TapLink[] => {
+  const directory = path.dirname(configPath);
+  const taps: TapLink[] = [];
+
+  for (const fileName of fs.readdirSync(directory)) {
+    if (!fileName.endsWith('.json') || fileName.startsWith('secrets')) {
+      continue;
+    }
+
+    let other: DeviceConfigInput;
+
+    try {
+      other = readInput(path.join(directory, fileName));
+    } catch {
+      continue;
+    }
+
+    if (other.brandName === input.brandName && other.hostname === input.hostname) {
+      taps.push({
+        deviceName: other.deviceName,
+        deviceId: other.deviceId,
+        url: `http://${tapHost(other)}/`,
+      });
+    }
+  }
+
+  // "Tap 2" before "Tap 10"
+  return taps.sort((a, b) =>
+    a.deviceName.localeCompare(b.deviceName, undefined, { numeric: true })
+  );
+};
+
 export const resolveDeviceConfigPath = (selectedPath = process.env.DEVICE_CONFIG): string =>
   selectedPath ? path.resolve(repositoryDirectory, selectedPath) : defaultConfigPath;
 
@@ -76,7 +122,7 @@ export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
-  const uploadHost = `${input.hostname}-${input.deviceId}.local`;
+  const uploadHost = tapHost(input);
   const config: DeviceConfig = {
     ...input,
     accessPointName: `${input.brandName} ${input.deviceName}`,
@@ -86,6 +132,7 @@ export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
     outputFileName: `${outputFileStem || 'display'}-text.bin`,
     appTitle: `${input.brandName} Display | ${input.deviceName}`,
     connectTitle: `${input.brandName} | Set up ${input.deviceName}`,
+    taps: readTapList(configPath, input),
   };
 
   return { config, configPath };
@@ -97,4 +144,5 @@ export const printDeviceConfig = (config: DeviceConfig, configPath: string) => {
   console.log(`Device: ${config.deviceName} (${config.deviceId})`);
   console.log(`Access point: ${config.accessPointName}`);
   console.log(`Hostname: ${config.uploadHost}`);
+  console.log(`Taps: ${config.taps.map((tap) => tap.deviceName).join(', ')}`);
 };

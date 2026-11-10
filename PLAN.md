@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 4 and 5a done, step 5b in progress (parts 1 to 5 of 6 done). Last updated 2026-11-10.
+Status: steps 0 to 5 done, step 6 (beer library) next. Last updated 2026-11-10.
 
 ## Goal
 
@@ -371,7 +371,10 @@ Force refresh in the settings menu still redraws on demand.
 
   A laser in the other mode says how to fix it: "double-tap its Bluetooth button".
 - Tap switcher: a large tap badge in the header (for example "Tap 2") and a dropdown
-  linking to the other taps' pages, built from the profiles in `config/`.
+  linking to the other taps' pages, built from the profiles in `config/`. Done in part
+  6 of 5b: the build lists every profile next to the tap's own with the same brand and
+  hostname (never reading the secrets file), and links to each tap's `.local` address.
+  With one tap it's a plain badge, and the setup page keeps its plain badge.
 - Settings: Status, Force refresh, Download log (a CSV file), Reboot and Factory
   reset.
 - Factory reset asks first, in a dialog like the old Forget Wi-Fi one. It says what
@@ -418,8 +421,8 @@ Each step ends with something visible to check.
    - 5b, web app, in 6 parts: (1) the 400 x 400 image area and the full-screen
      preview with the strip; (2) zoom between Fit and Fill, with the Background for
      the gaps; (3) pasting an image address or an image; (4) developer mode with
-     "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. Parts
-     1 to 5 done, tested on tap 1.
+     "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. All 6
+     done, tested on tap 1.
 6. **Beer library:** storage on each tap, the shared grid, removing several at once,
    the prompt when full and the keg states. Test by sending a beer on one tap and
    picking it on another.

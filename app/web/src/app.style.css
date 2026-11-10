@@ -19,6 +19,81 @@
   margin: 0;
 }
 
+/* The heading and the tap switcher after it, at the heading's size, wrapping
+   like one line of text */
+.app-title {
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+}
+
+.app-title h1 {
+  display: inline;
+  margin-right: 0.3em;
+  font-size: inherit;
+}
+
+.tap-switcher {
+  position: relative;
+  display: inline-block;
+}
+
+.tap-switcher .tap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  padding-right: 8px;
+  border: 0;
+  cursor: pointer;
+}
+
+.tap-switcher .tap-badge:hover,
+.tap-switcher .tap-badge[aria-expanded='true'] {
+  background: var(--accent);
+}
+
+.tap-switcher-chevron {
+  width: 0.6em;
+  height: 0.6em;
+}
+
+.tap-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  box-shadow: 0 12px 30px rgba(26, 26, 23, 0.18);
+  font-size: 0.95rem;
+}
+
+.tap-menu a,
+.tap-menu span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 12px;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tap-menu a:hover,
+.tap-menu a:focus-visible {
+  color: var(--accent);
+  background: rgba(239, 45, 86, 0.06);
+}
+
+.tap-menu [aria-current='page'] {
+  color: var(--muted);
+}
+
 .settings-menu {
   justify-self: end;
 }
