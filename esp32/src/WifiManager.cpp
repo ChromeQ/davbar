@@ -16,6 +16,7 @@
 #include "DeviceLog.h"
 #include "ImageManager.h"
 #include "LaserScanner.h"
+#include "LibraryManager.h"
 #include "Settings.h"
 #include "Storage.h"
 #include "StripManager.h"
@@ -295,6 +296,7 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
 static void handleFactoryReset(AsyncWebServerRequest* request)
 {
     bool clearLog = request->arg("clearLog") == "1";
+    bool clearBeers = request->arg("clearLibrary") == "1";
 
     bool cleared =
         clearWifiSettings() &&
@@ -304,6 +306,10 @@ static void handleFactoryReset(AsyncWebServerRequest* request)
     if (clearLog)
     {
         cleared = clearDeviceLog() && cleared;
+    }
+    if (clearBeers)
+    {
+        cleared = clearLibrary() && cleared;
     }
 
     if (!cleared)
@@ -319,7 +325,11 @@ static void handleFactoryReset(AsyncWebServerRequest* request)
     }
 
     // With the log cleared, this is the first entry of the new one.
-    logEvent("factory reset", clearLog ? "log cleared" : "log kept");
+    logEvent(
+        "factory reset",
+        String(clearLog ? "log cleared" : "log kept") +
+            (clearBeers ? ", beer library cleared" : ", beer library kept")
+    );
 
     request->send(
         200,
@@ -424,6 +434,7 @@ static void handleStatus(AsyncWebServerRequest* request)
     addChosenLaser(doc.as<JsonObject>());
     addLaserStatus(doc["lasers"].to<JsonArray>());
     addStripStatus(doc["strip"].to<JsonObject>());
+    addLibraryStatus(doc["library"].to<JsonObject>());
 
     sendJson(request, 200, doc);
 }
@@ -1076,6 +1087,8 @@ void startWebServer()
         HTTP_POST,
         handleStripLive
     );
+
+    addLibraryRoutes(server);
 
     server.onNotFound(
         [](AsyncWebServerRequest *request)

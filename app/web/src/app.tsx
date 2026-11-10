@@ -125,6 +125,10 @@ type DeviceStatus = {
   };
   laser?: ChosenLaser | null;
   lasers?: LaserItem[];
+  library?: {
+    count: number;
+    capacity: number;
+  };
 };
 
 const isApiResult = (value: unknown): value is ApiResult =>
@@ -339,6 +343,7 @@ const App = () => {
   const [rebootResult, setRebootResult] = useState<ApiResult | null>(null);
   const [factoryResetDialogOpen, setFactoryResetDialogOpen] = useState(false);
   const [clearLog, setClearLog] = useState(false);
+  const [clearBeers, setClearBeers] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [factoryResetResult, setFactoryResetResult] = useState<ApiResult | null>(null);
   const [laserDialogOpen, setLaserDialogOpen] = useState(false);
@@ -874,6 +879,7 @@ const App = () => {
   const openFactoryResetDialog = () => {
     setSettingsOpen(false);
     setClearLog(false);
+    setClearBeers(false);
     setFactoryResetResult(null);
     setFactoryResetDialogOpen(true);
   };
@@ -1056,7 +1062,10 @@ const App = () => {
     try {
       const response = await fetch('/factory-reset', {
         method: 'POST',
-        body: new URLSearchParams({ clearLog: clearLog ? '1' : '0' }),
+        body: new URLSearchParams({
+          clearLog: clearLog ? '1' : '0',
+          clearLibrary: clearBeers ? '1' : '0',
+        }),
       });
       const responseBody = await response.text();
 
@@ -1638,6 +1647,14 @@ const App = () => {
                   <dt>Image size</dt>
                   <dd>{status.image.size.toLocaleString()} bytes</dd>
                 </div>
+                {status.library && (
+                  <div>
+                    <dt>Beer library</dt>
+                    <dd>
+                      {status.library.count} of {status.library.capacity} beers
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>Uptime</dt>
                   <dd>{formatUptime(status.uptime)}</dd>
@@ -1915,17 +1932,27 @@ const App = () => {
                 : (factoryResetResult?.message ??
                   (resetting
                     ? 'Clearing the device.'
-                    : 'The device will forget its WiFi network and laser and clear its screen image, then restart in setup mode. The screen keeps showing the current picture until a new one is sent. The log is kept unless you tick the box below.'))}
+                    : "The device will forget its WiFi network and laser and clear its screen image, then restart in setup mode. The screen keeps showing the current picture until a new one is sent. The log and this tap's beer library are kept unless you tick them below. Other taps keep their own copies of its beers."))}
             </p>
             {!resetting && !factoryResetResult && (
-              <label className="checkbox-option">
-                <input
-                  type="checkbox"
-                  checked={clearLog}
-                  onChange={(event) => setClearLog(event.target.checked)}
-                />
-                Also clear the log
-              </label>
+              <div className="checkbox-options">
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={clearLog}
+                    onChange={(event) => setClearLog(event.target.checked)}
+                  />
+                  Also clear the log
+                </label>
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={clearBeers}
+                    onChange={(event) => setClearBeers(event.target.checked)}
+                  />
+                  Also clear this tap's beer library
+                </label>
+              </div>
             )}
             {!resetting && (
               <div className="modal-actions">
