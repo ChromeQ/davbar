@@ -483,8 +483,12 @@ h2 {
   outline: none;
 }
 
+/* Browse and Library fill the picker's height, so they always match */
 .browse-button {
+  display: flex;
   flex: none;
+  align-self: stretch;
+  align-items: center;
   padding: 10px 15px;
   color: #fff;
   background: var(--accent);
@@ -501,6 +505,7 @@ h2 {
 .library-button {
   display: inline-flex;
   flex: none;
+  align-self: stretch;
   align-items: center;
   gap: 6px;
   padding: 9px 13px;
