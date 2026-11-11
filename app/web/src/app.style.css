@@ -543,6 +543,13 @@ h2 {
   margin: 2px 0 0;
 }
 
+/* The spinner before "Asking Tap 2 and Tap 3…" while taps haven't answered, in
+   line with the text so a narrow screen wraps it like the rest of the line */
+.library-asking svg {
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -603,11 +610,41 @@ h2 {
   font-weight: 600;
 }
 
-/* Selecting beers to remove: a round tick box in each corner */
+.library-grid li {
+  position: relative;
+}
+
+/* The round tick in each beer's corner, to choose beers to remove: shown on
+   hover with a mouse, always on a touch screen, and on every beer once one is
+   ticked. The button is bigger than the circle, to be easy to tap. */
 .library-check {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.library-grid li:hover .library-check,
+.library-grid.is-selecting .library-check,
+.library-check:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .library-check {
+    opacity: 1;
+  }
+}
+
+.library-check-mark {
   display: grid;
   width: 24px;
   height: 24px;
@@ -619,12 +656,19 @@ h2 {
   box-shadow: 0 1px 4px rgba(26, 26, 23, 0.35);
 }
 
-.library-beer.is-selected .library-check {
+/* Only with a mouse: a phone keeps the last tapped button "hovered" */
+@media (hover: hover) {
+  .library-grid li:not(.is-selected) .library-check:hover:not(:disabled) .library-check-mark {
+    background: rgba(26, 26, 23, 0.6);
+  }
+}
+
+.library-grid li.is-selected .library-check-mark {
   border-color: var(--accent);
   background: var(--accent);
 }
 
-.library-beer.is-selected .library-thumbnail {
+.library-grid li.is-selected .library-thumbnail {
   outline: 3px solid var(--accent);
   outline-offset: 2px;
 }
@@ -642,8 +686,12 @@ h2 {
   font-weight: 600;
 }
 
-.library-select-button {
-  margin-right: auto;
+/* "Tick beers to remove them", left of Close */
+.app-modal .library-hint {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 
 .app-modal .library-notice {

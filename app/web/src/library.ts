@@ -99,6 +99,12 @@ export const formatLastShown = (beer: LibraryBeer, now = new Date()) => {
   return `${tap.deviceName} · ${text}`;
 };
 
+// "Tap 2", "Tap 2 and Tap 3", or "Tap 1, Tap 2 and Tap 3".
+export const namesText = (names: string[]) =>
+  names.length <= 1
+    ? (names[0] ?? '')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+
 // Where to ask a tap: this page's own tap by a relative address, so it works
 // however the page was opened, and other taps by their .local address. In
 // `pnpm dev` every tap is asked by its address, as there is no tap behind the
@@ -282,7 +288,7 @@ export const removalSummary = (results: RemoveResult[], unreachable: string[]) =
   }
 
   if (unreachable.length > 0) {
-    parts.push(`${unreachable.join(' and ')} couldn't be reached, so any copies there stay.`);
+    parts.push(`${namesText(unreachable)} couldn't be reached, so any copies there stay.`);
   }
 
   return parts.join(' ');

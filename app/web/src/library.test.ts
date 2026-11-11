@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchTapLibrary,
   inBatches,
+  namesText,
   removalPlan,
   removalSummary,
   removeBeers,
@@ -65,6 +66,12 @@ describe('the grid of every tap', () => {
       library(3, [{ id: 'dddddddd', shownAt: '2025-03-02T09:00:00Z' }]),
     ]);
     expect(formatLastShown(lastYear[0]!, now)).toBe('Tap 3 · Mar 2025');
+  });
+
+  it('names the taps still being asked, or not reached, as a list', () => {
+    expect(namesText(['Tap 2'])).toBe('Tap 2');
+    expect(namesText(['Tap 2', 'Tap 3'])).toBe('Tap 2 and Tap 3');
+    expect(namesText(['Tap 1', 'Tap 2', 'Tap 3'])).toBe('Tap 1, Tap 2 and Tap 3');
   });
 });
 
