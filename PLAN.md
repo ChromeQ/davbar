@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done, step 6 (beer library) in progress (6a done, 6b built and to try on the taps). Last updated 2026-11-10.
+Status: steps 0 to 5 done, step 6 (beer library) in progress (6a done; 6b and 6c built, to try on the taps). Last updated 2026-11-10.
 
 ## Goal
 
@@ -341,6 +341,16 @@ Force refresh in the settings menu still redraws on demand.
   - When this tap is full, Send opens the same grid to choose what to remove, or
     "Send without saving". Nothing is ever removed automatically, because the oldest
     beers may be the ones made most often.
+  - Done in 6c, with one change: the picture goes to the screen first and the
+    library is asked after, as the tap already says whether a beer is new and
+    whether it's full (asking first would need the page to work out the beer's ID),
+    and the screen shouldn't wait on it. The upload's message then says it wasn't
+    saved, with "Make room…", which opens the grid on this tap's beers, ready to
+    choose; "Remove 2 and save" removes them and saves the new one, and closing
+    leaves it unsaved. Select in the grid ticks beers, and "Remove 3" asks once
+    more ("Their pictures can't be got back"), then asks each tap to remove the ones
+    it has, 10 at a time. A tap that couldn't be reached keeps its copies, and the
+    grid says so. Tested against faked taps; still to try on the real taps.
   - Done in 6b: Send in image mode saves the composed square (before the six
     colours) as a JPEG, lowering the quality until it fits (a 400 x 400 square of
     random noise, the worst case, came to 62 KB), with a 200 x 200 thumbnail. A
@@ -458,7 +468,7 @@ Each step ends with something visible to check.
    picking it on another. In four parts: (6a) the firmware's storage and routes, with
    the factory reset option; (6b) saving on Send and the Library grid from all taps;
    (6c) removing several and the prompt when full; (6d) the keg states. 6a done,
-   tested on tap 1; 6b built, tested against faked taps.
+   tested on tap 1; 6b and 6c built, tested against faked taps.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
    planned here, were done in step 5a.
 8. **Fit the enclosure,** once the case parts are printed and the last screens arrive.

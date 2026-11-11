@@ -191,6 +191,103 @@ export const saveBeer = async (
   }
 };
 
+// Beers a tap removes in one request (esp32/lib/BeerLibrary/BeerLibrary.h): the
+// tap restarts if one request holds it for 5s.
+export const MAX_REMOVED_AT_ONCE = 10;
+
+// Which of the chosen beers each tap has, so each is asked to remove only its own.
+export const removalPlan = (libraries: TapLibrary[], ids: string[]) =>
+  libraries
+    .map((library) => ({
+      tap: library.tap,
+      ids: library.beers.map((beer) => beer.id).filter((id) => ids.includes(id)),
+    }))
+    .filter((plan) => plan.ids.length > 0);
+
+// The items in batches of at most size.
+export const inBatches = <T>(items: T[], size: number): T[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+    items.slice(index * size, (index + 1) * size)
+  );
+
+export type RemoveResult = {
+  tap: TapLink;
+  // The beers gone from the tap, whether removed now or already gone.
+  removed: string[];
+  // Why the rest weren't removed, or null if they all were.
+  error: string | null;
+};
+
+// Why a request to a tap failed, to follow "Tap 2 couldn't remove them: ".
+const failureOf = (error: unknown) => {
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    return "it didn't answer in time.";
+  }
+
+  // fetch() fails with a TypeError when the tap can't be reached.
+  return error instanceof Error && !(error instanceof TypeError)
+    ? error.message
+    : "it didn't answer.";
+};
+
+// Removes beers from one tap, a batch at a time, stopping at the first failure.
+export const removeBeers = async (
+  tap: TapLink,
+  thisTapId: string,
+  ids: string[]
+): Promise<RemoveResult> => {
+  const removed: string[] = [];
+
+  for (const batch of inBatches(ids, MAX_REMOVED_AT_ONCE)) {
+    try {
+      const response = await fetch(tapAddress(tap, thisTapId, 'library/remove'), {
+        method: 'POST',
+        body: new URLSearchParams({ ids: batch.join(',') }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const result = await readDeviceJson(response);
+
+      if (!response.ok || result.success !== true) {
+        const message =
+          typeof result.message === 'string' ? result.message : `status ${response.status}`;
+        return { tap, removed, error: message };
+      }
+
+      removed.push(...batch);
+    } catch (error) {
+      return { tap, removed, error: failureOf(error) };
+    }
+  }
+
+  return { tap, removed, error: null };
+};
+
+const sentenceCase = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
+
+// "Removed 3 beers.", then any tap that couldn't remove them, and any that
+// couldn't be reached, whose copies stay.
+export const removalSummary = (results: RemoveResult[], unreachable: string[]) => {
+  const removed = new Set(results.flatMap((result) => result.removed)).size;
+  const parts = [
+    removed > 0
+      ? `Removed ${removed} ${removed === 1 ? 'beer' : 'beers'}.`
+      : 'Nothing was removed.',
+  ];
+
+  for (const result of results) {
+    if (result.error) {
+      const what = result.removed.length > 0 ? 'them all' : 'them';
+      parts.push(`${result.tap.deviceName} couldn't remove ${what}: ${sentenceCase(result.error)}`);
+    }
+  }
+
+  if (unreachable.length > 0) {
+    parts.push(`${unreachable.join(' and ')} couldn't be reached, so any copies there stay.`);
+  }
+
+  return parts.join(' ');
+};
+
 // The canvas as a JPEG of at most maxBytes, lowering the quality until it fits.
 const jpegOf = async (canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob> => {
   for (const quality of [0.9, 0.85, 0.8, 0.7, 0.6, 0.5, 0.4]) {

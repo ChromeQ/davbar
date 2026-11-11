@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   fetchTapLibrary,
+  inBatches,
+  removalPlan,
+  removalSummary,
+  removeBeers,
   formatLastShown,
   mergeLibraries,
   saveBeer,
@@ -130,5 +134,79 @@ describe('asking the taps', () => {
       outcome: 'failed',
       message: "the tap didn't answer.",
     });
+  });
+});
+
+describe('removing beers from every tap', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it('asks each tap to remove only the chosen beers it has', () => {
+    const plan = removalPlan(
+      [
+        library(1, [
+          { id: 'aaaaaaaa', shownAt: null },
+          { id: 'bbbbbbbb', shownAt: null },
+        ]),
+        library(2, [{ id: 'aaaaaaaa', shownAt: null }]),
+        library(3, [{ id: 'cccccccc', shownAt: null }]),
+      ],
+      ['aaaaaaaa', 'bbbbbbbb']
+    );
+
+    expect(plan).toEqual([
+      { tap: tap(1), ids: ['aaaaaaaa', 'bbbbbbbb'] },
+      { tap: tap(2), ids: ['aaaaaaaa'] },
+    ]);
+  });
+
+  it('sends at most 10 at a time', () => {
+    const ids = Array.from({ length: 23 }, (_, index) => String(index));
+
+    expect(inBatches(ids, 10).map((batch) => batch.length)).toEqual([10, 10, 3]);
+    expect(inBatches([], 10)).toEqual([]);
+  });
+
+  it('removes in batches, and stops at a batch the tap turns down', async () => {
+    vi.stubEnv('DEV', false);
+    const ids = Array.from({ length: 12 }, (_, index) => `0000000${index.toString(16)}`.slice(-8));
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, removed: 10 })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ success: false, message: "Some beers couldn't be removed. Try again." }),
+          {
+            status: 500,
+          }
+        )
+      );
+    vi.stubGlobal('fetch', fetch);
+
+    const result = await removeBeers(tap(2), 'tap1', ids);
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch.mock.calls[0]![0]).toBe('http://davbar-tap2.local/library/remove');
+    expect(String(fetch.mock.calls[1]![1].body)).toBe(`ids=${ids.slice(10).join('%2C')}`);
+    expect(result.removed).toEqual(ids.slice(0, 10));
+    expect(result.error).toBe("Some beers couldn't be removed. Try again.");
+  });
+
+  it('says what was removed, and where it may not have been', () => {
+    const ok = { tap: tap(1), removed: ['aaaaaaaa', 'bbbbbbbb'], error: null };
+
+    expect(removalSummary([ok, { tap: tap(2), removed: ['aaaaaaaa'], error: null }], [])).toBe(
+      'Removed 2 beers.'
+    );
+    expect(
+      removalSummary([ok, { tap: tap(2), removed: [], error: "it didn't answer." }], ['Tap 3'])
+    ).toBe(
+      "Removed 2 beers. Tap 2 couldn't remove them: it didn't answer. Tap 3 couldn't be reached, so any copies there stay."
+    );
+    expect(removalSummary([{ tap: tap(1), removed: [], error: 'Full.' }], [])).toBe(
+      "Nothing was removed. Tap 1 couldn't remove them: full."
+    );
   });
 });
