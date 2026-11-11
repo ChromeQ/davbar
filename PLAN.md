@@ -347,10 +347,14 @@ Force refresh in the settings menu still redraws on demand.
     and the screen shouldn't wait on it. The upload's message then says it wasn't
     saved, with "Make room…", which opens the grid on this tap's beers, ready to
     choose; "Remove 2 and save" removes them and saves the new one, and closing
-    leaves it unsaved. Select in the grid ticks beers, and "Remove 3" asks once
-    more ("Their pictures can't be got back"), then asks each tap to remove the ones
-    it has, 10 at a time. A tap that couldn't be reached keeps its copies, and the
-    grid says so. Tested against faked taps; still to try on the real taps.
+    leaves it unsaved. Each beer has a round tick in its corner, as in Google
+    Photos (on hover with a mouse, always on a touch screen); once one is ticked,
+    clicking any beer ticks it rather than loading it, and "Remove 3", bottom
+    right, asks once more ("Their pictures can't be got back"), then asks each tap
+    to remove the ones it has, 10 at a time. (A Select button first started this,
+    but didn't say it was for removing.) A tap that couldn't be reached keeps its
+    copies, and the grid says so. While taps haven't answered, the grid says which
+    it's still asking. Tested against faked taps; still to try on the real taps.
   - Done in 6b: Send in image mode saves the composed square (before the six
     colours) as a JPEG, lowering the quality until it fits (a 400 x 400 square of
     random noise, the worst case, came to 62 KB), with a 200 x 200 thumbnail. A
