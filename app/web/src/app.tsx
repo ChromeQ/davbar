@@ -317,9 +317,9 @@ const App = () => {
   const [pickingColour, setPickingColour] = useState<BackgroundColour | null>(null);
   // While dragging a filled image: where the pointer last was.
   const dragFrom = useRef<{ x: number; y: number } | null>(null);
-  const [imageFrame, setImageFrame] = useState<SourceFrame | null>(null);
+  // The image drawn in the square, and which image it was drawn from.
+  const [imageFrame, setImageFrame] = useState<(SourceFrame & { image: ImageBitmap }) | null>(null);
   const [textFrame, setTextFrame] = useState<SourceFrame | null>(null);
-  const [binary, setBinary] = useState<Uint8Array | null>(null);
   // The image field: the chosen file's name, or an address being typed or loaded.
   const [imageSource, setImageSource] = useState('');
   const [loadingImage, setLoadingImage] = useState(false);
@@ -368,9 +368,30 @@ const App = () => {
   const stripValues = developerMode ? test.strip : (strip?.values ?? null);
   // The image the tap has stored, or null if it has none or couldn't send it.
   const [tapImage, setTapImage] = useState<Uint8Array | null>(null);
+  // Image mode's frame counts only while its image is still the one composed.
+  const sourceFrame =
+    mode === 'image' ? (image && imageFrame?.image === image ? imageFrame : null) : textFrame;
+  // The composed square in the panel's six colours: these are the bytes uploaded.
+  const encoded = useMemo(() => {
+    if (!sourceFrame) {
+      return { binary: null, error: '' };
+    }
+
+    try {
+      return {
+        binary: encodeSpectra6(new Uint8Array(sourceFrame.pixels), IMAGE_SIZE, IMAGE_SIZE).bytes,
+        error: '',
+      };
+    } catch (encodingError) {
+      return {
+        binary: null,
+        error: encodingError instanceof Error ? encodingError.message : 'Preview failed.',
+      };
+    }
+  }, [sourceFrame]);
+  const binary = encoded.binary;
   // Until something new is composed, the preview shows what the screen shows.
   const previewImage = binary ?? tapImage;
-  const sourceFrame = mode === 'image' ? imageFrame : textFrame;
   const canPan = mode === 'image' && image !== null && overflows(image, zoom);
   const slider = image ? zoomSlider(image) : null;
   // A background fills any gaps around the image.
@@ -522,32 +543,14 @@ const App = () => {
 
     if (!image) {
       context.clearRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
-      setImageFrame(null);
 
       return;
     }
 
     drawImageInSquare(context, image, zoom, pan, imageBackground);
-    setImageFrame({ pixels: context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE).data });
+    setImageFrame({ pixels: context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE).data, image });
     setUploadState('idle');
   }, [image, imageBackground, mode, pan, zoom]);
-
-  // Encodes the image for the panel: these are the bytes uploaded.
-  useEffect(() => {
-    if (!sourceFrame) {
-      setBinary(null);
-
-      return;
-    }
-
-    try {
-      setBinary(encodeSpectra6(new Uint8Array(sourceFrame.pixels), IMAGE_SIZE, IMAGE_SIZE).bytes);
-      setError('');
-    } catch (encodingError) {
-      setBinary(null);
-      setError(encodingError instanceof Error ? encodingError.message : 'Preview failed.');
-    }
-  }, [sourceFrame]);
 
   // The whole screen: the encoded image, or the tap's own until something is
   // composed, above the strip as the tap would draw it now, so new strip values
@@ -578,7 +581,6 @@ const App = () => {
     }
 
     setMode(nextMode);
-    setBinary(null);
     setUploadState('idle');
     setError('');
   };
@@ -1310,7 +1312,9 @@ const App = () => {
                 </div>
               </div>
             )}
-            {error && <p className="message error-message">{error}</p>}
+            {(error || encoded.error) && (
+              <p className="message error-message">{error || encoded.error}</p>
+            )}
           </div>
         </article>
 
