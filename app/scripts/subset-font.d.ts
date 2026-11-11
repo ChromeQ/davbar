@@ -1,4 +1,4 @@
-// subset-font has no types of its own. Only the options roboto-subset.ts uses.
+// subset-font has no types of its own. Only the options fonts-subset.ts uses.
 declare module 'subset-font' {
   type Axis = number | { min: number; max: number; default?: number };
 

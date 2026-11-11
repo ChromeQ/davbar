@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done, step 6 (beer library) in progress (6a done; 6b and 6c built, to try on the taps). Last updated 2026-11-10.
+Status: steps 0 to 5 done, step 6 (beer library) in progress (6a, 6b and 6c done and on tap 1; 6d, the keg states, built and on tap 1, still to see on its screen). Last updated 2026-11-11.
 
 ## Goal
 
@@ -366,10 +366,35 @@ Force refresh in the settings menu still redraws on demand.
     ("Tap 2 · 11 Nov", or "Tap 2 · June 2025" for an earlier year). Thumbnails
     come one at a time from each tap, this tap's own first. Tested in the browser
     against faked taps; still to try on the real taps.
-  - Two keg states always in the grid, which can't be removed: "Keg empty" and "Keg
-    ready" (cleaned and ready to fill). Sending one adds the date, for example "Keg
-    ready · 9 Nov", as a reminder of when the keg was emptied or cleaned. The strip
-    still shows the laser's reading. Nothing switches to them automatically.
+  - Two keg states always first in the grid, which can't be removed or ticked: "Keg
+    empty" and "Keg ready" (cleaned and ready to fill). Sending one adds the date, as
+    a reminder of when the keg was emptied or cleaned. The strip still shows the
+    laser's reading. Nothing switches to them automatically.
+  - Built in 6d, chosen from mockups (H, the handwritten chalkboard). Tested against
+    faked taps and uploaded to tap 1; still to send to its screen, as tap 1 was
+    away from its Wi-Fi:
+    - A pub chalkboard: black, with a double white border. Across the middle, a worn
+      rubber stamp in Roboto Bold, tilted slightly: red KEG EMPTY or green KEG READY.
+    - Above it, a line in chalk: Permanent Marker, with tiny specks knocked out of
+      the letters, white when empty and yellow when ready. Each time a state is
+      picked, the page takes its line from a list, never the one it took last time
+      (remembered by each browser for each tap, as each tap's page is its own site),
+      so the board stays fresh. The lists are in `config/keg-lines.json`, to add
+      puns without changing code: "Gone too soon" and "Tapped out" when empty,
+      "Something's brewing" and "Coming soon" when ready. The build checks each
+      line: at most 24 characters, as longer lines shrink too small to read, and
+      only characters the font has.
+    - Below it, the date in the same chalk: "Kicked 9 Nov" or "Cleaned 9 Nov".
+    - The page draws the picture when a state is picked, so the date is that day.
+      Picking loads it into Compose like a beer; Send shows it, and doesn't save it
+      to the library. The grid shows the line each will get next. Not shown when
+      making room, as they take no room.
+    - Permanent Marker (Apache License 2.0) is built into the app page only:
+      `pnpm fonts:subset` now makes both fonts. It's trimmed to what the lines may
+      use, letters, digits, ASCII punctuation, curly quotes, dashes and the ellipsis,
+      as its hand-drawn letters are big: 18 KB, where accented letters would make it
+      26 KB. The gzipped app page grows from 125 KB to 146 KB.
+    - The firmware doesn't change: the tap just gets a picture.
 - The preview shows the whole screen, including a close copy of the strip with the
   tap's live readings and the chosen mode's icon. Until something new is composed,
   it shows the tap's stored image (`GET /image`, labelled "On the tap"), so the page
@@ -391,7 +416,7 @@ Force refresh in the settings menu still redraws on demand.
   page (whose phone has no internet) and text mode always have it: one variable font
   file trimmed to weights 400-700 and to ASCII, Latin-1 and common punctuation,
   about 25 KB a page (Google's file is 43 KB). The unused 800 weight is dropped.
-  Done in part 5 of 5b: `pnpm roboto:subset` makes `web/src/fonts/roboto.woff2`
+  Done in part 5 of 5b: `pnpm roboto:subset` (now `pnpm fonts:subset`) makes `web/src/fonts/roboto.woff2`
   (26 KB, keeping the font's copyright and license entries), and each gzipped page
   grows by about 28 KB. The build now puts every file inside its page and fails if
   anything is left over. Text mode waits for its font before drawing, as the canvas
@@ -472,7 +497,8 @@ Each step ends with something visible to check.
    picking it on another. In four parts: (6a) the firmware's storage and routes, with
    the factory reset option; (6b) saving on Send and the Library grid from all taps;
    (6c) removing several and the prompt when full; (6d) the keg states. 6a done,
-   tested on tap 1; 6b and 6c built, tested against faked taps.
+   tested on tap 1; 6b and 6c built, tested against faked taps and on tap 1; 6d built,
+   tested against faked taps and uploaded to tap 1.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
    planned here, were done in step 5a.
 8. **Fit the enclosure,** once the case parts are printed and the last screens arrive.

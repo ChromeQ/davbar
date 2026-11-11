@@ -5,10 +5,13 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 import { loadDeviceConfig, printDeviceConfig } from '../scripts/device-config.ts';
+import { loadKegLines } from '../scripts/keg-lines.ts';
 import { singleFilePage } from './single-file-page.ts';
 
 const currentDirectory = path.dirname(fileURLToPath(import.meta.url));
 const { config: deviceConfig, configPath } = loadDeviceConfig();
+// Checked here, so a line the screen can't show stops the build.
+const kegLines = loadKegLines();
 
 // Each page is built on its own into a single file (see single-file-page.ts):
 // `vite build --mode app`, then `vite build --mode connect`.
@@ -45,6 +48,7 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       __DEVICE_CONFIG__: JSON.stringify(deviceConfig),
+      __KEG_LINES__: JSON.stringify(kegLines),
     },
     build: {
       // The connect build adds its page next to the app's.
