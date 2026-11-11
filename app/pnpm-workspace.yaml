@@ -18,12 +18,14 @@ catalog:
   prettier: 3.9.10
   sharp: 0.35.5
   tsx: 4.23.15
-  typescript-eslint: 8.72.1
+  typescript-eslint: 8.72.2
   vitest: 5.1.0
 
 catalogs:
   typescript:
     typescript: 'npm:@typescript/typescript6@6.0.2'
     '@typescript/native': 'npm:typescript@7.0.2'
+
+minimumReleaseAge: 0
 
 saveExact: true
