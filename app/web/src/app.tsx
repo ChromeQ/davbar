@@ -39,6 +39,7 @@ import {
 } from './image-source';
 import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
 import { beerPictures, saveBeer, thumbnailOf, type SaveResult } from './library';
+import { kegStateName, type KegState } from './keg-states';
 import { LibraryDialog, thisTapLibrary } from './library-dialog';
 import {
   byLaserNumber,
@@ -374,6 +375,9 @@ const App = () => {
     picture: Blob;
     image: ImageBitmap;
   } | null>(null);
+  // A keg state picked from the library, while its picture is in Compose: it
+  // isn't saved to the library, as it's drawn afresh each time.
+  const [kegImage, setKegImage] = useState<ImageBitmap | null>(null);
   // What happened to the library copy of the last beer sent.
   const [librarySave, setLibrarySave] = useState<SaveResult | null>(null);
   // A beer sent that this tap's full library turned away, kept while there's a
@@ -623,13 +627,13 @@ const App = () => {
   };
 
   // Shows a new image from a file, a paste or an address. name goes in the image
-  // field; notAnImage is the error when it can't be read as an image.
-  // libraryId is the beer's, when it comes from the library.
+  // field; notAnImage is the error when it can't be read as an image. from says
+  // when it comes from the library: a beer, by its ID, or a keg state.
   const loadImage = async (
     load: () => Promise<Blob>,
     name: string,
     notAnImage: string,
-    libraryId?: string
+    from?: { libraryId: string } | { kegState: KegState }
   ) => {
     const thisLoad = ++loadCount.current;
 
@@ -660,7 +664,10 @@ const App = () => {
       });
       setPan(CENTRED);
       setImageSource(name);
-      setLibraryPick(libraryId ? { id: libraryId, picture: blob, image: bitmap } : null);
+      setLibraryPick(
+        from && 'libraryId' in from ? { id: from.libraryId, picture: blob, image: bitmap } : null
+      );
+      setKegImage(from && 'kegState' in from ? bitmap : null);
     } catch (loadError) {
       if (thisLoad === loadCount.current) {
         setError(loadError instanceof Error ? loadError.message : notAnImage);
@@ -940,8 +947,11 @@ const App = () => {
         throw new Error(result.message || `Upload failed with status ${response.status}.`);
       }
 
-      // Image mode's pictures also go in this tap's library, to send again later.
-      setLibrarySave(mode === 'image' ? await saveToLibrary(sourceFrame) : null);
+      // Image mode's pictures also go in this tap's library, to send again later,
+      // apart from the keg states.
+      setLibrarySave(
+        mode === 'image' && image !== kegImage ? await saveToLibrary(sourceFrame) : null
+      );
       setUploadState('success');
     } catch (uploadFailure) {
       setUploadState('error');
@@ -1623,7 +1633,17 @@ const App = () => {
               () => Promise.resolve(picture),
               'From the library',
               "That beer's picture couldn't be read.",
-              id
+              { libraryId: id }
+            );
+          }}
+          onPickKegState={({ state, picture }) => {
+            setLibraryOpen(false);
+            selectMode('image');
+            void loadImage(
+              () => Promise.resolve(picture),
+              kegStateName[state],
+              "The keg picture couldn't be drawn.",
+              { kegState: state }
             );
           }}
         />

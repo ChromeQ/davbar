@@ -1,5 +1,5 @@
 /* Roboto, trimmed to weights 400-700 and the characters the pages use by
-   app/scripts/roboto-subset.ts, and built into each page, so the setup page has it
+   app/scripts/fonts-subset.ts, and built into each page, so the setup page has it
    on a phone with no internet. Licensed under the SIL Open Font License. */
 @font-face {
   font-family: 'Roboto';

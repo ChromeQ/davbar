@@ -3,12 +3,25 @@
 // tick in each beer's corner chooses beers to remove from every tap; once one is
 // ticked, clicking any beer ticks it too.
 //
+// The keg states, Keg empty and Keg ready, come first: drawn here with the line
+// each will get next (see keg-states.ts), and never removed.
+//
 // When a beer sent wasn't saved because this tap's library is full, the grid
 // opens on this tap's beers, ready to choose which to remove to make room.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, CircleAlert, Library, LoaderCircle } from 'lucide-react';
 
 import { deviceConfig, type TapLink } from './device-config';
+import {
+  KEG_STATES,
+  kegLines,
+  kegStateName,
+  kegStatePicture,
+  lastLine,
+  pickLine,
+  rememberLine,
+  type KegState,
+} from './keg-states';
 import {
   fetchBeerFile,
   fetchTapLibrary,
@@ -34,6 +47,8 @@ type LibraryDialogProps = {
   onClose: () => void;
   // A beer was picked: its ID and picture.
   onPick: (beer: { id: string; picture: Blob }) => void;
+  // A keg state was picked: its picture, drawn with today's date.
+  onPickKegState?: (pick: { state: KegState; picture: Blob }) => void;
   // Set when making room for a beer this tap's full library turned away: called
   // once beers are gone from this tap, to save it.
   onMadeRoom?: () => Promise<void>;
@@ -62,12 +77,20 @@ export const thisTapLibrary = tapAddress(
 
 const beersText = (count: number) => `${count} ${count === 1 ? 'beer' : 'beers'}`;
 
-export const LibraryDialog = ({ onClose, onPick, onMadeRoom }: LibraryDialogProps) => {
+type KegPicture = { line: string; picture: Blob; url: string };
+
+export const LibraryDialog = ({
+  onClose,
+  onPick,
+  onPickKegState,
+  onMadeRoom,
+}: LibraryDialogProps) => {
   const makingRoom = onMadeRoom !== undefined;
   const [taps, setTaps] = useState<TapState[]>(() =>
     libraryTaps.map((tap) => ({ tap, library: null, failed: false }))
   );
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [kegPictures, setKegPictures] = useState<Partial<Record<KegState, KegPicture>>>({});
   const [picking, setPicking] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
@@ -108,6 +131,34 @@ export const LibraryDialog = ({ onClose, onPick, onMadeRoom }: LibraryDialogProp
       thumbnailUrls.current = [];
     };
   }, []);
+
+  // The keg states' pictures, with the line each will get next and today's date,
+  // so the grid shows just what picking one loads. None when making room, as
+  // they take no room.
+  useEffect(() => {
+    if (makingRoom) {
+      return;
+    }
+
+    const today = new Date();
+
+    for (const state of KEG_STATES) {
+      const line = pickLine(kegLines[state], lastLine(state));
+
+      kegStatePicture(state, line, today).then(
+        (picture) => {
+          if (mounted.current) {
+            const url = URL.createObjectURL(picture);
+            thumbnailUrls.current.push(url);
+            setKegPictures((pictures) => ({ ...pictures, [state]: { line, picture, url } }));
+          }
+        },
+        () => {
+          // Left as a blank square, which can't be picked.
+        }
+      );
+    }
+  }, [makingRoom]);
 
   // Each tap's list, all at once: each is one small request.
   useEffect(() => {
@@ -304,11 +355,40 @@ export const LibraryDialog = ({ onClose, onPick, onMadeRoom }: LibraryDialogProp
           </div>
         </div>
 
-        {shownBeers.length > 0 ? (
+        {(!makingRoom || shownBeers.length > 0) && (
           <ul
             className={`library-grid ${selecting ? 'is-selecting' : ''}`}
-            aria-label={selecting ? 'Beers to remove' : 'Beers, last shown first'}
+            aria-label={
+              selecting ? 'Beers to remove' : 'The keg states, then beers, last shown first'
+            }
           >
+            {!makingRoom &&
+              KEG_STATES.map((state) => {
+                const keg = kegPictures[state];
+
+                return (
+                  <li key={state} className="library-keg">
+                    <button
+                      className="library-beer"
+                      type="button"
+                      disabled={busy || selecting || !keg}
+                      aria-label={`Load ${kegStateName[state]}${keg ? `, "${keg.line}"` : ''}`}
+                      onClick={() => {
+                        if (keg && onPickKegState) {
+                          // So next time it gets another line
+                          rememberLine(state, keg.line);
+                          onPickKegState({ state, picture: keg.picture });
+                        }
+                      }}
+                    >
+                      <span className="library-thumbnail">
+                        {keg && <img src={keg.url} alt="" />}
+                      </span>
+                      <span className="library-beer-label">{kegStateName[state]}</span>
+                    </button>
+                  </li>
+                );
+              })}
             {shownBeers.map((beer) => {
               const lastShown = formatLastShown(beer);
               const chosen = selected.includes(beer.id);
@@ -352,7 +432,9 @@ export const LibraryDialog = ({ onClose, onPick, onMadeRoom }: LibraryDialogProp
               );
             })}
           </ul>
-        ) : (
+        )}
+
+        {shownBeers.length === 0 && (
           <p className="library-empty">
             {loading
               ? 'Loading the beers…'
