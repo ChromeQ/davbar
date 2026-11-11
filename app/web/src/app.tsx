@@ -17,6 +17,7 @@ import {
   Download,
   FlaskConical,
   Gauge,
+  Library,
   LoaderCircle,
   Power,
   RefreshCw,
@@ -37,6 +38,8 @@ import {
   NOT_AN_IMAGE_ADDRESS,
 } from './image-source';
 import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
+import { beerPictures, saveBeer, thumbnailOf, type SaveResult } from './library';
+import { LibraryDialog, thisTapLibrary } from './library-dialog';
 import {
   byLaserNumber,
   fetchChosenLaser,
@@ -101,6 +104,22 @@ type SourceFrame = {
 };
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
+
+// Added to the upload's success message.
+const librarySaveNote = (save: SaveResult | null) => {
+  switch (save?.outcome) {
+    case 'saved':
+      return " It's saved in this tap's library too.";
+    case 'already-saved':
+      return " It's in this tap's library already.";
+    case 'full':
+      return " It wasn't saved in this tap's library, as the library is full.";
+    case 'failed':
+      return ` It wasn't saved in this tap's library: ${save.message.charAt(0).toLowerCase()}${save.message.slice(1).replace(/\.$/, '')}.`;
+    default:
+      return '';
+  }
+};
 type SourceMode = 'image' | 'text';
 type ApiResult = {
   success: boolean;
@@ -347,6 +366,16 @@ const App = () => {
   const [resetting, setResetting] = useState(false);
   const [factoryResetResult, setFactoryResetResult] = useState<ApiResult | null>(null);
   const [laserDialogOpen, setLaserDialogOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  // The beer picked from the library, while its picture is in Compose: sent
+  // unchanged, its own JPEG goes back to the library, so it keeps its ID.
+  const [libraryPick, setLibraryPick] = useState<{
+    id: string;
+    picture: Blob;
+    image: ImageBitmap;
+  } | null>(null);
+  // What happened to the library copy of the last beer sent.
+  const [librarySave, setLibrarySave] = useState<SaveResult | null>(null);
   // undefined until loaded; null when no laser is chosen.
   const [chosenLaser, setChosenLaser] = useState<ChosenLaser | null | undefined>(undefined);
   const [chosenLaserFailed, setChosenLaserFailed] = useState(false);
@@ -416,7 +445,8 @@ const App = () => {
     refreshDialogOpen ||
     rebootDialogOpen ||
     factoryResetDialogOpen ||
-    laserDialogOpen;
+    laserDialogOpen ||
+    libraryOpen;
 
   useEffect(() => {
     fetchChosenLaser()
@@ -468,6 +498,7 @@ const App = () => {
         setRebootDialogOpen(false);
         setFactoryResetDialogOpen(false);
         setLaserDialogOpen(false);
+        setLibraryOpen(false);
       }
     };
 
@@ -587,7 +618,13 @@ const App = () => {
 
   // Shows a new image from a file, a paste or an address. name goes in the image
   // field; notAnImage is the error when it can't be read as an image.
-  const loadImage = async (load: () => Promise<Blob>, name: string, notAnImage: string) => {
+  // libraryId is the beer's, when it comes from the library.
+  const loadImage = async (
+    load: () => Promise<Blob>,
+    name: string,
+    notAnImage: string,
+    libraryId?: string
+  ) => {
     const thisLoad = ++loadCount.current;
 
     setError('');
@@ -617,6 +654,7 @@ const App = () => {
       });
       setPan(CENTRED);
       setImageSource(name);
+      setLibraryPick(libraryId ? { id: libraryId, picture: blob, image: bitmap } : null);
     } catch (loadError) {
       if (thisLoad === loadCount.current) {
         setError(loadError instanceof Error ? loadError.message : notAnImage);
@@ -829,6 +867,24 @@ const App = () => {
     resetMode(mode);
   };
 
+  // The picture as it was before the six colours. A beer picked from the library
+  // and sent unchanged goes back as its own JPEG, keeping its ID.
+  const saveToLibrary = async (frame: SourceFrame): Promise<SaveResult> => {
+    try {
+      const unchanged = libraryPick && libraryPick.image === image && zoom === FIT_ZOOM;
+      const { picture, thumbnail } = unchanged
+        ? { picture: libraryPick.picture, thumbnail: await thumbnailOf(libraryPick.image) }
+        : await beerPictures(frame.pixels, IMAGE_SIZE);
+
+      return await saveBeer(thisTapLibrary, picture, thumbnail);
+    } catch (saveError) {
+      return {
+        outcome: 'failed',
+        message: saveError instanceof Error ? saveError.message : 'unable to make the picture.',
+      };
+    }
+  };
+
   const uploadBinary = async () => {
     if (!binary || !sourceFrame) {
       return;
@@ -864,6 +920,8 @@ const App = () => {
         throw new Error(result.message || `Upload failed with status ${response.status}.`);
       }
 
+      // Image mode's pictures also go in this tap's library, to send again later.
+      setLibrarySave(mode === 'image' ? await saveToLibrary(sourceFrame) : null);
       setUploadState('success');
     } catch (uploadFailure) {
       setUploadState('error');
@@ -1217,6 +1275,16 @@ const App = () => {
                   <label className="browse-button" htmlFor="image-file">
                     Browse
                   </label>
+                  <button
+                    className="library-button"
+                    type="button"
+                    aria-haspopup="dialog"
+                    title="Pick a beer sent before, from any tap"
+                    onClick={() => setLibraryOpen(true)}
+                  >
+                    <Library size={16} aria-hidden="true" />
+                    Library
+                  </button>
                 </div>
                 {loadingImage && <p className="fit-hint">Loading the image…</p>}
                 {image && (
@@ -1446,7 +1514,7 @@ const App = () => {
               {isUploading
                 ? `Sending the display image to ${deviceConfig.uploadHost}. This may take a moment.`
                 : uploadSucceeded
-                  ? 'The display image was uploaded successfully.'
+                  ? `The display image was uploaded successfully.${librarySaveNote(librarySave)}`
                   : (uploadError ??
                     (pendingReset === 'image'
                       ? 'This removes the uploaded image and its preview. Your text composition will be kept.'
@@ -1504,6 +1572,22 @@ const App = () => {
             )}
           </div>
         </div>
+      )}
+
+      {libraryOpen && (
+        <LibraryDialog
+          onClose={() => setLibraryOpen(false)}
+          onPick={({ id, picture }) => {
+            setLibraryOpen(false);
+            selectMode('image');
+            void loadImage(
+              () => Promise.resolve(picture),
+              'From the library',
+              "That beer's picture couldn't be read.",
+              id
+            );
+          }}
+        />
       )}
 
       {laserDialogOpen && (
