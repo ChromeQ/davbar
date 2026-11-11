@@ -376,6 +376,10 @@ const App = () => {
   } | null>(null);
   // What happened to the library copy of the last beer sent.
   const [librarySave, setLibrarySave] = useState<SaveResult | null>(null);
+  // A beer sent that this tap's full library turned away, kept while there's a
+  // chance to make room for it.
+  const [unsavedBeer, setUnsavedBeer] = useState<{ picture: Blob; thumbnail: Blob } | null>(null);
+  const [makingRoom, setMakingRoom] = useState(false);
   // undefined until loaded; null when no laser is chosen.
   const [chosenLaser, setChosenLaser] = useState<ChosenLaser | null | undefined>(undefined);
   const [chosenLaserFailed, setChosenLaserFailed] = useState(false);
@@ -446,7 +450,8 @@ const App = () => {
     rebootDialogOpen ||
     factoryResetDialogOpen ||
     laserDialogOpen ||
-    libraryOpen;
+    libraryOpen ||
+    makingRoom;
 
   useEffect(() => {
     fetchChosenLaser()
@@ -499,6 +504,7 @@ const App = () => {
         setFactoryResetDialogOpen(false);
         setLaserDialogOpen(false);
         setLibraryOpen(false);
+        setMakingRoom(false);
       }
     };
 
@@ -876,13 +882,27 @@ const App = () => {
         ? { picture: libraryPick.picture, thumbnail: await thumbnailOf(libraryPick.image) }
         : await beerPictures(frame.pixels, IMAGE_SIZE);
 
-      return await saveBeer(thisTapLibrary, picture, thumbnail);
+      const result = await saveBeer(thisTapLibrary, picture, thumbnail);
+      setUnsavedBeer(result.outcome === 'full' ? { picture, thumbnail } : null);
+
+      return result;
     } catch (saveError) {
       return {
         outcome: 'failed',
         message: saveError instanceof Error ? saveError.message : 'unable to make the picture.',
       };
     }
+  };
+
+  // Once beers are removed to make room, saves the one turned away.
+  const saveUnsavedBeer = async () => {
+    if (unsavedBeer) {
+      const result = await saveBeer(thisTapLibrary, unsavedBeer.picture, unsavedBeer.thumbnail);
+      setLibrarySave(result);
+      setUnsavedBeer(result.outcome === 'full' ? unsavedBeer : null);
+    }
+
+    setMakingRoom(false);
   };
 
   const uploadBinary = async () => {
@@ -1523,14 +1543,25 @@ const App = () => {
             {!isUploading && (
               <div className="modal-actions">
                 {uploadSucceeded ? (
-                  <button
-                    className="modal-button primary-modal-button"
-                    type="button"
-                    autoFocus
-                    onClick={() => window.location.reload()}
-                  >
-                    Close
-                  </button>
+                  <>
+                    {librarySave?.outcome === 'full' && unsavedBeer && (
+                      <button
+                        className="modal-button"
+                        type="button"
+                        onClick={() => setMakingRoom(true)}
+                      >
+                        Make room…
+                      </button>
+                    )}
+                    <button
+                      className="modal-button primary-modal-button"
+                      type="button"
+                      autoFocus
+                      onClick={() => window.location.reload()}
+                    >
+                      Close
+                    </button>
+                  </>
                 ) : uploadError ? (
                   <>
                     <button
@@ -1572,6 +1603,14 @@ const App = () => {
             )}
           </div>
         </div>
+      )}
+
+      {makingRoom && (
+        <LibraryDialog
+          onClose={() => setMakingRoom(false)}
+          onPick={() => {}}
+          onMadeRoom={saveUnsavedBeer}
+        />
       )}
 
       {libraryOpen && (

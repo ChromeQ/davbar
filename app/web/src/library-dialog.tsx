@@ -1,7 +1,11 @@
 // The Library: every tap's beers in one grid, each once, last shown first.
-// Picking one loads its picture into Compose, like choosing a file.
+// Picking one loads its picture into Compose, like choosing a file. Select
+// chooses several to remove from every tap.
+//
+// When a beer sent wasn't saved because this tap's library is full, the grid
+// opens on this tap's beers, ready to choose which to remove to make room.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CircleAlert, Library, LoaderCircle } from 'lucide-react';
+import { Check, CircleAlert, Library, LoaderCircle } from 'lucide-react';
 
 import { deviceConfig, type TapLink } from './device-config';
 import {
@@ -9,6 +13,9 @@ import {
   fetchTapLibrary,
   formatLastShown,
   mergeLibraries,
+  removalPlan,
+  removalSummary,
+  removeBeers,
   sourceTap,
   tapAddress,
   type LibraryBeer,
@@ -25,6 +32,9 @@ type LibraryDialogProps = {
   onClose: () => void;
   // A beer was picked: its ID and picture.
   onPick: (beer: { id: string; picture: Blob }) => void;
+  // Set when making room for a beer this tap's full library turned away: called
+  // once beers are gone from this tap, to save it.
+  onMadeRoom?: () => Promise<void>;
 };
 
 const thisTapId = deviceConfig.deviceId;
@@ -48,13 +58,21 @@ export const thisTapLibrary = tapAddress(
   'library'
 );
 
-export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
+const beersText = (count: number) => `${count} ${count === 1 ? 'beer' : 'beers'}`;
+
+export const LibraryDialog = ({ onClose, onPick, onMadeRoom }: LibraryDialogProps) => {
+  const makingRoom = onMadeRoom !== undefined;
   const [taps, setTaps] = useState<TapState[]>(() =>
     libraryTaps.map((tap) => ({ tap, library: null, failed: false }))
   );
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const [picking, setPicking] = useState<string | null>(null);
-  const [pickError, setPickError] = useState('');
+  const [selecting, setSelecting] = useState(makingRoom);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  // What the last pick or removal came to.
+  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null);
   const mounted = useRef(true);
   // Thumbnails asked for, and the addresses made for them, freed on closing.
   const requested = useRef(new Set<string>());
@@ -65,9 +83,14 @@ export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
     () => mergeLibraries(taps.flatMap((state) => (state.library ? [state.library] : []))),
     [taps]
   );
+  // Making room, only this tap's beers free any.
+  const shownBeers = makingRoom
+    ? beers.filter((beer) => beer.taps.some((tap) => tap.deviceId === thisTapId))
+    : beers;
   const thisTap = taps.find((state) => state.tap.deviceId === thisTapId);
   const unreachable = taps.filter((state) => state.failed).map((state) => state.tap.deviceName);
   const loading = taps.some((state) => !state.library && !state.failed);
+  const busy = picking !== null || removing;
 
   useEffect(() => {
     mounted.current = true;
@@ -144,7 +167,7 @@ export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
 
   const pick = async (beer: LibraryBeer) => {
     setPicking(beer.id);
-    setPickError('');
+    setNotice(null);
 
     try {
       const picture = await fetchBeerFile(
@@ -156,9 +179,10 @@ export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
       onPick({ id: beer.id, picture });
     } catch (error) {
       if (mounted.current) {
-        setPickError(
-          `That beer couldn't be loaded: ${error instanceof Error ? error.message : 'no answer.'}`
-        );
+        setNotice({
+          text: `That beer couldn't be loaded: ${error instanceof Error ? error.message : 'no answer.'}`,
+          error: true,
+        });
       }
     } finally {
       if (mounted.current) {
@@ -167,11 +191,78 @@ export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
     }
   };
 
+  const toggle = (id: string) => {
+    setSelected((chosen) =>
+      chosen.includes(id) ? chosen.filter((each) => each !== id) : [...chosen, id]
+    );
+    setConfirming(false);
+  };
+
+  const stopSelecting = () => {
+    setSelecting(false);
+    setSelected([]);
+    setConfirming(false);
+  };
+
+  // Removes the chosen beers from every tap that has them and can be reached.
+  const remove = async () => {
+    setRemoving(true);
+    setNotice(null);
+
+    const libraries = taps.flatMap((state) => (state.library ? [state.library] : []));
+    const results = await Promise.all(
+      removalPlan(libraries, selected).map(({ tap, ids }) => removeBeers(tap, thisTapId, ids))
+    );
+
+    if (!mounted.current) {
+      return;
+    }
+
+    setTaps((states) =>
+      states.map((state) => {
+        const result = results.find((each) => each.tap.deviceId === state.tap.deviceId);
+
+        return result && state.library
+          ? {
+              ...state,
+              library: {
+                ...state.library,
+                beers: state.library.beers.filter((beer) => !result.removed.includes(beer.id)),
+              },
+            }
+          : state;
+      })
+    );
+    setNotice({
+      text: removalSummary(results, unreachable),
+      error: results.some((result) => result.error),
+    });
+    setSelected([]);
+    setConfirming(false);
+    setRemoving(false);
+    setSelecting(makingRoom);
+
+    const madeRoom = results.some(
+      (result) => result.tap.deviceId === thisTapId && result.removed.length > 0
+    );
+    if (onMadeRoom && madeRoom) {
+      await onMadeRoom();
+    }
+  };
+
+  const summary = thisTap?.library
+    ? makingRoom
+      ? `This tap's library is full (${thisTap.library.beers.length} of ${thisTap.library.capacity}). Choose beers to remove from every tap to make room for the one just sent, or close to leave it unsaved.`
+      : `${thisTap.library.beers.length} of ${thisTap.library.capacity} on this tap`
+    : thisTap?.failed
+      ? "This tap's library couldn't be read"
+      : 'Loading…';
+
   return (
     <div
       className="modal-backdrop"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
+        if (event.target === event.currentTarget && !removing) {
           onClose();
         }
       }}
@@ -181,41 +272,54 @@ export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
         role="dialog"
         aria-modal="true"
         aria-labelledby="library-modal-title"
-        aria-busy={loading}
+        aria-busy={loading || removing}
       >
         <div className="library-heading">
           <div className="modal-icon settings-modal-icon" aria-hidden="true">
             <Library size={22} strokeWidth={1.8} />
           </div>
           <div>
-            <h2 id="library-modal-title">Beer library</h2>
+            <h2 id="library-modal-title">{makingRoom ? 'Make room' : 'Beer library'}</h2>
             <p className="library-summary">
-              {thisTap?.library
-                ? `${thisTap.library.beers.length} of ${thisTap.library.capacity} on this tap`
-                : thisTap?.failed
-                  ? "This tap's library couldn't be read"
-                  : 'Loading…'}
-              {unreachable.length > 0 && ` · ${unreachable.join(' and ')} couldn't be reached`}
+              {summary}
+              {unreachable.length > 0 &&
+                (makingRoom
+                  ? ` ${unreachable.join(' and ')} couldn't be reached.`
+                  : ` · ${unreachable.join(' and ')} couldn't be reached`)}
             </p>
           </div>
         </div>
 
-        {beers.length > 0 ? (
-          <ul className="library-grid" aria-label="Beers, last shown first">
-            {beers.map((beer) => {
+        {shownBeers.length > 0 ? (
+          <ul
+            className={`library-grid ${selecting ? 'is-selecting' : ''}`}
+            aria-label={selecting ? 'Beers to remove' : 'Beers, last shown first'}
+          >
+            {shownBeers.map((beer) => {
               const lastShown = formatLastShown(beer);
+              const chosen = selected.includes(beer.id);
 
               return (
                 <li key={beer.id}>
                   <button
-                    className="library-beer"
+                    className={`library-beer ${chosen ? 'is-selected' : ''}`}
                     type="button"
-                    disabled={picking !== null}
-                    aria-label={`Load the beer last shown on ${lastShown}`}
-                    onClick={() => void pick(beer)}
+                    disabled={busy}
+                    aria-pressed={selecting ? chosen : undefined}
+                    aria-label={
+                      selecting
+                        ? `The beer last shown on ${lastShown}`
+                        : `Load the beer last shown on ${lastShown}`
+                    }
+                    onClick={() => (selecting ? toggle(beer.id) : void pick(beer))}
                   >
                     <span className="library-thumbnail">
                       {thumbnails[beer.id] && <img src={thumbnails[beer.id]} alt="" />}
+                      {selecting && (
+                        <span className="library-check" aria-hidden="true">
+                          {chosen && <Check size={16} strokeWidth={3} />}
+                        </span>
+                      )}
                       {picking === beer.id && (
                         <LoaderCircle className="upload-spinner" size={26} aria-hidden="true" />
                       )}
@@ -234,17 +338,87 @@ export const LibraryDialog = ({ onClose, onPick }: LibraryDialogProps) => {
           </p>
         )}
 
-        {pickError && (
-          <p className="laser-modal-error" role="alert">
-            <CircleAlert size={16} aria-hidden="true" /> {pickError}
+        {notice && (
+          <p
+            className={notice.error ? 'laser-modal-error' : 'library-notice'}
+            role={notice.error ? 'alert' : 'status'}
+          >
+            {notice.error && <CircleAlert size={16} aria-hidden="true" />} {notice.text}
           </p>
         )}
 
-        <div className="modal-actions">
-          <button className="modal-button" type="button" autoFocus onClick={onClose}>
-            Close
-          </button>
-        </div>
+        {confirming ? (
+          <div className="modal-actions library-actions">
+            <p className="library-confirm">
+              Remove {beersText(selected.length)} from every tap?{' '}
+              {selected.length === 1 ? "Its picture can't" : "Their pictures can't"} be got back.
+            </p>
+            <button
+              className="modal-button"
+              type="button"
+              disabled={removing}
+              onClick={() => setConfirming(false)}
+            >
+              Back
+            </button>
+            <button
+              className="modal-button destructive-button"
+              type="button"
+              autoFocus
+              disabled={removing}
+              onClick={() => void remove()}
+            >
+              {removing && <LoaderCircle className="upload-spinner" size={16} aria-hidden="true" />}
+              {removing ? 'Removing…' : makingRoom ? 'Remove and save' : 'Remove'}
+            </button>
+          </div>
+        ) : selecting ? (
+          <div className="modal-actions library-actions">
+            <p className="library-confirm">
+              {selected.length > 0 ? `${selected.length} selected` : 'Choose the beers to remove'}
+            </p>
+            <button
+              className="modal-button"
+              type="button"
+              disabled={busy}
+              onClick={makingRoom ? onClose : stopSelecting}
+            >
+              {makingRoom ? "Don't save" : 'Cancel'}
+            </button>
+            <button
+              className="modal-button destructive-button"
+              type="button"
+              disabled={busy || selected.length === 0}
+              onClick={() => setConfirming(true)}
+            >
+              {/* With nothing chosen yet, no count. */}
+              {[
+                'Remove',
+                selected.length > 0 ? ` ${selected.length}` : '',
+                makingRoom ? ' and save' : '',
+              ].join('')}
+            </button>
+          </div>
+        ) : (
+          <div className="modal-actions library-actions">
+            {beers.length > 0 && (
+              <button
+                className="modal-button library-select-button"
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setSelecting(true);
+                  setNotice(null);
+                }}
+              >
+                Select
+              </button>
+            )}
+            <button className="modal-button" type="button" autoFocus onClick={onClose}>
+              Close
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
