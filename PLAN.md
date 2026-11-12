@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done, step 6 (beer library) in progress (6a, 6b and 6c done and on tap 1; 6d, the keg states, built and on tap 1, still to see on its screen). Last updated 2026-11-11.
+Status: steps 0 to 5 done; step 6 (beer library) done on tap 1, still to test sending on one tap and picking on another once tap 2 is running; step 7 (setup help) done on tap 1. Last updated 2026-11-12.
 
 ## Goal
 
@@ -175,7 +175,7 @@ from real kegs at the next keg change.
   - No saved image: show setup help instead. Before Wi-Fi is set up, that is the
     access point name and password; once connected, it is
     `http://<hostname>-<deviceId>.local`. Setup help never replaces a saved image, for
-    example after a power cut.
+    example after a power cut. Done in step 7, below.
 
 ## Redraw rules
 
@@ -247,7 +247,7 @@ Force refresh in the settings menu still redraws on demand.
 - **Factory reset** replaces Forget Wi-Fi. It clears Wi-Fi, sensor and image, then
   reboots into setup. It keeps the log and the beer library unless asked to clear
   them too. Done in step 2b, apart from the sensor (step 4) and library (6a).
-  The screen keeps the last picture until the setup help screen arrives in step 7.
+  The restart then shows the setup help (step 7).
 - **Lasers:** a shared list, `config/lasers.json` (laser number and address), is
   built into every tap. Each tap stores which laser it shows and which mode it
   expects (Smart by default). RAPT sensors not in the list can still be chosen by
@@ -371,8 +371,7 @@ Force refresh in the settings menu still redraws on demand.
     a reminder of when the keg was emptied or cleaned. The strip still shows the
     laser's reading. Nothing switches to them automatically.
   - Built in 6d, chosen from mockups (H, the handwritten chalkboard). Tested against
-    faked taps and uploaded to tap 1; still to send to its screen, as tap 1 was
-    away from its Wi-Fi:
+    faked taps, and both sent to tap 1's screen, where they look right:
     - A pub chalkboard: black, with a double white border. Across the middle, a worn
       rubber stamp in Roboto Bold, tilted slightly: red KEG EMPTY or green KEG READY.
     - Above it, a line in chalk: Permanent Marker, with tiny specks knocked out of
@@ -498,9 +497,36 @@ Each step ends with something visible to check.
    the factory reset option; (6b) saving on Send and the Library grid from all taps;
    (6c) removing several and the prompt when full; (6d) the keg states. 6a done,
    tested on tap 1; 6b and 6c built, tested against faked taps and on tap 1; 6d built,
-   tested against faked taps and uploaded to tap 1.
+   tested against faked taps and on tap 1's screen. Still to do: send a beer on one
+   tap and pick it on another, once tap 2 is running.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
-   planned here, were done in step 5a.
+   planned here, were done in step 5a. Done, and checked on tap 1's screen; chosen
+   from mockups:
+   - With no picture saved (a newly flashed tap, or after a factory reset), the
+     tap draws setup help in the picture's square, above the strip, in black and
+     white. Screen 1, "Set up Tap 2", while the tap's own network is open and it
+     isn't on Wi-Fi: a QR code that offers to join that network (the `WIFI:` form
+     phone cameras understand), the network's name and password, and "Then the
+     setup page opens". Screen 2, "Tap 2 is ready", once on Wi-Fi: a QR code that
+     opens the tap's page by IP address, which works on any phone on the same
+     Wi-Fi, and the `.local` name and the IP written out. While the tap is still
+     joining its saved Wi-Fi it draws nothing, so a tap about to join doesn't
+     redraw twice. It redraws when the screen or the IP address changes, and the
+     first picture replaces it for good.
+   - The titles in Permanent Marker at 38px, the keg states' chalk, and the rest in
+     Roboto Bold at 22px, from the strip's glyph script (`pnpm strip:glyphs`, which
+     now takes either typeface), firmware only. The QR codes come from the QR
+     generator in the ESP32's own libraries, at medium error correction. The
+     firmware grew by 31 KB, to 59% of its slot.
+   - The drawing (`esp32/lib/Strip/SetupHelp`) has no Arduino code, so laptop tests
+     check its layout, its QR contents and its margins. The strip and the help share
+     one drawing core (`Draw`); the strip's pixel tests show it's unchanged.
+   - Developer mode's test values have a Setup help choice: Off, 1 or 2. The preview
+     shows the tap's own drawing from `GET /setup-help?screen=join|ready`, with the
+     password left out of its text and its QR code, and Show on device puts it on the
+     screen, with the real password, alongside the test values for 5 minutes or
+     until Back to live. Tested on tap 1: both previews, their QR codes decoded,
+     and Show on device and Back to live, each a redraw in the device log.
 8. **Fit the enclosure,** once the case parts are printed and the last screens arrive.
    The case's frame may cover a few pixels of each screen, and more on one side
    than the other. Each tap gets its own visible area (how much each edge loses),

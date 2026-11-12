@@ -2,6 +2,7 @@
 // shows test values, with "Back to live".
 import { useEffect, useEffectEvent, useState } from 'react';
 
+import { SETUP_HELP_SCREENS } from './setup-help';
 import {
   formatCountdown,
   TEST_SECONDS,
@@ -64,6 +65,10 @@ type TestValuesPanelProps = {
   errors: string[];
   // When the tap's test values end, or null while it shows the laser's.
   endsAt: number | null;
+  // The tap shows the setup help with them.
+  showingSetupHelp: boolean;
+  // Why the preview can't show the chosen setup help.
+  setupHelpError: string;
   sending: 'show' | 'live' | null;
   sendError: string;
   onShow: () => void;
@@ -78,6 +83,8 @@ export const TestValuesPanel = ({
   onInputsChange,
   errors,
   endsAt,
+  showingSetupHelp,
+  setupHelpError,
   sending,
   sendError,
   onShow,
@@ -180,6 +187,37 @@ export const TestValuesPanel = ({
               No signal hides the mode warning, as it does on the tap.
             </p>
           )}
+          <div className="test-setup-help">
+            <span id="setup-help-label">Setup help</span>
+            <div className="mode-switch" role="group" aria-labelledby="setup-help-label">
+              {[{ screen: null, label: 'Off' }, ...SETUP_HELP_SCREENS].map(({ screen, label }) => (
+                <button
+                  key={label}
+                  className={inputs.setupHelp === screen ? 'active' : ''}
+                  type="button"
+                  aria-pressed={inputs.setupHelp === screen}
+                  onClick={() => change({ setupHelp: screen })}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {inputs.setupHelp && (
+            <p className="test-values-hint">
+              What the tap shows in place of a picture while it has none:{' '}
+              {inputs.setupHelp === 'join'
+                ? 'before its Wi-Fi is set up.'
+                : 'on Wi-Fi, until the first picture.'}{' '}
+              The preview is the tap's own drawing, with the password left out. Show on device puts
+              it on the screen with the test values.
+            </p>
+          )}
+          {setupHelpError && (
+            <p className="message error-message" role="alert">
+              {setupHelpError}
+            </p>
+          )}
           {errors.map((error) => (
             <p key={error} className="message error-message">
               {error}
@@ -201,7 +239,8 @@ export const TestValuesPanel = ({
         {endsAt !== null && (
           <>
             <p className="test-countdown">
-              Test values on the screen for <Countdown endsAt={endsAt} onEnd={onEnd} />
+              {showingSetupHelp ? 'Setup help and test values' : 'Test values'} on the screen for{' '}
+              <Countdown endsAt={endsAt} onEnd={onEnd} />
             </p>
             <button
               className="modal-button"

@@ -8,6 +8,7 @@ import {
   PERCENT_ERROR,
   PICK_UP_MS,
   readTestInputs,
+  showsSetupHelp,
   TEMPERATURE_ERROR,
   TEST_SECONDS,
   testEndsAt,
@@ -120,6 +121,14 @@ describe('the form for the tap', () => {
     expect(testForm(read({ percent: '' }).strip)).toBeNull();
     expect(testForm(read({ litres: '' }).strip)).toBeNull();
   });
+
+  it('asks for the setup help in place of the picture only when one is chosen', () => {
+    const strip = read({}).strip;
+
+    expect(testForm(strip, 'join')?.get('setupHelp')).toBe('join');
+    expect(testForm(strip, 'ready')?.get('setupHelp')).toBe('ready');
+    expect(testForm(strip, null)?.has('setupHelp')).toBe(false);
+  });
 });
 
 describe('when the test values end', () => {
@@ -155,6 +164,29 @@ describe('when the test values end', () => {
     expect(testEndsAt(report(190, at + 10_000), live)).toBeNull();
     expect(testEndsAt(report(null, at + 1_000), live)).toBeNull();
     expect(testEndsAt(report(140, at + PICK_UP_MS), live)).toBe(at + PICK_UP_MS + 140_000);
+  });
+});
+
+describe('whether the tap shows the setup help', () => {
+  const at = 1_000_000;
+  const report = (setupHelp: 'join' | 'ready' | null, receivedAt: number) => ({
+    setupHelp,
+    receivedAt,
+  });
+
+  it('goes by the tap, and by the request until the tap has picked it up', () => {
+    const show = { kind: 'show' as const, at, setupHelp: 'join' as const };
+
+    expect(showsSetupHelp(report('ready', at), null)).toBe(true);
+    expect(showsSetupHelp(null, show)).toBe(true);
+    // Not picked up yet, then picked up
+    expect(showsSetupHelp(report(null, at + 2_000), show)).toBe(true);
+    expect(showsSetupHelp(report('join', at + 2_000), show)).toBe(true);
+    // Still not shown after a redraw's time
+    expect(showsSetupHelp(report(null, at + PICK_UP_MS), show)).toBe(false);
+    // Test values alone, and Back to live
+    expect(showsSetupHelp(report(null, at + 2_000), { kind: 'show', at })).toBe(false);
+    expect(showsSetupHelp(report('join', at + 2_000), { kind: 'live', at })).toBe(false);
   });
 });
 

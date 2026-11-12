@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { developmentDelay, isNumberOrNull, isObject, readDeviceJson } from './device-json';
 import type { StripValues } from './strip';
-import { TEST_SECONDS, testForm } from './test-values';
+import { TEST_SECONDS, testForm, type SetupHelpScreen } from './test-values';
 
 // How often the preview asks. The strip changes every few minutes at most.
 export const STRIP_POLL_MS = 15000;
@@ -13,7 +13,12 @@ export type StripState = {
   values: StripValues;
   // null when the strip shows the laser's values.
   testSecondsLeft: number | null;
+  // The setup help screen showing with the test values, or null.
+  setupHelp: SetupHelpScreen | null;
 };
+
+const asSetupHelp = (value: unknown): SetupHelpScreen | null =>
+  value === 'join' || value === 'ready' ? value : null;
 
 export const isStripValues = (value: unknown): value is StripValues =>
   isObject(value) &&
@@ -43,10 +48,15 @@ const developmentState: StripState = {
     test: false,
   },
   testSecondsLeft: null,
+  setupHelp: null,
 };
 
 // Test values on the made-up tap, and when they end.
-let developmentTest: { values: StripValues; endsAt: number } | null = null;
+let developmentTest: {
+  values: StripValues;
+  setupHelp: SetupHelpScreen | null;
+  endsAt: number;
+} | null = null;
 
 const developmentStrip = (): StripState => {
   if (developmentTest && Date.now() >= developmentTest.endsAt) {
@@ -57,6 +67,7 @@ const developmentStrip = (): StripState => {
     ? {
         values: { ...developmentTest.values, test: true },
         testSecondsLeft: Math.ceil((developmentTest.endsAt - Date.now()) / 1000),
+        setupHelp: developmentTest.setupHelp,
       }
     : developmentState;
 };
@@ -79,7 +90,11 @@ export const fetchStrip = async (): Promise<StripState> => {
     throw new Error('The device returned an invalid response.');
   }
 
-  return { values: result.values, testSecondsLeft: result.testSecondsLeft };
+  return {
+    values: result.values,
+    testSecondsLeft: result.testSecondsLeft,
+    setupHelp: asSetupHelp(result.setupHelp),
+  };
 };
 
 // Sends a POST to the tap, throwing its message if it turns the request down.
@@ -96,9 +111,13 @@ const postToTap = async (path: string, body?: URLSearchParams) => {
   }
 };
 
-// "Show on device": the tap shows these test values for TEST_SECONDS.
-export const showTestValues = async (values: StripValues) => {
-  const form = testForm(values);
+// "Show on device": the tap shows these test values for TEST_SECONDS, with the
+// setup help in place of the picture if asked.
+export const showTestValues = async (
+  values: StripValues,
+  setupHelp: SetupHelpScreen | null = null
+) => {
+  const form = testForm(values, setupHelp);
 
   if (!form) {
     throw new Error('The test values are not complete.');
@@ -106,7 +125,7 @@ export const showTestValues = async (values: StripValues) => {
 
   if (import.meta.env.DEV) {
     await developmentDelay();
-    developmentTest = { values, endsAt: Date.now() + TEST_SECONDS * 1000 };
+    developmentTest = { values, setupHelp, endsAt: Date.now() + TEST_SECONDS * 1000 };
     return;
   }
 

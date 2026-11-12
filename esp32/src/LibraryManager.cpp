@@ -126,8 +126,7 @@ static void sendJson(AsyncWebServerRequest* request, int code, const JsonDocumen
     request->send(response);
 }
 
-// Lets pages on the local network, such as another tap's, read the answer.
-static void allowLocalPages(AsyncWebServerRequest* request, ArMiddlewareNext next)
+void allowLocalPages(AsyncWebServerRequest* request, ArMiddlewareNext next)
 {
     next();
 

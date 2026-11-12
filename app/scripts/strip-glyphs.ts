@@ -1,6 +1,8 @@
-// Turns Roboto Bold and the strip's Lucide icons into 1-bit pixel tables, so the
-// tap's firmware can draw the strip without a font library. The web app gets the
-// same tables, so its preview of the strip matches the screen pixel for pixel.
+// Turns Roboto Bold, Permanent Marker and the strip's Lucide icons into 1-bit
+// pixel tables, so the tap's firmware can draw the strip and the setup help without
+// a font library.
+// The web app gets the strip's tables, so its preview of the strip matches the
+// screen pixel for pixel; it shows the setup help as the tap draws it.
 //
 // Usage (from app/): pnpm strip:glyphs [--preview <file.png>]
 // Run it after changing a size, a character or an icon below, and commit the
@@ -14,12 +16,37 @@ import sharp from 'sharp';
 
 import { repositoryDirectory } from './device-config.ts';
 
+// The typefaces, from their fontsource packages: Roboto Bold for most, and
+// Permanent Marker, the keg states' chalk (Apache License 2.0), for the setup
+// help's titles.
+const typefaces = {
+  roboto: {
+    name: 'Roboto Bold',
+    file: '@fontsource/roboto/files/roboto-latin-700-normal.woff2',
+  },
+  marker: {
+    name: 'Permanent Marker',
+    file: '@fontsource/permanent-marker/files/permanent-marker-latin-400-normal.woff2',
+  },
+} as const;
+
+type Typeface = keyof typeof typefaces;
+
 type FontSpec = {
   name: string;
+  // Roboto Bold unless given.
+  typeface?: Typeface;
   size: number;
   characters: string;
   use: string;
+  // Left out of the web app, which never draws with it.
+  firmwareOnly?: boolean;
 };
+
+// Every printable ASCII character, for text from the tap's profile.
+const ascii = String.fromCodePoint(
+  ...Array.from({ length: 0x7f - 0x20 }, (_, index) => 0x20 + index)
+);
 
 // Only the characters each size needs. Add one here before the firmware uses it.
 const fontSpecs: FontSpec[] = [
@@ -40,6 +67,21 @@ const fontSpecs: FontSpec[] = [
     size: 64,
     characters: '0123456789.L',
     use: 'the litres in the bar',
+  },
+  {
+    name: 'helpTitleFont',
+    typeface: 'marker',
+    size: 38,
+    characters: ascii,
+    use: "the setup help's title",
+    firmwareOnly: true,
+  },
+  {
+    name: 'helpFont',
+    size: 22,
+    characters: ascii,
+    use: "the setup help's text",
+    firmwareOnly: true,
   },
 ];
 
@@ -105,10 +147,6 @@ const iconSpecs: IconSpec[] = [
 ];
 
 const appDirectory = path.join(repositoryDirectory, 'app');
-const fontPath = path.join(
-  appDirectory,
-  'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff2'
-);
 const cppDirectory = path.join(repositoryDirectory, 'esp32/lib/Strip');
 const tsPath = path.join(appDirectory, 'web/src/strip-glyphs.ts');
 
@@ -131,7 +169,7 @@ type Glyph = Bitmap & {
 type Font = FontSpec & {
   capHeight: number;
   glyphs: Glyph[];
-  // Pairs of characters whose spacing Roboto adjusts, in 1/16 px.
+  // Pairs of characters whose spacing the typeface adjusts, in 1/16 px.
   kerning: Array<{ first: string; second: string; adjust: number }>;
 };
 
@@ -177,20 +215,30 @@ const trim = (bitmap: Bitmap) => {
   return { bitmap: { width, height, pixels }, dx: minX, dy: minY };
 };
 
-const loadRoboto = (): FontkitFont => {
-  const font = openSync(fontPath);
-  if (!('glyphForCodePoint' in font)) throw new Error(`${fontPath} is a font collection`);
+const loaded = new Map<Typeface, FontkitFont>();
+
+const loadTypeface = (typeface: Typeface): FontkitFont => {
+  const known = loaded.get(typeface);
+  if (known) return known;
+
+  const file = path.join(appDirectory, 'node_modules', typefaces[typeface].file);
+  const font = openSync(file);
+  if (!('glyphForCodePoint' in font)) throw new Error(`${file} is a font collection`);
+  loaded.set(typeface, font);
   return font;
 };
 
-const buildFont = async (roboto: FontkitFont, spec: FontSpec): Promise<Font> => {
-  const scale = spec.size / roboto.unitsPerEm;
+const typefaceOf = (spec: FontSpec) => typefaces[spec.typeface ?? 'roboto'];
+
+const buildFont = async (spec: FontSpec): Promise<Font> => {
+  const typeface = loadTypeface(spec.typeface ?? 'roboto');
+  const scale = spec.size / typeface.unitsPerEm;
   const characters = [...new Set(spec.characters)].sort();
   const glyphs: Glyph[] = [];
 
   for (const character of characters) {
-    const glyph = roboto.glyphForCodePoint(character.codePointAt(0)!);
-    if (glyph.id === 0) throw new Error(`Roboto has no "${character}"`);
+    const glyph = typeface.glyphForCodePoint(character.codePointAt(0)!);
+    if (glyph.id === 0) throw new Error(`${typefaceOf(spec).name} has no "${character}"`);
     const { minX, minY, maxX, maxY } = glyph.bbox;
     // A whole-pixel box around the outline, with the pen at x 0 and the baseline at y 0.
     const left = Math.floor(minX * scale) - 1;
@@ -211,14 +259,14 @@ const buildFont = async (roboto: FontkitFont, spec: FontSpec): Promise<Font> => 
   const kerning: Font['kerning'] = [];
   for (const first of characters) {
     for (const second of characters) {
-      const run = roboto.layout(first + second);
+      const run = typeface.layout(first + second);
       const adjust = run.positions[0]!.xAdvance - run.glyphs[0]!.advanceWidth;
       const sixteenths = toSixteenths(adjust * scale);
       if (sixteenths !== 0) kerning.push({ first, second, adjust: sixteenths });
     }
   }
 
-  const capHeight = Math.round(roboto.capHeight * scale);
+  const capHeight = Math.round(typeface.capHeight * scale);
   return { ...spec, capHeight, glyphs, kerning };
 };
 
@@ -268,7 +316,7 @@ const cppBytes = (bytes: Uint8Array, indent: string) => {
 
 const generatedNote = (comment: string) =>
   [
-    `${comment} Generated by app/scripts/strip-glyphs.ts from Roboto Bold and Lucide icons.`,
+    `${comment} Generated by app/scripts/strip-glyphs.ts from Roboto Bold, Permanent Marker and Lucide icons.`,
     `${comment} Don't edit it: change the script and run pnpm strip:glyphs from app/.`,
   ].join('\n');
 
@@ -282,8 +330,9 @@ const writeCppHeader = (fonts: Font[], icons: Icon[]) => {
 
 #include <stdint.h>
 
-// Roboto Bold and the strip's icons as 1-bit pixels: each row is padded to whole
-// bytes, with the most significant bit on the left.
+// Roboto Bold, Permanent Marker and the strip's icons as 1-bit pixels, for the
+// strip and the setup help: each row is padded to whole bytes, with the most
+// significant bit on the left.
 namespace StripGlyphs
 {
     struct Glyph
@@ -319,7 +368,7 @@ namespace StripGlyphs
         uint8_t glyphCount;
         const Glyph* glyphs;
         const uint8_t* bits;
-        uint8_t kerningCount;
+        uint16_t kerningCount;
         const Kerning* kerning;
     };
 
@@ -357,7 +406,7 @@ const writeCppSource = (fonts: Font[], icons: Icon[]) => {
           )
           .join('\n')}\n    };\n\n`
       : '';
-    return `    // Roboto Bold ${font.size}px: ${font.glyphs.map((glyph) => glyph.character).join('')}
+    return `    // ${typefaceOf(font).name} ${font.size}px: ${font.glyphs.map((glyph) => glyph.character).join('')}
     static const uint8_t ${font.name}Bits[] = {
 ${cppBytes(Uint8Array.from(bits), '        ')}
     };
@@ -466,8 +515,10 @@ ${[...fontSource, ...iconSource].join('\n\n')}
 // An enlarged picture of every glyph and icon, and some strip text drawn from the
 // tables, to check them by eye.
 const writePreview = async (fonts: Font[], icons: Icon[], file: string) => {
-  const width = 520;
-  const height = 300;
+  const lineWidth = (font: Font) =>
+    Math.ceil(font.glyphs.reduce((total, glyph) => total + glyph.advance, 0) / 16) + 16;
+  const width = Math.max(520, ...fonts.map(lineWidth));
+  const height = fonts.reduce((total, font) => total + font.size + 8, 8) + 220;
   const canvas = new Uint8Array(width * height);
   const blit = (bitmap: Bitmap, x: number, y: number) => {
     for (let j = 0; j < bitmap.height; j++) {
@@ -519,16 +570,21 @@ const writePreview = async (fonts: Font[], icons: Icon[], file: string) => {
     .toFile(file);
 };
 
-const roboto = loadRoboto();
 const fonts: Font[] = [];
-for (const spec of fontSpecs) fonts.push(await buildFont(roboto, spec));
+for (const spec of fontSpecs) fonts.push(await buildFont(spec));
 const icons: Icon[] = [];
 for (const spec of iconSpecs) icons.push(await buildIcon(spec));
 
 fs.mkdirSync(cppDirectory, { recursive: true });
 fs.writeFileSync(path.join(cppDirectory, 'StripGlyphs.h'), writeCppHeader(fonts, icons));
 fs.writeFileSync(path.join(cppDirectory, 'StripGlyphs.cpp'), writeCppSource(fonts, icons));
-fs.writeFileSync(tsPath, await writeTypeScript(fonts, icons));
+fs.writeFileSync(
+  tsPath,
+  await writeTypeScript(
+    fonts.filter((font) => !font.firmwareOnly),
+    icons
+  )
+);
 
 for (const font of fonts) {
   const bytes = font.glyphs.reduce((total, glyph) => total + packBits(glyph).length, 0);

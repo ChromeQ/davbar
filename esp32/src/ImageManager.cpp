@@ -9,6 +9,7 @@
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
 #include "Screen.h"
+#include "SetupHelpManager.h"
 #include "Storage.h"
 #include "StripManager.h"
 
@@ -305,18 +306,34 @@ static void updateDisplay(bool force, const char* reason)
 
 static void drawScreen(bool force, const char* reason, const Strip::Values& strip)
 {
-    if (!DataFS.exists("/image.bin"))
+    bool imageSaved = DataFS.exists("/image.bin");
+    // In place of the picture while there's none, or to check it on the screen
+    SetupHelp::Screen help = setupHelpToDraw(imageSaved);
+
+    if (help != SetupHelp::Screen::None)
+    {
+        Serial.println("Drawing the setup help...");
+
+        if (!drawSetupHelp(screenBuffer, help, false))
+        {
+            logEvent("redraw failed", String(reason) + ", unable to draw the setup help");
+            return;
+        }
+    }
+    else if (!imageSaved)
     {
         logEvent("redraw skipped", String(reason) + ", no image saved");
         return;
     }
-
-    Serial.println("Loading image...");
-
-    if (!loadImage(screenBuffer))
+    else
     {
-        logEvent("redraw failed", String(reason) + ", unable to load the image");
-        return;
+        Serial.println("Loading image...");
+
+        if (!loadImage(screenBuffer))
+        {
+            logEvent("redraw failed", String(reason) + ", unable to load the image");
+            return;
+        }
     }
 
     Strip::draw(screenBuffer + IMAGE_SIZE, strip);

@@ -25,6 +25,10 @@ void startLibrary();
 
 void addLibraryRoutes(AsyncWebServer& server);
 
+// Middleware that lets pages on the local network, such as another tap's or the
+// web app's dev server, read a route's answer.
+void allowLocalPages(AsyncWebServerRequest* request, ArMiddlewareNext next);
+
 // For /status: how many beers this tap has, of how many.
 void addLibraryStatus(JsonObject library);
 
