@@ -18,6 +18,7 @@
 #include "LaserScanner.h"
 #include "LibraryManager.h"
 #include "Settings.h"
+#include "SetupHelpManager.h"
 #include "Storage.h"
 #include "StripManager.h"
 
@@ -473,6 +474,16 @@ static void handleStripTest(AsyncWebServerRequest* request)
     JsonDocument doc;
     JsonObject response = doc.to<JsonObject>();
     String error;
+    SetupHelp::Screen setupHelp;
+
+    if (!parseSetupHelpScreen(request->arg("setupHelp"), setupHelp))
+    {
+        response["success"] = false;
+        response["message"] = "The setup help must be join or ready.";
+        sendJson(request, 400, doc);
+
+        return;
+    }
 
     if (!showTestValues(
         request->arg("percent"),
@@ -481,6 +492,7 @@ static void handleStripTest(AsyncWebServerRequest* request)
         request->arg("battery"),
         request->arg("modeWarning"),
         request->arg("noSignal"),
+        setupHelp,
         error
     ))
     {
@@ -492,7 +504,9 @@ static void handleStripTest(AsyncWebServerRequest* request)
     }
 
     response["success"] = true;
-    response["message"] = "Showing the test values for 5 minutes.";
+    response["message"] = setupHelp == SetupHelp::Screen::None
+        ? "Showing the test values for 5 minutes."
+        : "Showing the setup help and test values for 5 minutes.";
     sendJson(request, 200, doc);
 }
 
@@ -988,6 +1002,21 @@ void startWifi()
     beginSavedWifi();
 }
 
+bool wifiIsConnected()
+{
+    return wifiConnected;
+}
+
+bool setupAccessPointIsOpen()
+{
+    return accessPointOpen();
+}
+
+String wifiIpAddress()
+{
+    return WiFi.localIP().toString();
+}
+
 void startWebServer()
 {
     server.on(
@@ -1089,6 +1118,8 @@ void startWebServer()
     );
 
     addLibraryRoutes(server);
+
+    addSetupHelpRoutes(server);
 
     server.onNotFound(
         [](AsyncWebServerRequest *request)

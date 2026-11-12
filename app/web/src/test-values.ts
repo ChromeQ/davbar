@@ -3,6 +3,10 @@
 // screen. The tap's side is showTestValues in esp32/src/StripManager.cpp.
 import type { StripValues } from './strip';
 
+// The setup help screens the tap draws in place of a picture while it has none
+// (esp32/lib/Strip/SetupHelp.h): before its Wi-Fi is set up, and on Wi-Fi.
+export type SetupHelpScreen = 'join' | 'ready';
+
 // The fields as typed, so a number part-way through being typed stays in its box.
 export type TestInputs = {
   percent: string;
@@ -11,6 +15,8 @@ export type TestInputs = {
   battery: string;
   modeWarning: boolean;
   noSignal: boolean;
+  // Shown in place of the picture with the test values, or null for the picture.
+  setupHelp: SetupHelpScreen | null;
 };
 
 export const DEFAULT_TEST_INPUTS: TestInputs = {
@@ -20,6 +26,7 @@ export const DEFAULT_TEST_INPUTS: TestInputs = {
   battery: '100',
   modeWarning: false,
   noSignal: false,
+  setupHelp: null,
 };
 
 // How long the tap shows test values before going back to the laser's.
@@ -132,8 +139,12 @@ export const readTestInputs = (
   };
 };
 
-// The form POST /strip/test takes, or null if a value is missing.
-export const testForm = (strip: StripValues): URLSearchParams | null => {
+// The form POST /strip/test takes, or null if a value is missing. setupHelp, if
+// set, shows that screen in place of the picture meanwhile.
+export const testForm = (
+  strip: StripValues,
+  setupHelp: SetupHelpScreen | null = null
+): URLSearchParams | null => {
   const { percent, litresTenths, temperatureTenths, batteryPercent } = strip;
 
   if (
@@ -145,7 +156,7 @@ export const testForm = (strip: StripValues): URLSearchParams | null => {
     return null;
   }
 
-  return new URLSearchParams({
+  const form = new URLSearchParams({
     percent: String(percent),
     litres: formatTenths(litresTenths),
     temperature: formatTenths(temperatureTenths),
@@ -153,10 +164,17 @@ export const testForm = (strip: StripValues): URLSearchParams | null => {
     modeWarning: String(strip.modeWarning),
     noSignal: String(strip.noSignal),
   });
+
+  if (setupHelp) {
+    form.set('setupHelp', setupHelp);
+  }
+
+  return form;
 };
 
-// The last "Show on device" or "Back to live" this page sent, and when.
-export type TestRequest = { kind: 'show' | 'live'; at: number };
+// The last "Show on device" or "Back to live" this page sent, and when, and the
+// setup help asked for with it.
+export type TestRequest = { kind: 'show' | 'live'; at: number; setupHelp?: SetupHelpScreen | null };
 
 // What the tap last said about test values, and when its answer arrived.
 export type TestReport = { testSecondsLeft: number | null; receivedAt: number };
@@ -195,6 +213,29 @@ export const testEndsAt = (
   }
 
   return requested;
+};
+
+// Whether the tap shows the setup help with its test values. As with
+// testEndsAt, the last request decides until the tap's answers show it.
+export const showsSetupHelp = (
+  report: { setupHelp: SetupHelpScreen | null; receivedAt: number } | null,
+  request: TestRequest | null
+) => {
+  const reported = report !== null && report.setupHelp !== null;
+
+  if (!request) {
+    return reported;
+  }
+
+  const requested = request.kind === 'show' && Boolean(request.setupHelp);
+
+  if (!report || report.receivedAt < request.at) {
+    return requested;
+  }
+
+  return reported === requested || report.receivedAt >= request.at + PICK_UP_MS
+    ? reported
+    : requested;
 };
 
 // "4:05"

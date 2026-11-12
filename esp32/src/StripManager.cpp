@@ -43,6 +43,8 @@ static const unsigned long testDuration = 5UL * 60 * 1000;
 static bool testing = false;
 static unsigned long testStartedAt = 0;
 static Strip::Values testValues = {};
+// The setup help screen shown in place of the picture meanwhile, or None.
+static SetupHelp::Screen testHelp = SetupHelp::Screen::None;
 
 // Web requests arrive in the web server's task; the loop picks them up, so
 // only the loop changes what the strip shows. The loop also publishes what the
@@ -56,6 +58,7 @@ enum class TestRequest : uint8_t
 static portMUX_TYPE sharedLock = portMUX_INITIALIZER_UNLOCKED;
 static TestRequest testRequest = TestRequest::None;
 static Strip::Values requestedValues = {};
+static SetupHelp::Screen requestedHelp = SetupHelp::Screen::None;
 static Strip::Values publishedValues = {};
 
 // Whole seconds since the tap started, which never wrap around like millis().
@@ -196,6 +199,7 @@ static void updateTest()
     portENTER_CRITICAL(&sharedLock);
     TestRequest request = testRequest;
     Strip::Values values = requestedValues;
+    SetupHelp::Screen help = requestedHelp;
     testRequest = TestRequest::None;
     portEXIT_CRITICAL(&sharedLock);
 
@@ -204,13 +208,21 @@ static void updateTest()
         testing = true;
         testStartedAt = millis();
         testValues = values;
-        logEvent("test values", stripDescription(values));
+        testHelp = help;
+        logEvent(
+            "test values",
+            stripDescription(values) +
+                (help == SetupHelp::Screen::None
+                    ? String()
+                    : String(", setup help ") + (help == SetupHelp::Screen::JoinWifi ? "join" : "ready"))
+        );
         requestImageUpdate("test values");
         redrawRequested = true;
     }
     else if (testing && (request == TestRequest::Live || millis() - testStartedAt >= testDuration))
     {
         testing = false;
+        testHelp = SetupHelp::Screen::None;
         logEvent("back to live", request == TestRequest::Live ? "asked for" : "after 5 minutes");
         requestImageUpdate("back to live");
         redrawRequested = true;
@@ -382,6 +394,7 @@ bool showTestValues(
     const String& battery,
     const String& modeWarning,
     const String& noSignal,
+    SetupHelp::Screen setupHelp,
     String& error
 )
 {
@@ -434,10 +447,16 @@ bool showTestValues(
 
     portENTER_CRITICAL(&sharedLock);
     requestedValues = values;
+    requestedHelp = setupHelp;
     testRequest = TestRequest::Show;
     portEXIT_CRITICAL(&sharedLock);
 
     return true;
+}
+
+SetupHelp::Screen testSetupHelp()
+{
+    return testing ? testHelp : SetupHelp::Screen::None;
 }
 
 void showLiveValues()
@@ -490,6 +509,7 @@ void addStripStatus(JsonObject strip)
 
     // Read from the web server's task; a moment out is fine for a countdown.
     bool showing = testing;
+    SetupHelp::Screen help = testHelp;
     unsigned long elapsed = millis() - testStartedAt;
 
     if (showing && elapsed < testDuration)
@@ -499,5 +519,14 @@ void addStripStatus(JsonObject strip)
     else
     {
         strip["testSecondsLeft"] = nullptr;
+    }
+
+    if (showing && help != SetupHelp::Screen::None)
+    {
+        strip["setupHelp"] = help == SetupHelp::Screen::JoinWifi ? "join" : "ready";
+    }
+    else
+    {
+        strip["setupHelp"] = nullptr;
     }
 }

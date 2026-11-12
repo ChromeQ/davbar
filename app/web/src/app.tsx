@@ -76,10 +76,13 @@ import { TapSwitcher } from './tap-switcher';
 import {
   DEFAULT_TEST_INPUTS,
   readTestInputs,
+  showsSetupHelp,
   testEndsAt,
+  type SetupHelpScreen,
   type TestInputs,
   type TestRequest,
 } from './test-values';
+import { fetchSetupHelp } from './setup-help';
 import { loadDeveloperMode, saveDeveloperMode, TestValuesPanel } from './test-values-panel';
 import './common.style.css';
 import './app.style.css';
@@ -405,6 +408,15 @@ const App = () => {
   const stripValues = developerMode ? test.strip : (strip?.values ?? null);
   // The image the tap has stored, or null if it has none or couldn't send it.
   const [tapImage, setTapImage] = useState<Uint8Array | null>(null);
+  // Developer mode's setup help, as the tap draws it, for the screen chosen.
+  const setupHelpScreen = developerMode ? testInputs.setupHelp : null;
+  const [setupHelp, setSetupHelp] = useState<{
+    screen: SetupHelpScreen;
+    bytes: Uint8Array | null;
+    error: string;
+  } | null>(null);
+  const setupHelpShown =
+    setupHelpScreen && setupHelp?.screen === setupHelpScreen ? setupHelp : null;
   // Image mode's frame counts only while its image is still the one composed.
   const sourceFrame =
     mode === 'image' ? (image && imageFrame?.image === image ? imageFrame : null) : textFrame;
@@ -427,8 +439,9 @@ const App = () => {
     }
   }, [sourceFrame]);
   const binary = encoded.binary;
-  // Until something new is composed, the preview shows what the screen shows.
-  const previewImage = binary ?? tapImage;
+  // Until something new is composed, the preview shows what the screen shows. The
+  // setup help, chosen in developer mode, shows in place of either.
+  const previewImage = setupHelpShown?.bytes ?? binary ?? tapImage;
   const canPan = mode === 'image' && image !== null && overflows(image, zoom);
   const slider = image ? zoomSlider(image) : null;
   // A background fills any gaps around the image.
@@ -466,6 +479,37 @@ const App = () => {
       .then((image) => setTapImage(image))
       .catch(() => setTapImage(null));
   }, []);
+
+  useEffect(() => {
+    if (!setupHelpScreen) {
+      return;
+    }
+
+    let stopped = false;
+
+    fetchSetupHelp(setupHelpScreen).then(
+      (bytes) => {
+        if (!stopped) {
+          setSetupHelp({ screen: setupHelpScreen, bytes, error: '' });
+        }
+      },
+      (fetchError) => {
+        if (!stopped) {
+          setSetupHelp({
+            screen: setupHelpScreen,
+            bytes: null,
+            error: `The setup help can't be previewed: ${
+              fetchError instanceof Error ? fetchError.message : 'the device did not answer.'
+            }`,
+          });
+        }
+      }
+    );
+
+    return () => {
+      stopped = true;
+    };
+  }, [setupHelpScreen]);
 
   // Escape stops picking a colour from the image.
   useEffect(() => {
@@ -987,8 +1031,12 @@ const App = () => {
     setTestError('');
 
     try {
-      await (kind === 'show' ? showTestValues(test.strip) : showLiveValues());
-      setTestRequest({ kind, at: Date.now() });
+      await (kind === 'show' ? showTestValues(test.strip, setupHelpScreen) : showLiveValues());
+      setTestRequest({
+        kind,
+        at: Date.now(),
+        setupHelp: kind === 'show' ? setupHelpScreen : null,
+      });
       refreshStrip();
     } catch (sendError) {
       const action = kind === 'show' ? 'shown' : 'stopped';
@@ -1422,7 +1470,13 @@ const App = () => {
               <h2>Preview</h2>
             </div>
             <span className={`preview-state ${binary ? 'ready' : ''}`}>
-              {binary ? 'Ready' : tapImage ? 'On the tap' : 'Waiting'}
+              {setupHelpShown?.bytes
+                ? 'Setup help'
+                : binary
+                  ? 'Ready'
+                  : tapImage
+                    ? 'On the tap'
+                    : 'Waiting'}
             </span>
           </div>
 
@@ -1489,6 +1543,8 @@ const App = () => {
               onInputsChange={setTestInputs}
               errors={test.errors}
               endsAt={testEnd}
+              showingSetupHelp={showsSetupHelp(strip, testRequest)}
+              setupHelpError={setupHelpShown?.error ?? ''}
               sending={sendingTest}
               sendError={testError}
               onShow={() => void sendTest('show')}

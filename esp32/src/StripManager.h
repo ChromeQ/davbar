@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <SetupHelp.h>
 #include <Strip.h>
 
 // The keg strip below the image: what it shows, and when it redraws.
@@ -31,8 +32,9 @@ bool clearStripValues();
 // laser's, with a red border, for 5 minutes or until showLiveValues(). Each is
 // a form field: percent (0-100), temperature (°C, -20 to 50), battery (0-100),
 // and optionally litres (0-19; otherwise worked out from percent), modeWarning
-// and noSignal ("true"). Returns false with a message for the web app if one is
-// missing or out of range.
+// and noSignal ("true"). setupHelp, unless None, shows that setup help screen in
+// place of the picture meanwhile, to check it on the real screen. Returns false
+// with a message for the web app if one is missing or out of range.
 bool showTestValues(
     const String& percent,
     const String& litres,
@@ -40,12 +42,18 @@ bool showTestValues(
     const String& battery,
     const String& modeWarning,
     const String& noSignal,
+    SetupHelp::Screen setupHelp,
     String& error
 );
+
+// The setup help screen showing with the test values, or None. From the loop.
+SetupHelp::Screen testSetupHelp();
 
 // Goes back to the laser's values, if test values are showing.
 void showLiveValues();
 
 // Sets "values" to what the strip would show now, for the web app's preview,
-// and "testSecondsLeft" to how long test values have left, or null.
+// "testSecondsLeft" to how long test values have left, or null, and
+// "setupHelp" to the setup help screen showing with them ("join" or "ready"),
+// or null.
 void addStripStatus(JsonObject strip);

@@ -971,6 +971,23 @@ h2 {
   width: 68px;
 }
 
+/* Developer mode's Setup help choice: Off, 1 or 2 */
+.test-setup-help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  color: #66645c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.test-setup-help .mode-switch {
+  display: inline-flex;
+  text-transform: none;
+}
+
 .test-values-options {
   display: flex;
   flex-wrap: wrap;

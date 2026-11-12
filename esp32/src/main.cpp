@@ -5,6 +5,7 @@
 #include "ImageManager.h"
 #include "LaserScanner.h"
 #include "LibraryManager.h"
+#include "SetupHelpManager.h"
 #include "Storage.h"
 #include "StripManager.h"
 #include "WifiManager.h"
@@ -49,6 +50,8 @@ void loop()
     processLaserScanner();
 
     processStripManager();
+
+    processSetupHelp();
 
     processDeviceLog();
 }

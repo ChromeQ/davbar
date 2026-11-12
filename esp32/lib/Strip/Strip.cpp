@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "Draw.h"
 #include "StripGlyphs.h"
 
 namespace Strip
@@ -11,7 +12,6 @@ namespace Strip
     namespace
     {
         using StripGlyphs::Font;
-        using StripGlyphs::Glyph;
         using StripGlyphs::Icon;
 
         constexpr int Margin = 16;
@@ -42,207 +42,11 @@ namespace Strip
         constexpr int BarHeight = 96;
         constexpr int BarBorder = 4;
 
-        struct Canvas
-        {
-            uint8_t* bytes;
-
-            void set(int x, int y, Colour colour) const
-            {
-                if (x < 0 || x >= Width || y < 0 || y >= Height)
-                {
-                    return;
-                }
-
-                if (colour == Orange)
-                {
-                    colour = (x + y) % 3 == 0 ? Yellow : Red;
-                }
-
-                uint8_t& byte = bytes[y * RowBytes + x / 2];
-                byte = x % 2 == 0
-                    ? static_cast<uint8_t>((byte & 0x0F) | (colour << 4))
-                    : static_cast<uint8_t>((byte & 0xF0) | colour);
-            }
-
-            void fillRect(int x, int y, int width, int height, Colour colour) const
-            {
-                for (int j = y; j < y + height; j++)
-                {
-                    for (int i = x; i < x + width; i++)
-                    {
-                        set(i, j, colour);
-                    }
-                }
-            }
-
-            void strokeRect(int x, int y, int width, int height, int border, Colour colour) const
-            {
-                fillRect(x, y, width, border, colour);
-                fillRect(x, y + height - border, width, border, colour);
-                fillRect(x, y, border, height, colour);
-                fillRect(x + width - border, y, border, height, colour);
-            }
-
-            // The pixels within r + 0.3 of the centre, so small dots look round.
-            void disc(int centreX, int centreY, int r, Colour colour) const
-            {
-                int limit = r * r * 10 + r * 6;
-                for (int j = -r; j <= r; j++)
-                {
-                    for (int i = -r; i <= r; i++)
-                    {
-                        if ((i * i + j * j) * 10 <= limit)
-                        {
-                            set(centreX + i, centreY + j, colour);
-                        }
-                    }
-                }
-            }
-        };
-
-        // Each pixel of some text is `before` left of column `split`, and `after`
-        // from it on, so text crossing the bar's fill contrasts with both sides.
-        struct TextColour
-        {
-            Colour before;
-            Colour after;
-            int split;
-        };
-
-        TextColour plain(Colour colour)
-        {
-            return {colour, colour, 0};
-        }
-
-        enum class Align
-        {
-            Left,
-            Centre,
-            Right,
-        };
-
-        // 1-bit rows, each padded to whole bytes, the most significant bit on the left.
-        void drawBits(
-            const Canvas& canvas,
-            const uint8_t* bits,
-            int width,
-            int height,
-            int x,
-            int y,
-            TextColour colour
-        )
-        {
-            int rowBytes = (width + 7) / 8;
-            for (int j = 0; j < height; j++)
-            {
-                for (int i = 0; i < width; i++)
-                {
-                    if (bits[j * rowBytes + i / 8] & (0x80 >> (i % 8)))
-                    {
-                        int px = x + i;
-                        canvas.set(px, y + j, px < colour.split ? colour.before : colour.after);
-                    }
-                }
-            }
-        }
-
-        void drawIcon(const Canvas& canvas, const Icon& icon, int x, int y, Colour colour)
-        {
-            drawBits(canvas, icon.bits, icon.width, icon.height, x, y, plain(colour));
-        }
-
-        const Glyph* findGlyph(const Font& font, char character)
-        {
-            uint8_t code = static_cast<uint8_t>(character);
-            for (uint8_t i = 0; i < font.glyphCount; i++)
-            {
-                if (font.glyphs[i].code == code)
-                {
-                    return &font.glyphs[i];
-                }
-            }
-
-            return nullptr;
-        }
-
-        int kerning(const Font& font, char first, char second)
-        {
-            for (uint8_t i = 0; i < font.kerningCount; i++)
-            {
-                const StripGlyphs::Kerning& pair = font.kerning[i];
-                if (
-                    pair.first == static_cast<uint8_t>(first) &&
-                    pair.second == static_cast<uint8_t>(second)
-                )
-                {
-                    return pair.adjust;
-                }
-            }
-
-            return 0;
-        }
-
-        // How far some text moves the pen, in 1/16 px. Characters the font
-        // doesn't have are skipped.
-        int32_t textAdvance(const Font& font, const char* text)
-        {
-            int32_t advance = 0;
-            for (const char* character = text; *character; character++)
-            {
-                const Glyph* glyph = findGlyph(font, *character);
-                if (glyph)
-                {
-                    advance += glyph->advance + kerning(font, character[0], character[1]);
-                }
-            }
-
-            return advance;
-        }
-
-        // Text is Latin-1, so the degree sign is "\xB0". The pen moves in 1/16 px
-        // and each character lands on the nearest whole pixel, as in the web
-        // app's preview.
-        void drawText(
-            const Canvas& canvas,
-            const Font& font,
-            const char* text,
-            int x,
-            int baseline,
-            Align align,
-            TextColour colour
-        )
-        {
-            int32_t advance = textAdvance(font, text);
-            int32_t pen = x * 16;
-            if (align == Align::Centre)
-            {
-                pen -= advance / 2;
-            }
-            else if (align == Align::Right)
-            {
-                pen -= advance;
-            }
-
-            for (const char* character = text; *character; character++)
-            {
-                const Glyph* glyph = findGlyph(font, *character);
-                if (!glyph)
-                {
-                    continue;
-                }
-
-                drawBits(
-                    canvas,
-                    font.bits + glyph->offset,
-                    glyph->width,
-                    glyph->height,
-                    ((pen + 8) >> 4) + glyph->left,
-                    baseline + glyph->top,
-                    colour
-                );
-                pen += glyph->advance + kerning(font, character[0], character[1]);
-            }
-        }
+        using Draw::Align;
+        using Draw::Canvas;
+        using Draw::drawIcon;
+        using Draw::drawText;
+        using Draw::plain;
 
         // Black, with a green fill in 10% steps. Below 10%: red, with a red fill
         // and the percentage in 1% steps.
@@ -440,7 +244,7 @@ namespace Strip
     void draw(uint8_t* strip, const Values& values)
     {
         memset(strip, (White << 4) | White, Size);
-        Canvas canvas{strip};
+        Canvas canvas{strip, Width, Height};
 
         if (!values.laserChosen)
         {
