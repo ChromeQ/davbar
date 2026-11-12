@@ -57,6 +57,8 @@ static SemaphoreHandle_t lasersMutex = nullptr;
 static LaserState lasers[maxLasers];
 static size_t laserCount = 0;
 static bool laserChosen = false;
+// No laser on purpose, saved as "none", rather than none chosen yet.
+static bool noLaser = false;
 static uint8_t chosenAddress[6];
 static ChosenMode chosenMode = ChosenMode::Smart;
 // Every laser is asked for readings until this time (millis); 0 when not.
@@ -403,10 +405,13 @@ void startLaserScanner()
     String address;
     String mode;
     String choice = "no laser chosen";
-    if (
-        loadLaserSettings(address, mode) &&
-        RaptLaser::parseAddress(address.c_str(), chosenAddress)
-    )
+    bool saved = loadLaserSettings(address, mode);
+    if (saved && address == "none")
+    {
+        noLaser = true;
+        choice = "no laser, on purpose";
+    }
+    else if (saved && RaptLaser::parseAddress(address.c_str(), chosenAddress))
     {
         laserChosen = true;
         parseMode(mode, chosenMode);
@@ -611,7 +616,9 @@ bool chooseLaser(const String& address, const String& mode, String& error)
         return false;
     }
 
-    bool none = address.isEmpty();
+    bool forget = address.isEmpty();
+    bool onPurpose = address == "none";
+    bool none = forget || onPurpose;
     uint8_t parsed[6] = {};
     if (!none && !RaptLaser::parseAddress(address.c_str(), parsed))
     {
@@ -627,9 +634,9 @@ bool chooseLaser(const String& address, const String& mode, String& error)
     }
 
     // Saved with capital letters, however it was typed
-    bool saved = none
-        ? clearLaserSettings()
-        : saveLaserSettings(addressText(parsed), modeText(parsedMode));
+    bool saved = forget ? clearLaserSettings()
+        : onPurpose     ? saveLaserSettings("none", "smart")
+                        : saveLaserSettings(addressText(parsed), modeText(parsedMode));
     if (!saved)
     {
         error = "Unable to save the laser. Try again.";
@@ -638,6 +645,7 @@ bool chooseLaser(const String& address, const String& mode, String& error)
 
     xSemaphoreTake(lasersMutex, portMAX_DELAY);
     laserChosen = !none;
+    noLaser = onPurpose;
     memcpy(chosenAddress, parsed, sizeof(chosenAddress));
     chosenMode = parsedMode;
     choiceChanged = true;
@@ -645,7 +653,9 @@ bool chooseLaser(const String& address, const String& mode, String& error)
 
     logEvent(
         "laser chosen",
-        none ? String("none") : laserName(parsed) + ", " + modeText(parsedMode)
+        onPurpose ? String("none, on purpose")
+            : forget ? String("none")
+                     : laserName(parsed) + ", " + modeText(parsedMode)
     );
 
     return true;
@@ -662,6 +672,7 @@ bool clearLaserChoice()
     {
         xSemaphoreTake(lasersMutex, portMAX_DELAY);
         laserChosen = false;
+        noLaser = false;
         choiceChanged = true;
         xSemaphoreGive(lasersMutex);
     }
@@ -669,9 +680,24 @@ bool clearLaserChoice()
     return true;
 }
 
+bool noLaserOnPurpose()
+{
+    if (!lasersMutex)
+    {
+        return false;
+    }
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+    bool result = noLaser;
+    xSemaphoreGive(lasersMutex);
+    return result;
+}
+
 // The caller holds lasersMutex.
 static void addChosenLaserLocked(JsonObject response)
 {
+    response["noLaser"] = noLaser;
+
     if (!laserChosen)
     {
         response["laser"] = nullptr;

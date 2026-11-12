@@ -464,6 +464,10 @@ static void handleChooseLaser(AsyncWebServerRequest* request)
         return;
     }
 
+    // Choosing a laser, or none, can change the layout: the strip comes or goes.
+    // The redraw is skipped if the screen would look the same.
+    requestImageUpdate("laser chosen");
+
     response["success"] = true;
     addChosenLaser(response);
     sendJson(request, 200, doc);

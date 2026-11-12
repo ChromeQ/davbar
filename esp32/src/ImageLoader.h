@@ -5,8 +5,10 @@
 
 #include "Screen.h"
 
-// Reads the saved 400 x 400 image into the first IMAGE_SIZE bytes of buffer,
-// the top 400 rows of the screen.
-bool loadImage(uint8_t *buffer);
+// Reads the saved picture, the 400 x 400 square or the whole 400 x 600 screen,
+// into screen (SCREEN_SIZE bytes), placed for the layout (see
+// lib/Strip/ScreenLayout.h): on the whole screen, or in the top 400 rows above the
+// strip. Leaves the strip's rows alone on the square layout.
+bool loadPicture(uint8_t* screen, bool wholeScreen);
 
 #endif
