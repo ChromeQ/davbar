@@ -459,6 +459,11 @@ SetupHelp::Screen testSetupHelp()
     return testing ? testHelp : SetupHelp::Screen::None;
 }
 
+bool testValuesShowing()
+{
+    return testing;
+}
+
 void showLiveValues()
 {
     portENTER_CRITICAL(&sharedLock);

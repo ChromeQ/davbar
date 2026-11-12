@@ -32,15 +32,21 @@ void pauseLaserScanner(ScanPause reason);
 void resumeLaserScanner(ScanPause reason);
 
 // Chooses this tap's laser by address ("E5:4C:66:F9:E1:33"), and the mode it
-// expects ("smart", the default, or "eco"), and saves them in settings. An
-// empty address chooses none. Returns false with a message for the web app if
-// the address or mode is wrong or saving fails.
+// expects ("smart", the default, or "eco"), and saves them in settings.
+// "none" chooses no laser on purpose, for a tap without one: its picture is
+// then the whole screen (PLAN.md, step 8). An empty address forgets the choice,
+// so the strip asks for a laser again. Returns false with a message for the web
+// app if the address or mode is wrong or saving fails.
 bool chooseLaser(const String& address, const String& mode, String& error);
 
 // Forgets the chosen laser, for a factory reset.
 bool clearLaserChoice();
 
-// Sets "laser" to the chosen laser (number, address and mode), or null.
+// Whether this tap has no laser on purpose, rather than none chosen yet.
+bool noLaserOnPurpose();
+
+// Sets "laser" to the chosen laser (number, address and mode), or null, and
+// "noLaser" to whether the tap has no laser on purpose.
 void addChosenLaser(JsonObject response);
 
 // This tap's laser and its latest reading, for the strip.

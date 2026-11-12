@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done; step 6 (beer library) done on tap 1, still to test sending on one tap and picking on another once tap 2 is running; step 7 (setup help) done on tap 1. Last updated 2026-11-12.
+Status: steps 0 to 5 done; step 6 (beer library) done on tap 1, still to test sending on one tap and picking on another once tap 2 is running; step 7 (setup help) done on tap 1; step 8 (no laser on purpose) in progress, 8a done on tap 1. Last updated 2026-11-12.
 
 ## Goal
 
@@ -527,7 +527,40 @@ Each step ends with something visible to check.
      screen, with the real password, alongside the test values for 5 minutes or
      until Back to live. Tested on tap 1: both previews, their QR codes decoded,
      and Show on device and Back to live, each a redraw in the device log.
-8. **Fit the enclosure,** once the case parts are printed and the last screens arrive.
+8. **No laser on purpose.** A tap may have no laser, by choice. In two parts: (8a)
+   the firmware, (8b) the web app. Chosen from a mockup; the bands were first going
+   to be filled from the square's edges, but the web app knows the background, so it
+   needn't guess, and a 400 x 600 picture to compose would put beers of two shapes
+   in the library.
+   - The laser picker gets a "No laser" choice. The tap saves it as its laser
+     ("none"), apart from not having chosen one yet: a new or factory reset tap
+     still shows "No laser" in the strip, as a prompt to choose one.
+   - A tap with no laser on purpose has no strip: the whole 400 x 600 screen is the
+     picture. The square is still the picture in Compose, where Fit, Fill, zoom, pan
+     and text work as now; the chosen background fills the 100px bands above and
+     below, over the full height (a gradient runs top to bottom, Blur covers the
+     screen), and the Background control always shows. Send uploads the whole
+     screen, 120,000 bytes, and the library saves the middle square, so every beer
+     stays a square that works on any tap. A beer picked from the library sits in
+     the square, with the background in the bands. The keg states are drawn full
+     height, with the board's border round the whole screen.
+   - The tap takes a whole-screen picture or a square one. With a laser, or while
+     test values show (so their strip can be checked), it draws a whole-screen
+     picture's middle square, with the strip. With no laser on purpose, a square
+     picture, or the setup help, sits in the middle on white bands until a
+     whole-screen picture is sent.
+   - Choosing a laser, or no laser, redraws the screen when that changes its layout.
+   - Done in 8a, tested on tap 1: `POST /laser` takes `address=none`, and the
+     laser's answers say `"noLaser"`; the choice is kept over a restart and cleared
+     by a factory reset. `POST /image` takes 80,000 or 120,000 bytes. Where the
+     picture goes is worked out in `esp32/lib/Strip/ScreenLayout`, which laptop
+     tests cover for each size of picture on each layout. On tap 1: no laser
+     redrew the square on white bands; a whole-screen picture drew in full; laser
+     1 again showed its middle square with the strip; and sending back the original
+     square was skipped as the same screen, which shows the middle square is cut
+     exactly. The redraw log says "whole screen, no laser" in place of the strip's
+     values.
+9. **Fit the enclosure,** once the case parts are printed and the last screens arrive.
    The case's frame may cover a few pixels of each screen, and more on one side
    than the other. Each tap gets its own visible area (how much each edge loses),
    set in the web app with "Show on device" to check it: the strip centres in the
@@ -541,14 +574,14 @@ Each step ends with something visible to check.
    profile, to commit. The firmware uses the profile's fit only when the saved one
    is missing, such as after erasing the whole chip or swapping in a new ESP32
    behind the same screen.
-9. **Wrap up,** the last commits on `keg-level` before merging into master: move the
+10. **Wrap up,** the last commits on `keg-level` before merging into master: move the
    lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
    the display behaves into the READMEs), then move this plan to
    `docs/plans/2026-11-keg-level.md` with a line at the top saying it is done and
    when it was merged. After that the archived plan is never edited; fixes go in the
    docs. Ideas still marked Later stay listed there, and each gets its own new plan
    file when picked up.
-10. **Later:** RAPT cloud upload.
+11. **Later:** RAPT cloud upload.
 
 ## Open questions and later ideas
 

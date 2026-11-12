@@ -1,11 +1,13 @@
 #include "ImageManager.h"
 
+#include <ScreenLayout.h>
 #include <Strip.h>
 #include <esp_crc.h>
 #include <new>
 
 #include "DEV_Config.h"
 #include "DeviceLog.h"
+#include "LaserScanner.h"
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
 #include "Screen.h"
@@ -34,6 +36,8 @@ struct ImageUploadState
 {
     File file;
     size_t bytesWritten;
+    // The square's 80000 bytes, or the whole screen's 120000.
+    size_t total;
     ImageUploadError error;
 };
 
@@ -44,7 +48,7 @@ const char* imageUploadErrorMessage(ImageUploadError error)
         case ImageUploadError::InvalidContentType:
             return "Image must be uploaded as application/octet-stream.";
         case ImageUploadError::InvalidSize:
-            return "Image must contain exactly 80000 bytes.";
+            return "The image must be 80000 bytes, the square, or 120000, the whole screen.";
         case ImageUploadError::OpenFailed:
             return "Unable to create the image file.";
         case ImageUploadError::OutOfOrder:
@@ -68,6 +72,7 @@ ImageUploadState* beginImageUpload(
     ImageUploadState* state = new (std::nothrow) ImageUploadState {
         File(),
         0,
+        total,
         ImageUploadError::None
     };
 
@@ -83,7 +88,7 @@ ImageUploadState* beginImageUpload(
         return state;
     }
 
-    if (total != IMAGE_SIZE)
+    if (!ScreenLayout::pictureSize(total))
     {
         state->error = ImageUploadError::InvalidSize;
         return state;
@@ -139,7 +144,9 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
         ? state->error
         : ImageUploadError::OpenFailed;
 
-    if (error == ImageUploadError::None && state->bytesWritten != IMAGE_SIZE)
+    bool wholeScreen = state && state->total == SCREEN_SIZE;
+
+    if (error == ImageUploadError::None && state->bytesWritten != state->total)
     {
         error = ImageUploadError::InvalidSize;
     }
@@ -176,7 +183,7 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     removeDataFile("/image.previous");
 
-    logEvent("image uploaded", "400 x 400");
+    logEvent("image uploaded", wholeScreen ? "400 x 600" : "400 x 400");
 
     requestImageUpdate("upload");
 
@@ -309,12 +316,22 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
     bool imageSaved = DataFS.exists("/image.bin");
     // In place of the picture while there's none, or to check it on the screen
     SetupHelp::Screen help = setupHelpToDraw(imageSaved);
+    // With no laser on purpose, the picture is the whole screen, with no strip.
+    bool wholeScreen = ScreenLayout::wholeScreen(noLaserOnPurpose(), testValuesShowing());
 
     if (help != SetupHelp::Screen::None)
     {
         Serial.println("Drawing the setup help...");
 
-        if (!drawSetupHelp(screenBuffer, help, false))
+        // In the middle of the whole screen, on white, like a square picture
+        uint8_t* square = screenBuffer;
+        if (wholeScreen)
+        {
+            memset(screenBuffer, (Strip::White << 4) | Strip::White, SCREEN_SIZE);
+            square += ScreenLayout::BandBytes;
+        }
+
+        if (!drawSetupHelp(square, help, false))
         {
             logEvent("redraw failed", String(reason) + ", unable to draw the setup help");
             return;
@@ -329,14 +346,17 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
     {
         Serial.println("Loading image...");
 
-        if (!loadImage(screenBuffer))
+        if (!loadPicture(screenBuffer, wholeScreen))
         {
             logEvent("redraw failed", String(reason) + ", unable to load the image");
             return;
         }
     }
 
-    Strip::draw(screenBuffer + IMAGE_SIZE, strip);
+    if (!wholeScreen)
+    {
+        Strip::draw(screenBuffer + IMAGE_SIZE, strip);
+    }
 
     // Covers the strip too, so a change to it redraws the screen.
     uint32_t imageCrc = esp_crc32_le(0, screenBuffer, SCREEN_SIZE);
@@ -370,6 +390,6 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
     logEvent(
         "redraw",
         String(reason) + ", " + String((millis() - startedAt) / 1000.0, 1) + " s, " +
-            stripDescription(strip)
+            (wholeScreen ? String("whole screen, no laser") : stripDescription(strip))
     );
 }

@@ -49,6 +49,9 @@ bool showTestValues(
 // The setup help screen showing with the test values, or None. From the loop.
 SetupHelp::Screen testSetupHelp();
 
+// Whether test values are showing, which need the strip. From the loop.
+bool testValuesShowing();
+
 // Goes back to the laser's values, if test values are showing.
 void showLiveValues();
 
