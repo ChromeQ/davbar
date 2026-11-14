@@ -29,8 +29,18 @@ export type ChosenLaser = {
   mode: ChosenMode;
 };
 
-export type LaserList = {
+// The address that chooses no laser on purpose, for a tap without one: its
+// picture is then the whole screen (PLAN.md, step 8).
+export const NO_LASER = 'none';
+
+// This tap's laser: the chosen one, or null, and whether null is on purpose
+// rather than none chosen yet.
+export type TapLaser = {
   laser: ChosenLaser | null;
+  noLaser: boolean;
+};
+
+export type LaserList = TapLaser & {
   lasers: LaserItem[];
 };
 
@@ -73,6 +83,16 @@ const readChosenLaser = (value: unknown): ChosenLaser | null => {
   return value;
 };
 
+// Older firmware leaves it out.
+const readNoLaser = (value: unknown) => value === true;
+
+// The tap's laser from an answer that may carry it, such as GET /strip, or null
+// if it doesn't (older firmware).
+export const readTapLaser = (result: Record<string, unknown>): TapLaser | null =>
+  typeof result.noLaser === 'boolean'
+    ? { laser: readChosenLaser(result.laser ?? null), noLaser: result.noLaser }
+    : null;
+
 // Made-up lasers for `pnpm dev`, where there is no device: one heard in each
 // mode, one not heard yet and one not in config/lasers.json.
 const developmentLasers: LaserItem[] = [
@@ -108,16 +128,18 @@ const developmentLasers: LaserItem[] = [
   { number: null, address: 'BB:00:00:00:00:09', rssi: -84, lastHeardSeconds: 40, reading: null },
 ];
 
-let developmentChoice: ChosenLaser | null = {
-  number: 2,
-  address: 'AA:00:00:00:00:02',
-  mode: 'smart',
+let developmentChoice: TapLaser = {
+  laser: { number: 2, address: 'AA:00:00:00:00:02', mode: 'smart' },
+  noLaser: false,
 };
+
+// The made-up tap's laser, for its made-up strip.
+export const developmentTapLaser = () => developmentChoice;
 
 export const fetchLasers = async (): Promise<LaserList> => {
   if (import.meta.env.DEV) {
     await developmentDelay();
-    return { laser: developmentChoice, lasers: developmentLasers };
+    return { ...developmentChoice, lasers: developmentLasers };
   }
 
   const response = await fetch('/lasers', { cache: 'no-store' });
@@ -132,12 +154,16 @@ export const fetchLasers = async (): Promise<LaserList> => {
     throw new Error('The device returned an invalid response.');
   }
 
-  return { laser: readChosenLaser(result.laser), lasers: result.lasers };
+  return {
+    laser: readChosenLaser(result.laser),
+    noLaser: readNoLaser(result.noLaser),
+    lasers: result.lasers,
+  };
 };
 
 // The chosen laser from GET /status, which (unlike GET /lasers) doesn't start
 // a search.
-export const fetchChosenLaser = async (): Promise<ChosenLaser | null> => {
+export const fetchChosenLaser = async (): Promise<TapLaser> => {
   if (import.meta.env.DEV) {
     await developmentDelay();
     return developmentChoice;
@@ -151,14 +177,18 @@ export const fetchChosenLaser = async (): Promise<ChosenLaser | null> => {
 
   const result = await readDeviceJson(response);
 
-  return readChosenLaser(result.laser);
+  return { laser: readChosenLaser(result.laser), noLaser: readNoLaser(result.noLaser) };
 };
 
-export const chooseLaser = async (address: string, mode: ChosenMode): Promise<ChosenLaser> => {
+// Chooses a laser by its address, or NO_LASER for none on purpose.
+export const chooseLaser = async (address: string, mode: ChosenMode): Promise<TapLaser> => {
   if (import.meta.env.DEV) {
     await developmentDelay();
     const laser = developmentLasers.find((item) => item.address === address);
-    developmentChoice = { number: laser?.number ?? null, address, mode };
+    developmentChoice =
+      address === NO_LASER
+        ? { laser: null, noLaser: true }
+        : { laser: { number: laser?.number ?? null, address, mode }, noLaser: false };
     return developmentChoice;
   }
 
@@ -176,10 +206,15 @@ export const chooseLaser = async (address: string, mode: ChosenMode): Promise<Ch
     );
   }
 
-  const chosen = readChosenLaser(result.laser);
+  const chosen = { laser: readChosenLaser(result.laser), noLaser: readNoLaser(result.noLaser) };
 
-  if (!chosen) {
-    throw new Error('The device returned an invalid response.');
+  // What was asked for, or older firmware that doesn't know NO_LASER
+  if (address === NO_LASER ? !chosen.noLaser : !chosen.laser) {
+    throw new Error(
+      address === NO_LASER
+        ? "This tap's firmware is too old for no laser. Upload the firmware."
+        : 'The device returned an invalid response.'
+    );
   }
 
   return chosen;

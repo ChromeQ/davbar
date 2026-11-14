@@ -608,6 +608,115 @@ void resumeLaserScanner(ScanPause reason)
     }
 }
 
+// A choice as chooseLaser takes it.
+struct LaserChoice
+{
+    // An empty address, which forgets the choice
+    bool forget;
+    // "none"
+    bool onPurpose;
+    uint8_t address[6];
+    ChosenMode mode;
+};
+
+static bool parseLaserChoice(
+    const String& address,
+    const String& mode,
+    LaserChoice& choice,
+    String& error
+)
+{
+    choice = {};
+    choice.forget = address.isEmpty();
+    choice.onPurpose = address == "none";
+    choice.mode = ChosenMode::Smart;
+
+    if (
+        !choice.forget &&
+        !choice.onPurpose &&
+        !RaptLaser::parseAddress(address.c_str(), choice.address)
+    )
+    {
+        error = "That isn't a laser address, such as E5:4C:66:F9:E1:33.";
+        return false;
+    }
+
+    if (!mode.isEmpty() && !parseMode(mode, choice.mode))
+    {
+        error = "The mode must be smart or eco.";
+        return false;
+    }
+
+    return true;
+}
+
+bool checkLaserChoice(const String& address, const String& mode, bool& changes, String& error)
+{
+    if (!lasersMutex)
+    {
+        error = "Bluetooth hasn't started yet. Try again.";
+        return false;
+    }
+
+    LaserChoice choice;
+    if (!parseLaserChoice(address, mode, choice, error))
+    {
+        return false;
+    }
+
+    bool none = choice.forget || choice.onPurpose;
+
+    xSemaphoreTake(lasersMutex, portMAX_DELAY);
+    // No laser has no mode to compare.
+    changes =
+        laserChosen == none ||
+        noLaser != choice.onPurpose ||
+        (
+            !none &&
+            (
+                memcmp(chosenAddress, choice.address, sizeof(chosenAddress)) != 0 ||
+                chosenMode != choice.mode
+            )
+        );
+    xSemaphoreGive(lasersMutex);
+
+    return true;
+}
+
+bool readTestLaser(const String& address, const String& mode, TestLaser& laser, String& error)
+{
+    laser = {};
+
+    if (!lasersMutex)
+    {
+        error = "Bluetooth hasn't started yet. Try again.";
+        return false;
+    }
+
+    if (address.isEmpty())
+    {
+        xSemaphoreTake(lasersMutex, portMAX_DELAY);
+        laser.noLaser = noLaser;
+        laser.number = laserChosen ? laserNumber(chosenAddress) : 0;
+        laser.eco = laserChosen && chosenMode == ChosenMode::Eco;
+        xSemaphoreGive(lasersMutex);
+
+        return true;
+    }
+
+    LaserChoice choice;
+    if (!parseLaserChoice(address, mode, choice, error))
+    {
+        return false;
+    }
+
+    laser.noLaser = choice.onPurpose;
+    laser.number = choice.onPurpose ? 0 : laserNumber(choice.address);
+    laser.eco = !choice.onPurpose && choice.mode == ChosenMode::Eco;
+
+    return true;
+}
+
 bool chooseLaser(const String& address, const String& mode, String& error)
 {
     if (!lasersMutex)
@@ -616,22 +725,17 @@ bool chooseLaser(const String& address, const String& mode, String& error)
         return false;
     }
 
-    bool forget = address.isEmpty();
-    bool onPurpose = address == "none";
-    bool none = forget || onPurpose;
-    uint8_t parsed[6] = {};
-    if (!none && !RaptLaser::parseAddress(address.c_str(), parsed))
+    LaserChoice choice;
+    if (!parseLaserChoice(address, mode, choice, error))
     {
-        error = "That isn't a laser address, such as E5:4C:66:F9:E1:33.";
         return false;
     }
 
-    ChosenMode parsedMode = ChosenMode::Smart;
-    if (!mode.isEmpty() && !parseMode(mode, parsedMode))
-    {
-        error = "The mode must be smart or eco.";
-        return false;
-    }
+    bool forget = choice.forget;
+    bool onPurpose = choice.onPurpose;
+    bool none = forget || onPurpose;
+    const uint8_t* parsed = choice.address;
+    ChosenMode parsedMode = choice.mode;
 
     // Saved with capital letters, however it was typed
     bool saved = forget ? clearLaserSettings()

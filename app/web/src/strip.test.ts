@@ -36,13 +36,15 @@ const nothingYet: StripValues = {
   test: false,
 };
 
+const waiting: StripValues = { ...nothingYet, laserChosen: true, laserNumber: 1 };
+
 const cases: Array<[string, StripValues, number]> = [
   ['full keg', fullKeg, 0x8a974b40],
   ['orange', { ...fullKeg, percent: 40, litresTenths: 76 }, 0x5bbb82c2],
   ['red', { ...fullKeg, percent: 15, litresTenths: 28 }, 0x50aae884],
   ['low battery', { ...fullKeg, laserNumber: 3, batteryPercent: 7 }, 0x53e20d63],
   ['mode warning', modeWarning, 0x2889c7dd],
-  ['no signal', { ...modeWarning, noSignal: true }, 0x9381743a],
+  ['no signal', { ...modeWarning, noSignal: true }, 0xb4a55abb],
   [
     'full and cold',
     {
@@ -57,7 +59,10 @@ const cases: Array<[string, StripValues, number]> = [
   ],
   ['test values', { ...fullKeg, test: true }, 0x227369f7],
   ['no laser', nothingYet, 0x15d02483],
-  ['waiting', { ...nothingYet, laserChosen: true, laserNumber: 1 }, 0xb024e814],
+  ['waiting', waiting, 0xf24cd5d5],
+  ['waiting, no number', { ...waiting, laserNumber: 0 }, 0x3c88cedf],
+  ['waiting, mode warning', { ...waiting, modeWarning: true }, 0x30f6b2d2],
+  ['never heard', { ...waiting, modeWarning: true, noSignal: true }, 0x6a2a49b4],
 ];
 
 describe('drawStrip', () => {

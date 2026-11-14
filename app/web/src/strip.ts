@@ -10,6 +10,7 @@ import {
   noSignal,
   noSignalStrike,
   rowFont,
+  shrug,
   warning,
   warningFill,
   type StripFont,
@@ -38,17 +39,22 @@ const ORANGE = 0x10;
 export type StripValues = {
   // false shows "No laser" and nothing else.
   laserChosen: boolean;
-  // 1-3 dots, matching the laser's lid; 0 for a laser not in config/lasers.json.
+  // 1-3 dots, matching the laser's lid, and the number in the messages; 0 for a
+  // laser not in config/lasers.json, which shows neither.
   laserNumber: number;
   // The mode chosen for this tap, shown as the brain or leaf icon.
   mode: 'smart' | 'eco';
+  // Without a level, the top row says "Waiting for laser 1" in place of the
+  // values, and the bar shows a shrug.
   percent: number | null;
   litresTenths: number | null;
   temperatureTenths: number | null;
   batteryPercent: number | null;
   // The laser has been in the other mode for over an hour.
   modeWarning: boolean;
-  // Nothing heard from the laser for too long. Hides the mode warning.
+  // Nothing heard from the laser for too long: the top row says "Can't hear laser
+  // 1" with the no signal icon, in place of the values, which are as old as the
+  // bar's level. Hides the mode warning.
   noSignal: boolean;
   // Test values from "Show on device", drawn with a red border.
   test: boolean;
@@ -73,7 +79,7 @@ const GROUP_GAP = 10;
 
 // Around test values. The content keeps MARGIN from every edge, so the border never
 // touches it.
-const TEST_BORDER = 5;
+export const TEST_BORDER = 5;
 
 // The level bar
 const BAR_X = MARGIN;
@@ -272,10 +278,21 @@ const drawDots = (canvas: Canvas, x: number, midY: number, count: number) => {
   }
 };
 
-// The laser dots, battery and mode icon, with the no signal icon or the mode
-// warning when needed, centred on the screen so the icons line up across the taps.
+// Bluetooth's blue, crossed out in red.
+const drawNoSignal = (canvas: Canvas, x: number, y: number) => {
+  drawIcon(canvas, noSignal, x, y, BLUE);
+  drawIcon(canvas, noSignalStrike, x, y, RED);
+};
+
+// Like a road sign: yellow inside, with a black outline and "!".
+const drawModeWarning = (canvas: Canvas, x: number, y: number) => {
+  drawIcon(canvas, warningFill, x, y, YELLOW);
+  drawIcon(canvas, warning, x, y, BLACK);
+};
+
+// The laser dots, battery and mode icon, with the mode warning when needed,
+// centred on the screen so the icons line up across the taps.
 const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
-  const showWarning = values.modeWarning && !values.noSignal;
   const width =
     DOT_RADIUS * 2 +
     GROUP_GAP +
@@ -283,7 +300,7 @@ const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
     NUB_WIDTH +
     GROUP_GAP +
     ICON_SIZE +
-    (values.noSignal || showWarning ? GROUP_GAP + ICON_SIZE : 0);
+    (values.modeWarning ? GROUP_GAP + ICON_SIZE : 0);
   let x = divide(STRIP_WIDTH, 2) - divide(width, 2);
   const iconY = midY - divide(ICON_SIZE, 2);
 
@@ -295,30 +312,53 @@ const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
   }
   x += BATTERY_WIDTH + NUB_WIDTH + GROUP_GAP;
 
-  // Bluetooth's blue, crossed out in red.
-  if (values.noSignal) {
-    drawIcon(canvas, noSignal, x, iconY, BLUE);
-    drawIcon(canvas, noSignalStrike, x, iconY, RED);
-    x += ICON_SIZE + GROUP_GAP;
-  }
-
   drawIcon(canvas, values.mode === 'eco' ? leaf : brain, x, iconY, BLACK);
   x += ICON_SIZE + GROUP_GAP;
 
-  // Like a road sign: yellow inside, with a black outline and "!".
-  if (showWarning) {
-    drawIcon(canvas, warningFill, x, iconY, YELLOW);
-    drawIcon(canvas, warning, x, iconY, BLACK);
+  if (values.modeWarning) {
+    drawModeWarning(canvas, x, iconY);
   }
 };
 
+// In place of the top row while there's no level, or nothing's been heard from
+// the laser: what the tap's waiting for, in words, with the no signal icon or the
+// mode warning in front, centred together.
+const drawMessage = (canvas: Canvas, values: StripValues) => {
+  const capTop = divide(BAR_Y - rowFont.capHeight, 2);
+  const words = values.noSignal ? "Can't hear laser" : 'Waiting for laser';
+  // A laser not in config/lasers.json has no number.
+  const text = values.laserNumber > 0 ? `${words} ${values.laserNumber}` : words;
+  // No signal hides the mode warning, as the laser's mode isn't known.
+  const showWarning = values.modeWarning && !values.noSignal;
+  const icon = values.noSignal || showWarning;
+  const textWidth = divide(textAdvance(rowFont, text) + 15, 16);
+  const width = (icon ? ICON_SIZE + GROUP_GAP : 0) + textWidth;
+  let x = divide(STRIP_WIDTH, 2) - divide(width, 2);
+  const iconY = capTop + divide(rowFont.capHeight, 2) - divide(ICON_SIZE, 2);
+
+  if (values.noSignal) {
+    drawNoSignal(canvas, x, iconY);
+  } else if (showWarning) {
+    drawModeWarning(canvas, x, iconY);
+  }
+
+  if (icon) {
+    x += ICON_SIZE + GROUP_GAP;
+  }
+
+  drawText(canvas, rowFont, text, x, capTop + rowFont.capHeight, 'left', plain(BLACK));
+};
+
 const drawTopRow = (canvas: Canvas, values: StripValues) => {
+  if (values.percent === null || values.litresTenths === null || values.noSignal) {
+    drawMessage(canvas, values);
+    return;
+  }
+
   const capTop = divide(BAR_Y - rowFont.capHeight, 2);
   const baseline = capTop + rowFont.capHeight;
 
-  if (values.percent !== null) {
-    drawText(canvas, rowFont, `${values.percent}%`, MARGIN, baseline, 'left', plain(BLACK));
-  }
+  drawText(canvas, rowFont, `${values.percent}%`, MARGIN, baseline, 'left', plain(BLACK));
 
   if (values.temperatureTenths !== null) {
     const tenths = Math.abs(values.temperatureTenths);
@@ -330,11 +370,20 @@ const drawTopRow = (canvas: Canvas, values: StripValues) => {
   drawGroup(canvas, values, capTop + divide(rowFont.capHeight, 2));
 };
 
-// Green from 50%, orange from 25% and red below, with the litres centred.
+// Green from 50%, orange from 25% and red below, with the litres centred. With
+// no level, a shrug.
 const drawBar = (canvas: Canvas, values: StripValues) => {
   canvas.strokeRect(BAR_X, BAR_Y, BAR_WIDTH, BAR_HEIGHT, BAR_BORDER, BLACK);
 
   if (values.percent === null || values.litresTenths === null) {
+    // Centred on its drawn pixels.
+    drawIcon(
+      canvas,
+      shrug,
+      divide(STRIP_WIDTH, 2) - divide(shrug.width, 2),
+      BAR_Y + divide(BAR_HEIGHT - shrug.height, 2),
+      BLACK
+    );
     return;
   }
 

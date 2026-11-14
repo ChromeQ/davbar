@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { developmentDelay, isNumberOrNull, isObject, readDeviceJson } from './device-json';
+import type { LaserPick } from './laser-pick';
+import { developmentTapLaser, readTapLaser, type TapLaser } from './lasers';
 import type { StripValues } from './strip';
-import { TEST_SECONDS, testForm, type SetupHelpScreen } from './test-values';
+import { setupHelpTestForm, TEST_SECONDS, testForm, type SetupHelpScreen } from './test-values';
 
 // How often the preview asks. The strip changes every few minutes at most.
 export const STRIP_POLL_MS = 15000;
@@ -15,6 +17,9 @@ export type StripState = {
   testSecondsLeft: number | null;
   // The setup help screen showing with the test values, or null.
   setupHelp: SetupHelpScreen | null;
+  // The tap's laser, so a choice made from another page shows, or null from older
+  // firmware.
+  tapLaser: TapLaser | null;
 };
 
 const asSetupHelp = (value: unknown): SetupHelpScreen | null =>
@@ -49,11 +54,13 @@ const developmentState: StripState = {
   },
   testSecondsLeft: null,
   setupHelp: null,
+  tapLaser: null,
 };
 
-// Test values on the made-up tap, and when they end.
+// Test values on the made-up tap, or null for the setup help alone, and when
+// they end.
 let developmentTest: {
-  values: StripValues;
+  values: StripValues | null;
   setupHelp: SetupHelpScreen | null;
   endsAt: number;
 } | null = null;
@@ -63,13 +70,23 @@ const developmentStrip = (): StripState => {
     developmentTest = null;
   }
 
+  // The made-up laser's choice, so choosing one shows
+  const tapLaser = developmentTapLaser();
+  const live: StripValues = {
+    ...developmentState.values,
+    laserChosen: tapLaser.laser !== null,
+    laserNumber: tapLaser.laser?.number ?? 0,
+    mode: tapLaser.laser?.mode ?? 'smart',
+  };
+
   return developmentTest
     ? {
-        values: { ...developmentTest.values, test: true },
+        values: developmentTest.values ? { ...developmentTest.values, test: true } : live,
         testSecondsLeft: Math.ceil((developmentTest.endsAt - Date.now()) / 1000),
         setupHelp: developmentTest.setupHelp,
+        tapLaser,
       }
-    : developmentState;
+    : { ...developmentState, values: live, tapLaser };
 };
 
 export const fetchStrip = async (): Promise<StripState> => {
@@ -94,6 +111,7 @@ export const fetchStrip = async (): Promise<StripState> => {
     values: result.values,
     testSecondsLeft: result.testSecondsLeft,
     setupHelp: asSetupHelp(result.setupHelp),
+    tapLaser: readTapLaser(result),
   };
 };
 
@@ -112,12 +130,16 @@ const postToTap = async (path: string, body?: URLSearchParams) => {
 };
 
 // "Show on device": the tap shows these test values for TEST_SECONDS, with the
-// setup help in place of the picture if asked.
+// setup help in place of the picture if asked. noReading shows the strip waiting
+// for the laser. pick, a laser picked in the preview and not sent yet, is tested
+// with in place of the tap's own.
 export const showTestValues = async (
   values: StripValues,
-  setupHelp: SetupHelpScreen | null = null
+  setupHelp: SetupHelpScreen | null = null,
+  noReading = false,
+  pick: LaserPick | null = null
 ) => {
-  const form = testForm(values, setupHelp);
+  const form = testForm(values, setupHelp, noReading, pick);
 
   if (!form) {
     throw new Error('The test values are not complete.');
@@ -130,6 +152,22 @@ export const showTestValues = async (
   }
 
   await postToTap('/strip/test', form);
+};
+
+// "Show on device" with no laser on purpose, the tap's or picked in the preview,
+// which has no strip to test: the setup help alone, on the whole screen, for
+// TEST_SECONDS.
+export const showSetupHelpTest = async (
+  setupHelp: SetupHelpScreen,
+  pick: LaserPick | null = null
+) => {
+  if (import.meta.env.DEV) {
+    await developmentDelay();
+    developmentTest = { values: null, setupHelp, endsAt: Date.now() + TEST_SECONDS * 1000 };
+    return;
+  }
+
+  await postToTap('/strip/test', setupHelpTestForm(setupHelp, pick));
 };
 
 // "Back to live": the tap goes back to the laser's values.

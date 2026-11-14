@@ -67,7 +67,7 @@ export const batteryFont: StripFont = {
   kerning: {},
 };
 
-// 40px, the top row.
+// 40px, the top row and its messages.
 export const rowFont: StripFont = {
   size: 40,
   capHeight: 28,
@@ -161,8 +161,17 @@ export const rowFont: StripFont = {
       advance: 473,
       bits: 'DwAAAD/AAAB/4AAA+fAgAPDweADw8HgA8PDwAPDw4ADw8eAA8PPAAH/jgAB/54AAH48AAAAPAAAAHgAAABwAAAA8fAAAeP8AAHH/gADz54AB48PAAeODwAPHg8ADh4PAB4ODwAcDx4ACA/+AAAH/AAAA/gA=',
     },
+    "'": { width: 4, height: 11, left: 1, top: -30, advance: 103, bits: '8PDw8PDw8PDw8GA=' },
     '-': { width: 11, height: 4, left: 2, top: -14, advance: 252, bits: '/+D/4P/g/+A=' },
     '.': { width: 6, height: 6, left: 3, top: -6, advance: 186, bits: 'MPj8/Px4' },
+    C: {
+      width: 23,
+      height: 29,
+      left: 2,
+      top: -29,
+      advance: 419,
+      bits: 'AH4AA//AD//gH//wP//4P4H8fgD8fgD8/AB+/AB+/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AB+fAB+fgD8fwH8P8f4H//4D//wB//AAf+A',
+    },
     N: {
       width: 23,
       height: 28,
@@ -170,6 +179,14 @@ export const rowFont: StripFont = {
       top: -28,
       advance: 452,
       bits: '/AB+/gB+/gB+/wB+/wB+/4B+/8B+/8B+/+B+/+B++/B++fh++Ph++Px++Hx++H5++D9++B9++B/++A/++A/++Af++AP++AP++AH++AH++AD++AB+',
+    },
+    W: {
+      width: 33,
+      height: 28,
+      left: 1,
+      top: -28,
+      advance: 560,
+      bits: '/APgH4D8A+AfgPwH8B+AfAfwHwB8B/AfAH4H8D8Afg/4PwB+D/g/AD4P+D4APg/4PgA/H3x+AD8ffH4AHx98fAAfHjx8AB8ePnwAH74+/AAfvj78AA++HvgAD/wf+AAP/B/4AA/8H/gAB/wP+AAH+A/wAAf4D/AAB/gP8AAH+AfwAAPwB+AAA/AH4AA=',
     },
     a: {
       width: 19,
@@ -187,6 +204,38 @@ export const rowFont: StripFont = {
       advance: 346,
       bits: 'ACAAA/4AD/8AH/+AP//APw/gfgfgfgPgfAPgf//g///w///w///wfAAAfAAAfgAAfwGAP4PAP//gH//AB/+AA/4A',
     },
+    f: {
+      width: 13,
+      height: 30,
+      left: 1,
+      top: -30,
+      advance: 229,
+      bits: 'A/gH+A/4H/gfwB+AHwAfAB8A//j/+P/4//AfAB8AHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8AHwAfAB8A',
+    },
+    g: {
+      width: 20,
+      height: 29,
+      left: 1,
+      top: -21,
+      advance: 366,
+      bits: 'B/vwD//wH//wP//wfwfwfgPwfgPwfAPw/APw/APw/APw/APw/APwfAPwfgPwfgPwPw/wP//wH//wD//wB/PwAAPwAAPgCAfgHg/gP//AP/+AH/8AB/wA',
+    },
+    h: {
+      width: 18,
+      height: 30,
+      left: 2,
+      top: -30,
+      advance: 358,
+      bits: '/AAA/AAA/AAA/AAA/AAA/AAA/AAA/AAA/BAA/P4A//8A//+A///A/h/A/A/A/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA',
+    },
+    i: {
+      width: 6,
+      height: 29,
+      left: 2,
+      top: -29,
+      advance: 169,
+      bits: 'fPz8/HgAAAD8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pw=',
+    },
     l: {
       width: 6,
       height: 30,
@@ -194,6 +243,14 @@ export const rowFont: StripFont = {
       top: -30,
       advance: 169,
       bits: '/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8/Pz8',
+    },
+    n: {
+      width: 18,
+      height: 22,
+      left: 2,
+      top: -22,
+      advance: 359,
+      bits: 'ABAA+P8A+/+A//+A///A/g/A/A/A/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA/AfA',
     },
     o: {
       width: 20,
@@ -219,6 +276,14 @@ export const rowFont: StripFont = {
       advance: 329,
       bits: 'D/wAH/8AP/+Afz+Afg/AfA/AfAAAfgAAf+AAP/wAH/8AB/+AAH/AAA/A+A/A/AfAfA/Af/+AP/+AH/8AB/wA',
     },
+    t: {
+      width: 13,
+      height: 26,
+      left: 0,
+      top: -26,
+      advance: 217,
+      bits: 'H4AfgB+AH4AfgP/4//j/+P/wH4AfgB+AH4AfgB+AH4AfgB+AH4AfgB+AH8AP+A/4B/gD+A==',
+    },
     '°': {
       width: 10,
       height: 11,
@@ -228,7 +293,40 @@ export const rowFont: StripFont = {
       bits: 'HgB/AP+A48DhwMHA4cDjwP+AfwAcAA==',
     },
   },
-  kerning: { 'r.': -49, ra: -10, re: -6, ro: -10 },
+  kerning: {
+    "''": -19,
+    "'a": -16,
+    "'e": -18,
+    "'g": -18,
+    "'n": -6,
+    "'o": -25,
+    "'s": -27,
+    ".'": -77,
+    'W-': -19,
+    'W.': -43,
+    Wa: -10,
+    We: -10,
+    Wg: -10,
+    Wo: -10,
+    Wr: -7,
+    "a'": -10,
+    "e'": -4,
+    "f'": 5,
+    fe: -7,
+    fg: -7,
+    "h'": -27,
+    "n'": -27,
+    "o'": -32,
+    "r'": 5,
+    'r.': -49,
+    ra: -10,
+    re: -6,
+    rf: 6,
+    rg: -6,
+    ro: -10,
+    rt: 16,
+    to: -8,
+  },
 };
 
 // 64px, the litres in the bar.
@@ -369,4 +467,11 @@ export const noSignalStrike: StripIcon = {
   width: 32,
   height: 32,
   bits: 'AAAAACAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABwAAAAOAAAABAAAAAA=',
+};
+
+// no level yet: ¯\_(ツ)_/¯, centred in the bar.
+export const shrug: StripIcon = {
+  width: 198,
+  height: 48,
+  bits: 'AAAAAAAAAAAAEAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAADgAAAAAABwAAAAAAAAAAAAAAAAAAAAAAAB4AAAAAAAeAAAAAAAAAAAAAAAAAAAAAAAA+AABwAA8HwAAAAAAAAAAAP//D+AAAAAAAfAAA+AAfg+AAAAAAA+D//z//wfwAAAAAAPwAAfwAH4PwAAAAAAfA//8//8H8AAAAAAH4A8H+AD+B+AAAAAAHwP//P//B/AAAAAAB8AfB/gA/gPgAAAAAB8D//gAAAP4AAAAAA+AP4P8AP4D8AAAAAA+AAAAAAAD+AAAAAAPgD/B/AD+AfAAAAAAPgAAAAAAAfgAAAAAH4A/wf4A/gH4AAAAAD4AAAAAAAH8AAAAAB8AH+D+AP4A+AAAAAB8AAAAAAAB/AAAAAA/AA/g/wD8APwAAAAAfAAAAAAAAP4AAAAAPgAP8H8B/AD8AAAAAHwAAAAAAAD+AAAAAD4AB/B/gfwAfAAAAAD4AAAAAAAA/gAAAAA+AAf4P4H8AH4AAAAA+AAAAAAAAH8AAAAAfgAD+D8D/AB+AAAAAPgAAAAAAAB/AAAAAH4AA/wfA/gAfgAAAAHwAAAAAAAAP4AAAAB+AAH8AAP4AH4AAAAB8AAAAAAAAD+AAAAAfAAB+AAH+AA/AAAAAfAAAAAAAAA/gAAAAHwAAPAAB/AAPwAAAAPgAAAAAAAAH8AAAAB8AAAAAA/wAD8AAAAD4AAAAAAAAB/AAAAAfAAAAAAP4AA/AAAAA+AAAAAAAAAPwAAAAHwAAAAAH+AAPwAAAAfAAAAAAAAAD+AAAAB8AAAAAD/AAD8AAAAHwAAAAAAAAA/gAAAAfAAAAAB/wAA/AAAAB8AAAAAAAAAH8AAAAHwAAAAA/4AAPwAAAA+AAAAAAAAAB/AAAAB8AAAAAP8AAD8AAAAPgAAAAAAAAAfwAAAAfAAAAAP/AAA/AAAAD4AAAAAAAAAD+AAAAHwAAAAH/gAAPgAAAB8AAAAAAAAAA/gAAAB+AAAAD/wAAH4AAAAfAAAAAAAAAAH8AAAAfgAAAD/4AAB+AAAAHwAAAAAAAAAB/AAAAH4AAAD/8AAAfgAAAD4AAAAAAAAAAfwAAAA+AAAD/+AAAH4AAAA+AAAAAAAAAAD+AAAAPgAAH//AAAB8AAAAPgAAAAAAAAAA/gAAAD8AAP//AAAA/AAAAHwAAAAAAAAAAH4AAAA/AAP//gAAAPwAAAB8AAAAAAAAAAB/AAAAHwAH//gAAAD4AAAAfAAAAAAAAAAAf////B+AB//gAAAB+D////gAAAAAAAAAAD////wPgAf/gAAAAfA////4AAAAAAAAAAA////8D8AH/gAAAAPwP///+AAAAAAAAAAAAP///AfAA/AAAAAD4D///wAAAAAAAAAAAAD///wH4AAAAAAAB+A///8AAAAAAAAAAAAAAAAAA/AAAAAAAA/AAAAAAAAAAAAAAAAAAAAAAAH4AAAAAAAfgAAAAAAAAAAAAAAAAAAAAAAA+AAAAAAAHwAAAAAAAAAAAAAAAAAAAAAAAHgAAAAAAB4AAAAAAAAAAAAAAAAAAAAAAAA4AAAAAAAcAAAAAAAAAAAA',
 };

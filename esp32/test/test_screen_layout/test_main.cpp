@@ -27,16 +27,6 @@ void testSizes()
     TEST_ASSERT_FALSE(ScreenLayout::pictureSize(100000));
 }
 
-void testWholeScreenOnlyWithNoLaserOnPurpose()
-{
-    TEST_ASSERT_TRUE(ScreenLayout::wholeScreen(true, false));
-    // A laser, or none chosen yet (the strip asks for one)
-    TEST_ASSERT_FALSE(ScreenLayout::wholeScreen(false, false));
-    // Test values show their strip, whatever the laser.
-    TEST_ASSERT_FALSE(ScreenLayout::wholeScreen(true, true));
-    TEST_ASSERT_FALSE(ScreenLayout::wholeScreen(false, true));
-}
-
 // A screen's bytes after placing a picture whose rows each start with their own
 // number, in two bytes, so where each row ended up can be read back.
 std::vector<uint8_t> placed(size_t pictureBytes, bool whole)
@@ -110,14 +100,41 @@ void testSquarePictureOnTheWholeScreenSitsInTheMiddleOnWhite()
     TEST_ASSERT_EQUAL(White, row(screen, 599));
 }
 
+// The colour code of one pixel of the screen's bytes, 2 pixels a byte.
+uint8_t pixel(const std::vector<uint8_t>& screen, int x, int y)
+{
+    uint8_t byte = screen[y * ScreenLayout::RowBytes + x / 2];
+    return x % 2 == 0 ? byte >> 4 : byte & 0x0F;
+}
+
+void testTestBorderGoesRoundTheWholeScreen()
+{
+    const uint8_t white = 0x1;
+    const uint8_t red = 0x3;
+    const int border = 5;
+
+    // Every edge, 5 pixels in, and nothing inside: no line between the square
+    // and the strip.
+    std::vector<uint8_t> screen(ScreenBytes, 0x11);
+    ScreenLayout::drawTestBorder(screen.data());
+    TEST_ASSERT_EQUAL(red, pixel(screen, 0, 0));
+    TEST_ASSERT_EQUAL(red, pixel(screen, 399, 599));
+    TEST_ASSERT_EQUAL(red, pixel(screen, border - 1, 300));
+    TEST_ASSERT_EQUAL(white, pixel(screen, border, 300));
+    TEST_ASSERT_EQUAL(red, pixel(screen, 200, 599 - (border - 1)));
+    TEST_ASSERT_EQUAL(white, pixel(screen, 200, 599 - border));
+    TEST_ASSERT_EQUAL(white, pixel(screen, 200, 399));
+    TEST_ASSERT_EQUAL(white, pixel(screen, 200, 400));
+}
+
 int main(int, char**)
 {
     UNITY_BEGIN();
     RUN_TEST(testSizes);
-    RUN_TEST(testWholeScreenOnlyWithNoLaserOnPurpose);
     RUN_TEST(testWholePictureOnTheWholeScreen);
     RUN_TEST(testWholePictureWithAStripShowsItsMiddleSquare);
     RUN_TEST(testSquarePictureWithAStrip);
     RUN_TEST(testSquarePictureOnTheWholeScreenSitsInTheMiddleOnWhite);
+    RUN_TEST(testTestBorderGoesRoundTheWholeScreen);
     return UNITY_END();
 }

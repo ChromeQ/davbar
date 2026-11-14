@@ -299,6 +299,70 @@ h2 {
   flex: 0 0 auto;
 }
 
+/* A keg state's date and line, in place of Fit, Fill and Zoom */
+.keg-row {
+  flex-wrap: wrap;
+}
+
+/* Never narrower than its date, so on a phone Today and Yesterday wrap below */
+.text-field.keg-date-field {
+  flex: 1 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.text-field.keg-date-field input {
+  flex: 1;
+  width: 140px;
+}
+
+/* As tall as the date field beside it */
+.keg-row .mode-switch {
+  min-height: 42px;
+}
+
+.text-field.keg-line-field {
+  flex: 1 1 240px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The labels the same width, so the line and date fields line up */
+.keg-row .text-field > span:first-child {
+  min-width: 52px;
+}
+
+.keg-line-input {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.keg-line-input input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 52px;
+}
+
+/* How many characters of the most, inside the field's right end */
+.keg-line-count {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.keg-line-count.is-full {
+  color: var(--accent);
+}
+
 .fit-hint {
   margin: 8px 0 0;
   color: var(--muted);
@@ -529,6 +593,29 @@ h2 {
 
 .library-button:hover {
   color: #fff;
+  background: var(--accent);
+}
+
+.library-button:disabled,
+.library-button:disabled:hover {
+  cursor: not-allowed;
+  color: var(--accent);
+  background: transparent;
+  opacity: 0.45;
+}
+
+/* In the empty Compose box: puts the picture on the tap in Compose, to edit */
+.library-button.tap-picture-button {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  align-self: auto;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--paper);
+}
+
+.library-button.tap-picture-button:hover {
   background: var(--accent);
 }
 
@@ -906,6 +993,15 @@ h2 {
   white-space: nowrap;
 }
 
+/* A laser picked for the preview, which Upload to display hasn't sent yet */
+.laser-button.is-picked {
+  border-color: var(--accent);
+}
+
+.laser-button.is-picked .upload-label {
+  color: var(--accent);
+}
+
 /* Developer mode's test values, under the preview */
 .test-values {
   display: grid;
@@ -969,6 +1065,12 @@ h2 {
 
 .test-percent-field input[type='number'] {
   width: 68px;
+}
+
+/* Not used with No reading */
+.test-values-fields input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 /* Developer mode's Setup help choice: Off, 1 or 2 */

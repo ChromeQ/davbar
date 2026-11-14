@@ -114,6 +114,32 @@ export const tapAddress = (tap: TapLink, thisTapId: string, path: string) =>
     ? `/${path}`
     : `${tap.url.replace(/\/$/, '')}/${path}`;
 
+// The beer on a tap's screen, from its library, or null. Sending a picture saves
+// it to the library, or marks it shown, straight after the upload, so a beer
+// last shown at or after the picture was uploaded is that picture, as it was
+// before the six colours. A picture the library doesn't keep, such as text or a
+// keg state, is uploaded after any beer was shown. uploadedAt is null if the
+// tap's clock wasn't set.
+export const beerOnScreen = (beers: TapBeer[], uploadedAt: string | null): string | null => {
+  const uploaded = uploadedAt === null ? Number.NaN : Date.parse(uploadedAt);
+
+  if (Number.isNaN(uploaded)) {
+    return null;
+  }
+
+  let last: { id: string; at: number } | null = null;
+
+  for (const beer of beers) {
+    const at = beer.shownAt === null ? Number.NaN : Date.parse(beer.shownAt);
+
+    if (!Number.isNaN(at) && (last === null || at > last.at)) {
+      last = { id: beer.id, at };
+    }
+  }
+
+  return last !== null && last.at >= uploaded ? last.id : null;
+};
+
 // A tap's beers. Taps that don't answer within a few seconds are left out.
 export const fetchTapLibrary = async (tap: TapLink, thisTapId: string): Promise<TapLibrary> => {
   const response = await fetch(tapAddress(tap, thisTapId, 'library'), {
