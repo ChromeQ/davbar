@@ -231,7 +231,7 @@ ImageUploadResult finishImageUpload(ImageUploadState* state, bool redraw, const 
         saveImageSource(source);
     }
 
-    logEvent("image uploaded", wholeScreen ? "400 x 600" : "400 x 400");
+    logEventNow("image uploaded", wholeScreen ? "400 x 600" : "400 x 400");
 
     if (redraw)
     {
@@ -453,7 +453,7 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
         Serial.println("Failed to save displayed image CRC");
     }
 
-    logEvent(
+    logEventNow(
         "redraw",
         String(reason) + ", " + String((millis() - startedAt) / 1000.0, 1) + " s, " +
             (wholeScreen ? String("whole screen, no laser") : stripDescription(strip))

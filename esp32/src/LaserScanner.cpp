@@ -755,7 +755,7 @@ bool chooseLaser(const String& address, const String& mode, String& error)
     choiceChanged = true;
     xSemaphoreGive(lasersMutex);
 
-    logEvent(
+    logEventNow(
         "laser chosen",
         onPurpose ? String("none, on purpose")
             : forget ? String("none")

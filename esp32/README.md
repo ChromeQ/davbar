@@ -111,7 +111,9 @@ root:
 `DeviceLog` records events to the serial port and to numbered CSV segments in
 `/log` on `store`: 16 segments of up to 64 KB, the oldest removed first. Entries
 are held in memory and written every 5 minutes, or sooner when 4 KB build up or
-before a restart. Each entry has a UTC time, the uptime in seconds, the event and
+before a restart. Rare entries are written straight away, with anything held
+before them, so a power cut soon after doesn't lose them (`logEventNow`): a boot,
+Wi-Fi saved, a laser chosen, a picture uploaded, a redraw, a beer saved or removed. Each entry has a UTC time, the uptime in seconds, the event and
 its details. Until the internet time arrives, marked by a `clock synced` entry, the
 time is empty after a power cut, or carried over and slightly off after a restart. The boot entry includes the reset reason and the firmware build
 ID (the start of the ELF SHA-256), which tells builds apart.

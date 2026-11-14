@@ -224,7 +224,9 @@ Force refresh in the settings menu still redraws on demand.
   heard every 5 minutes, redraws and why, Wi-Fi drops (with the reason), reboots
   (with the reason) and mode warnings. About 25 KB a day, so roughly 6 weeks, oldest
   dropped first. Entries are held in memory and written every few minutes to spare
-  the flash, so a power cut loses at most those minutes. Times come from the
+  the flash, so a power cut loses at most those minutes, except rare ones written
+  straight away: boots, Wi-Fi saved, a laser chosen, pictures and beers saved or
+  removed, and redraws. Times come from the
   internet (NTP), or time since boot until Wi-Fi connects. Done in step 2b, with
   boots, Wi-Fi, the setup access point, uploads and redraws; the sensor entries come
   in step 3.
