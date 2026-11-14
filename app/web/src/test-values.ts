@@ -1,6 +1,7 @@
 // Developer mode's test values: made-up numbers for the strip, drawn in the
 // preview and sent to the tap by "Show on device" to check them on the real
 // screen. The tap's side is showTestValues in esp32/src/StripManager.cpp.
+import { pickQuery, type LaserPick } from './laser-pick';
 import type { StripValues } from './strip';
 
 // The setup help screens the tap draws in place of a picture while it has none
@@ -15,6 +16,9 @@ export type TestInputs = {
   battery: string;
   modeWarning: boolean;
   noSignal: boolean;
+  // No level yet: the strip says it's waiting for the laser, or can't hear it
+  // with noSignal, and the numbers above aren't used.
+  noReading: boolean;
   // Shown in place of the picture with the test values, or null for the picture.
   setupHelp: SetupHelpScreen | null;
 };
@@ -26,6 +30,7 @@ export const DEFAULT_TEST_INPUTS: TestInputs = {
   battery: '100',
   modeWarning: false,
   noSignal: false,
+  noReading: false,
   setupHelp: null,
 };
 
@@ -106,11 +111,30 @@ export const withLitres = (inputs: TestInputs, litres: string): TestInputs => {
 export type TapStrip = Pick<StripValues, 'laserNumber' | 'mode'>;
 
 // The strip "Show on device" would draw, with the red border. A value that can't
-// be sent is left off, and errors says why.
+// be sent is left off, and errors says why. With no reading, the strip has none
+// of the numbers, as the tap's own has none while it waits for the laser.
 export const readTestInputs = (
   inputs: TestInputs,
   tap: TapStrip
 ): { strip: StripValues; errors: string[] } => {
+  if (inputs.noReading) {
+    return {
+      strip: {
+        laserChosen: true,
+        laserNumber: tap.laserNumber,
+        mode: tap.mode,
+        percent: null,
+        litresTenths: null,
+        temperatureTenths: null,
+        batteryPercent: null,
+        modeWarning: inputs.modeWarning,
+        noSignal: inputs.noSignal,
+        test: true,
+      },
+      errors: [],
+    };
+  }
+
   const percent = parseWhole(inputs.percent, 0, 100);
   const litresTenths = parseTenths(inputs.litres, 0, 19);
   const temperatureTenths = parseTenths(inputs.temperature, -20, 50);
@@ -139,13 +163,44 @@ export const readTestInputs = (
   };
 };
 
+// A laser picked in the preview and not sent yet is tested with in place of the
+// tap's own, so the screen shows what the preview does. The tap keeps its own.
+const withPick = (form: URLSearchParams, pick: LaserPick | null) => {
+  for (const [name, value] of pick ? pickQuery(pick) : []) {
+    form.set(name, value);
+  }
+
+  return form;
+};
+
 // The form POST /strip/test takes, or null if a value is missing. setupHelp, if
-// set, shows that screen in place of the picture meanwhile.
+// set, shows that screen in place of the picture meanwhile. noReading sends no
+// numbers, for the strip waiting for the laser. pick is a laser picked in the
+// preview and not sent yet, to test with.
 export const testForm = (
   strip: StripValues,
-  setupHelp: SetupHelpScreen | null = null
+  setupHelp: SetupHelpScreen | null = null,
+  noReading = false,
+  pick: LaserPick | null = null
 ): URLSearchParams | null => {
   const { percent, litresTenths, temperatureTenths, batteryPercent } = strip;
+  const withSetupHelp = (form: URLSearchParams) => {
+    if (setupHelp) {
+      form.set('setupHelp', setupHelp);
+    }
+
+    return withPick(form, pick);
+  };
+
+  if (noReading) {
+    return withSetupHelp(
+      new URLSearchParams({
+        noReading: 'true',
+        modeWarning: String(strip.modeWarning),
+        noSignal: String(strip.noSignal),
+      })
+    );
+  }
 
   if (
     percent === null ||
@@ -156,21 +211,22 @@ export const testForm = (
     return null;
   }
 
-  const form = new URLSearchParams({
-    percent: String(percent),
-    litres: formatTenths(litresTenths),
-    temperature: formatTenths(temperatureTenths),
-    battery: String(batteryPercent),
-    modeWarning: String(strip.modeWarning),
-    noSignal: String(strip.noSignal),
-  });
-
-  if (setupHelp) {
-    form.set('setupHelp', setupHelp);
-  }
-
-  return form;
+  return withSetupHelp(
+    new URLSearchParams({
+      percent: String(percent),
+      litres: formatTenths(litresTenths),
+      temperature: formatTenths(temperatureTenths),
+      battery: String(batteryPercent),
+      modeWarning: String(strip.modeWarning),
+      noSignal: String(strip.noSignal),
+    })
+  );
 };
+
+// The form POST /strip/test takes for the setup help alone, with no laser, which
+// has no strip to test. pick is as for testForm.
+export const setupHelpTestForm = (setupHelp: SetupHelpScreen, pick: LaserPick | null = null) =>
+  withPick(new URLSearchParams({ setupHelp }), pick);
 
 // The last "Show on device" or "Back to live" this page sent, and when, and the
 // setup help asked for with it.

@@ -421,11 +421,23 @@ static void handleStatus(AsyncWebServerRequest* request)
         }
 
         image.close();
+
+        // How the web app drew it, if it did, for it to read (PLAN.md, step 8f)
+        String source = imageSource();
+        if (source.isEmpty())
+        {
+            doc["image"]["source"] = nullptr;
+        }
+        else
+        {
+            doc["image"]["source"] = source;
+        }
     }
     else
     {
         doc["image"]["updated"] = nullptr;
         doc["image"]["size"] = 0;
+        doc["image"]["source"] = nullptr;
     }
 
     doc["uptime"] = static_cast<uint64_t>(esp_timer_get_time()) / 1000000;
@@ -464,9 +476,10 @@ static void handleChooseLaser(AsyncWebServerRequest* request)
         return;
     }
 
-    // Choosing a laser, or none, can change the layout: the strip comes or goes.
-    // The redraw is skipped if the screen would look the same.
-    requestImageUpdate("laser chosen");
+    // The strip's redraw rules show the new choice (StripManager), waiting for a
+    // new laser's first reading so the strip isn't drawn empty. A test was set up
+    // for the old choice, so it ends.
+    endTestForLaserChoice();
 
     response["success"] = true;
     addChosenLaser(response);
@@ -489,6 +502,37 @@ static void handleStripTest(AsyncWebServerRequest* request)
         return;
     }
 
+    // A laser picked in the web app's preview and not sent yet, or the tap's own
+    TestLaser laser;
+    if (!readTestLaser(request->arg("laser"), request->arg("mode"), laser, error))
+    {
+        response["success"] = false;
+        response["message"] = error;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // No laser has no strip to test, so the setup help shows alone.
+    if (laser.noLaser)
+    {
+        if (setupHelp == SetupHelp::Screen::None)
+        {
+            response["success"] = false;
+            response["message"] = "With no laser, there's no strip to test. Choose a setup help screen to show.";
+            sendJson(request, 400, doc);
+
+            return;
+        }
+
+        showSetupHelpTest(setupHelp);
+        response["success"] = true;
+        response["message"] = "Showing the setup help for 5 minutes.";
+        sendJson(request, 200, doc);
+
+        return;
+    }
+
     if (!showTestValues(
         request->arg("percent"),
         request->arg("litres"),
@@ -496,6 +540,8 @@ static void handleStripTest(AsyncWebServerRequest* request)
         request->arg("battery"),
         request->arg("modeWarning"),
         request->arg("noSignal"),
+        request->arg("noReading"),
+        laser,
         setupHelp,
         error
     ))
@@ -583,11 +629,50 @@ static void handleImageUpload(
     );
 }
 
+// The web app sends the laser chosen in its preview with the picture, as laser
+// and mode in the address (as POST /laser takes them), so the screen redraws
+// once for both (PLAN.md, step 8d), and source, how it drew the picture, if it
+// did (finishImageUpload).
 static void handleImageUploadFinished(AsyncWebServerRequest* request)
 {
     ImageUploadState* state = static_cast<ImageUploadState*>(request->_tempObject);
-    ImageUploadResult result = finishImageUpload(state);
     request->_tempObject = nullptr;
+
+    bool withLaser = request->hasArg("laser");
+    String laser = request->arg("laser");
+    String mode = request->arg("mode");
+    String source = request->arg("source");
+    bool laserChanges = false;
+    String laserError;
+
+    JsonDocument doc;
+    JsonObject response = doc.to<JsonObject>();
+
+    if (source.length() > MaxImageSourceLength)
+    {
+        cancelImageUpload(state, "its source was too long");
+        response["success"] = false;
+        response["message"] = "How the picture was drawn is too long to keep with it.";
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // Checked before the picture is saved, so neither is.
+    if (withLaser && !checkLaserChoice(laser, mode, laserChanges, laserError))
+    {
+        cancelImageUpload(state, "the laser sent with it was turned down");
+        response["success"] = false;
+        response["message"] = laserError;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // A new laser's redraw rules (StripManager) then show the picture with it:
+    // once its first reading arrives, so the strip isn't drawn empty, or straight
+    // away for no laser.
+    ImageUploadResult result = finishImageUpload(state, !laserChanges, source);
 
     Serial.printf(
         "Image upload %s: %s\n",
@@ -595,22 +680,38 @@ static void handleImageUploadFinished(AsyncWebServerRequest* request)
         result.message
     );
 
-    JsonDocument doc;
-    doc["success"] = result.success;
-    doc["message"] = result.message;
-    String response;
-    serializeJson(doc, response);
+    response["success"] = result.success;
+    response["message"] = result.message;
 
     bool clientError =
         result.error == ImageUploadError::InvalidContentType ||
         result.error == ImageUploadError::InvalidSize ||
         result.error == ImageUploadError::OutOfOrder;
+    int status = result.success ? 200 : clientError ? 400 : 500;
 
-    request->send(
-        result.success ? 200 : clientError ? 400 : 500,
-        "application/json",
-        response
-    );
+    if (result.success && laserChanges)
+    {
+        if (chooseLaser(laser, mode, laserError))
+        {
+            // A test was set up for the old choice.
+            endTestForLaserChoice();
+        }
+        else
+        {
+            // The picture shows with the laser it had.
+            requestImageUpdate("upload");
+            response["success"] = false;
+            response["message"] = "The picture was saved, but the laser wasn't. " + laserError;
+            status = 500;
+        }
+    }
+
+    if (withLaser)
+    {
+        addChosenLaser(response);
+    }
+
+    sendJson(request, status, doc);
 }
 
 static void startAccessPoint(const char* reason)

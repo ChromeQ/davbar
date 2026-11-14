@@ -47,8 +47,9 @@ type LibraryDialogProps = {
   onClose: () => void;
   // A beer was picked: its ID and picture.
   onPick: (beer: { id: string; picture: Blob }) => void;
-  // A keg state was picked: its picture, drawn with today's date.
-  onPickKegState?: (pick: { state: KegState; picture: Blob }) => void;
+  // A keg state was picked: its picture, drawn with today's date, and its line
+  // and date, to draw it again on the whole screen of a tap with no laser.
+  onPickKegState?: (pick: { state: KegState; line: string; date: Date; picture: Blob }) => void;
   // Set when making room for a beer this tap's full library turned away: called
   // once beers are gone from this tap, to save it.
   onMadeRoom?: () => Promise<void>;
@@ -69,15 +70,14 @@ export const libraryTaps: TapLink[] =
       ];
 
 // Where this page's tap takes beers to save.
-export const thisTapLibrary = tapAddress(
-  libraryTaps.find((tap) => tap.deviceId === thisTapId) ?? libraryTaps[0]!,
-  thisTapId,
-  'library'
-);
+// This page's tap, among them.
+export const thisTap = libraryTaps.find((tap) => tap.deviceId === thisTapId) ?? libraryTaps[0]!;
+
+export const thisTapLibrary = tapAddress(thisTap, thisTapId, 'library');
 
 const beersText = (count: number) => `${count} ${count === 1 ? 'beer' : 'beers'}`;
 
-type KegPicture = { line: string; picture: Blob; url: string };
+type KegPicture = { line: string; date: Date; picture: Blob; url: string };
 
 export const LibraryDialog = ({
   onClose,
@@ -150,7 +150,10 @@ export const LibraryDialog = ({
           if (mounted.current) {
             const url = URL.createObjectURL(picture);
             thumbnailUrls.current.push(url);
-            setKegPictures((pictures) => ({ ...pictures, [state]: { line, picture, url } }));
+            setKegPictures((pictures) => ({
+              ...pictures,
+              [state]: { line, date: today, picture, url },
+            }));
           }
         },
         () => {
@@ -377,7 +380,12 @@ export const LibraryDialog = ({
                         if (keg && onPickKegState) {
                           // So next time it gets another line
                           rememberLine(state, keg.line);
-                          onPickKegState({ state, picture: keg.picture });
+                          onPickKegState({
+                            state,
+                            line: keg.line,
+                            date: keg.date,
+                            picture: keg.picture,
+                          });
                         }
                       }}
                     >

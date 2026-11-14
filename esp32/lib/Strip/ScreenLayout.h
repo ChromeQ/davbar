@@ -9,6 +9,7 @@
 // It has no Arduino code, so it is tested on the laptop too (pio test -e native).
 
 #include <stddef.h>
+#include <stdint.h>
 
 namespace ScreenLayout
 {
@@ -18,10 +19,6 @@ namespace ScreenLayout
     constexpr size_t SquareBytes = RowBytes * 400;
     // The 100 rows above the square on the whole screen, and the 100 below it.
     constexpr size_t BandBytes = RowBytes * 100;
-
-    // The picture is the whole screen with no laser on purpose, except while test
-    // values show, so their strip can be checked on the screen.
-    bool wholeScreen(bool noLaserOnPurpose, bool testValuesShowing);
 
     // A picture is the square or the whole screen.
     bool pictureSize(size_t bytes);
@@ -40,4 +37,9 @@ namespace ScreenLayout
     // For a picture of a valid size (pictureSize). A whole-screen picture on the
     // square layout gives its middle square, which is the beer's picture.
     Placement place(size_t pictureBytes, bool wholeScreen);
+
+    // The test values' red border (Strip::TestBorder) round the whole screen,
+    // for the setup help shown by "Show on device", in place of the strip's own.
+    // screen is the screen's bytes.
+    void drawTestBorder(uint8_t* screen);
 }

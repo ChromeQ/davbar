@@ -162,6 +162,150 @@ static void testNoSignalHidesTheModeWarning()
     TEST_ASSERT_TRUE(colours & bit(Strip::Red));
 }
 
+// The bounds of the pixels of one colour in an area, or of everything but white.
+struct Ink
+{
+    int left;
+    int top;
+    int right;
+    int bottom;
+};
+
+static const int AnyInk = -1;
+
+static Ink inkIn(int x, int y, int width, int height, int colour = AnyInk)
+{
+    Ink ink = {x + width, y + height, x - 1, y - 1};
+    for (int j = y; j < y + height; j++)
+    {
+        for (int i = x; i < x + width; i++)
+        {
+            uint8_t found = pixel(i, j);
+            bool counts = colour == AnyInk ? found != Strip::White : found == colour;
+            if (counts)
+            {
+                ink.left = i < ink.left ? i : ink.left;
+                ink.right = i > ink.right ? i : ink.right;
+                ink.top = j < ink.top ? j : ink.top;
+                ink.bottom = j > ink.bottom ? j : ink.bottom;
+            }
+        }
+    }
+
+    return ink;
+}
+
+static Strip::Values noReading()
+{
+    Strip::Values values = {};
+    values.laserChosen = true;
+    values.laserNumber = 1;
+    return values;
+}
+
+// The shrug in the bar, centred in its inside to within a pixel, as an odd space
+// can't split evenly.
+static void assertShrugInTheBar()
+{
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White) | bit(Strip::Black),
+        coloursIn(BarInsideX, BarInsideY, BarInsideWidth, BarInsideHeight)
+    );
+
+    Ink shrug = inkIn(BarInsideX, BarInsideY, BarInsideWidth, BarInsideHeight);
+    TEST_ASSERT_INT_WITHIN(1, shrug.left - BarInsideX, BarInsideX + BarInsideWidth - 1 - shrug.right);
+    TEST_ASSERT_INT_WITHIN(1, shrug.top - BarInsideY, BarInsideY + BarInsideHeight - 1 - shrug.bottom);
+}
+
+// "Waiting for laser 1" across the row, in place of the values, centred to
+// within a few pixels, as each end's letter has its own space beside it.
+static void testWaitingForTheFirstReading()
+{
+    drawAndSave("waiting", noReading());
+
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White) | bit(Strip::Black),
+        coloursIn(0, 0, Strip::Width, Strip::Height)
+    );
+    Ink message = inkIn(0, 0, Strip::Width, 88);
+    TEST_ASSERT_LESS_THAN(50, message.left);
+    TEST_ASSERT_GREATER_THAN(350, message.right);
+    TEST_ASSERT_INT_WITHIN(6, Strip::Width - 1, message.left + message.right);
+    assertShrugInTheBar();
+}
+
+// A laser not in config/lasers.json has no number to give.
+static void testWaitingForALaserWithNoNumber()
+{
+    Strip::draw(strip, noReading());
+    int withNumber = inkIn(0, 0, Strip::Width, 88).right - inkIn(0, 0, Strip::Width, 88).left;
+
+    Strip::Values values = noReading();
+    values.laserNumber = 0;
+    drawAndSave("waiting-no-number", values);
+    Ink message = inkIn(0, 0, Strip::Width, 88);
+
+    TEST_ASSERT_LESS_THAN(withNumber - 20, message.right - message.left);
+    assertShrugInTheBar();
+}
+
+// The mode warning, which may be why there's no reading yet, goes in front.
+static void testWaitingShowsTheModeWarning()
+{
+    Strip::Values values = noReading();
+    values.modeWarning = true;
+    drawAndSave("waiting-mode-warning", values);
+
+    // The sign at the left end, and all of it clear of the test border.
+    Ink sign = inkIn(0, 0, Strip::Width, 88, Strip::Yellow);
+    Ink row = inkIn(0, 0, Strip::Width, 88);
+    TEST_ASSERT_INT_WITHIN(3, row.left, sign.left);
+    TEST_ASSERT_GREATER_OR_EQUAL(Strip::TestBorder, row.left);
+    TEST_ASSERT_LESS_THAN(Strip::Width - Strip::TestBorder, row.right);
+    TEST_ASSERT_GREATER_THAN(350, row.right);
+}
+
+// No reading, and nothing heard: "Can't hear laser 1", with the no signal icon in
+// front.
+static void testCantHearALaserNeverHeard()
+{
+    Strip::Values values = noReading();
+    values.noSignal = true;
+    values.modeWarning = true;
+    drawAndSave("never-heard", values);
+
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White) | bit(Strip::Black) | bit(Strip::Blue) | bit(Strip::Red),
+        coloursIn(0, 0, Strip::Width, 88)
+    );
+    Ink icon = inkIn(0, 0, Strip::Width, 88, Strip::Blue);
+    Ink text = inkIn(0, 0, Strip::Width, 88, Strip::Black);
+    TEST_ASSERT_LESS_THAN(text.left, icon.right);
+    assertShrugInTheBar();
+}
+
+// Nothing heard after a reading: the message in place of the row's values, which
+// are as old as the level, and the bar keeping the last level.
+static void testCantHearALaserKeepsTheLevel()
+{
+    Strip::Values values = fullKeg();
+    values.noSignal = true;
+    drawAndSave("cant-hear", values);
+
+    unsigned row = coloursIn(0, 0, Strip::Width, 88);
+    // No battery fill
+    TEST_ASSERT_FALSE(row & bit(Strip::Green));
+    TEST_ASSERT_TRUE(row & bit(Strip::Blue));
+
+    static uint8_t withSignal[Strip::Size];
+    Strip::draw(withSignal, fullKeg());
+    TEST_ASSERT_EQUAL_MEMORY(
+        withSignal + 88 * Strip::RowBytes,
+        strip + 88 * Strip::RowBytes,
+        (Strip::Height - 88) * Strip::RowBytes
+    );
+}
+
 static void testNoLaserShowsOnlyText()
 {
     Strip::Values values = {};
@@ -239,22 +383,6 @@ static void testTestValuesHaveARedBorder()
     }
 }
 
-static void testWaitingForTheFirstReading()
-{
-    Strip::Values values = {};
-    values.laserChosen = true;
-    values.laserNumber = 1;
-    drawAndSave("waiting", values);
-
-    // An empty bar and no numbers either side of the middle group.
-    TEST_ASSERT_EQUAL_HEX(
-        bit(Strip::White),
-        coloursIn(BarInsideX, BarInsideY, BarInsideWidth, BarInsideHeight)
-    );
-    TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(0, 0, 130, 80));
-    TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(270, 0, 130, 80));
-}
-
 // CRC-32, the same as zlib's, which the web app's test uses.
 static uint32_t crc32(const uint8_t* data, size_t length)
 {
@@ -317,9 +445,16 @@ static void testMatchesTheWebAppsPreview()
 
     Strip::Values noLaser = {};
 
-    Strip::Values waiting = {};
-    waiting.laserChosen = true;
-    waiting.laserNumber = 1;
+    Strip::Values waiting = noReading();
+
+    Strip::Values noNumber = waiting;
+    noNumber.laserNumber = 0;
+
+    Strip::Values waitingWarning = waiting;
+    waitingWarning.modeWarning = true;
+
+    Strip::Values neverHeard = waitingWarning;
+    neverHeard.noSignal = true;
 
     const Case cases[] = {
         {"full keg", full, 0x8A974B40},
@@ -327,11 +462,14 @@ static void testMatchesTheWebAppsPreview()
         {"red", red, 0x50AAE884},
         {"low battery", lowBattery, 0x53E20D63},
         {"mode warning", modeWarning, 0x2889C7DD},
-        {"no signal", noSignal, 0x9381743A},
+        {"no signal", noSignal, 0xB4A55ABB},
         {"full and cold", fullAndCold, 0xA4FD7742},
         {"test values", test, 0x227369F7},
         {"no laser", noLaser, 0x15D02483},
-        {"waiting", waiting, 0xB024E814},
+        {"waiting", waiting, 0xF24CD5D5},
+        {"waiting, no number", noNumber, 0x3C88CEDF},
+        {"waiting, mode warning", waitingWarning, 0x30F6B2D2},
+        {"never heard", neverHeard, 0x6A2A49B4},
     };
 
     // All printed first (pio test -v shows them), then checked.
@@ -362,6 +500,10 @@ int main()
     RUN_TEST(testTopRowIsCentredAboveTheBar);
     RUN_TEST(testTestValuesHaveARedBorder);
     RUN_TEST(testWaitingForTheFirstReading);
+    RUN_TEST(testWaitingForALaserWithNoNumber);
+    RUN_TEST(testWaitingShowsTheModeWarning);
+    RUN_TEST(testCantHearALaserNeverHeard);
+    RUN_TEST(testCantHearALaserKeepsTheLevel);
     RUN_TEST(testMatchesTheWebAppsPreview);
     return UNITY_END();
 }

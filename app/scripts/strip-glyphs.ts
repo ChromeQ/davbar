@@ -59,8 +59,9 @@ const fontSpecs: FontSpec[] = [
   {
     name: 'rowFont',
     size: 40,
-    characters: '0123456789%.°- Nolaser',
-    use: 'the top row',
+    // With "No laser", "Waiting for laser 1" and "Can't hear laser 1"
+    characters: "0123456789%.°- NolaserWitngfC'h",
+    use: 'the top row and its messages',
   },
   {
     name: 'barFont',
@@ -145,6 +146,23 @@ const iconSpecs: IconSpec[] = [
     paths: ['m2 2 20 20'],
   },
 ];
+
+// The shrug in the empty bar while there's no level, ¯\_(ツ)_/¯, drawn whole as
+// one picture. Roboto Bold has every character of it but ツ (katakana tsu), so
+// that's drawn here at Roboto Bold's stroke weight, with round ends.
+const shrugSize = 48;
+const shrugLeft = '¯\\_(';
+const shrugRight = ')_/¯';
+// ツ's width, in ems.
+const tsuAdvance = 0.9;
+// ツ's strokes, in ems with y up from the baseline: two ticks for the eyes, and
+// a long sweep for the smile.
+const tsuPath = (point: (x: number, y: number) => string) =>
+  [
+    `M${point(0.15, 0.6)} L${point(0.25, 0.42)}`,
+    `M${point(0.38, 0.66)} L${point(0.48, 0.48)}`,
+    `M${point(0.78, 0.66)} C${point(0.76, 0.3)} ${point(0.56, 0.06)} ${point(0.2, -0.02)}`,
+  ].join(' ');
 
 const appDirectory = path.join(repositoryDirectory, 'app');
 const cppDirectory = path.join(repositoryDirectory, 'esp32/lib/Strip');
@@ -277,6 +295,48 @@ const buildIcon = async (spec: IconSpec): Promise<Icon> => {
     : 'fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" ${paint}>${paths}</svg>`;
   return { name: spec.name, use: spec.use, ...(await rasterise(svg, iconSize, iconSize)) };
+};
+
+const buildShrug = async (): Promise<Icon> => {
+  const typeface = loadTypeface('roboto');
+  const scale = shrugSize / typeface.unitsPerEm;
+  // The width of the l's stem.
+  const stem = typeface.glyphForCodePoint('l'.codePointAt(0)!).bbox;
+  const strokeWidth = (stem.maxX - stem.minX) * scale;
+  const paths: string[] = [];
+  // In font units
+  let pen = 0;
+
+  const addText = (text: string) => {
+    const run = typeface.layout(text);
+    run.glyphs.forEach((glyph, index) => {
+      if (glyph.id === 0) throw new Error(`Roboto Bold has no "${text}"`);
+      paths.push(
+        `<path transform="translate(${pen * scale} 0) scale(${scale} ${-scale})" d="${glyph.path.toSVG()}"/>`
+      );
+      pen += run.positions[index]!.xAdvance;
+    });
+  };
+
+  addText(shrugLeft);
+  const tsuX = pen * scale;
+  const point = (x: number, y: number) =>
+    `${(tsuX + x * shrugSize).toFixed(2)} ${(-y * shrugSize).toFixed(2)}`;
+  paths.push(
+    `<path d="${tsuPath(point)}" fill="none" stroke="#000" stroke-width="${strokeWidth}" stroke-linecap="round"/>`
+  );
+  pen += tsuAdvance * typeface.unitsPerEm;
+  addText(shrugRight);
+
+  // Room all round, then cut down to the drawn pixels, which the strip centres in
+  // the bar.
+  const width = Math.ceil(pen * scale) + shrugSize;
+  const height = shrugSize * 2;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${-shrugSize / 2} ${-shrugSize * 1.5} ${width} ${height}">${paths.join('')}</svg>`;
+  const { bitmap } = trim(await rasterise(svg, width, height));
+  if (bitmap.width > 255 || bitmap.height > 255)
+    throw new Error('The shrug is too big for an Icon');
+  return { name: 'shrug', use: 'no level yet: ¯\\_(ツ)_/¯, centred in the bar', ...bitmap };
 };
 
 // 1 bit a pixel, each row padded to whole bytes, the most significant bit on the left.
@@ -517,8 +577,8 @@ ${[...fontSource, ...iconSource].join('\n\n')}
 const writePreview = async (fonts: Font[], icons: Icon[], file: string) => {
   const lineWidth = (font: Font) =>
     Math.ceil(font.glyphs.reduce((total, glyph) => total + glyph.advance, 0) / 16) + 16;
-  const width = Math.max(520, ...fonts.map(lineWidth));
-  const height = fonts.reduce((total, font) => total + font.size + 8, 8) + 220;
+  const width = Math.max(560, ...fonts.map(lineWidth));
+  const height = fonts.reduce((total, font) => total + font.size + 8, 8) + 280;
   const canvas = new Uint8Array(width * height);
   const blit = (bitmap: Bitmap, x: number, y: number) => {
     for (let j = 0; j < bitmap.height; j++) {
@@ -548,14 +608,20 @@ const writePreview = async (fonts: Font[], icons: Icon[], file: string) => {
     text(font, font.glyphs.map((glyph) => glyph.character).join(''), 8, y + font.capHeight);
     y += font.size + 8;
   }
-  icons.forEach((icon, index) => blit(icon, 8 + index * (iconSize + 12), y));
-  y += iconSize + 16;
+  let iconX = 8;
+  for (const icon of icons) {
+    blit(icon, iconX, y);
+    iconX += icon.width + 12;
+  }
+  y += Math.max(...icons.map((icon) => icon.height)) + 16;
   const row = fonts.find((font) => font.name === 'rowFont')!;
   const bar = fonts.find((font) => font.name === 'barFont')!;
   const battery = fonts.find((font) => font.name === 'batteryFont')!;
   text(row, '62%', 8, y + row.capHeight);
   text(row, '18.3°', 230, y + row.capHeight);
   text(battery, '7%', 140, y + row.capHeight);
+  y += row.size + 8;
+  text(row, "Can't hear laser 1", 8, y + row.capHeight);
   y += row.size + 8;
   text(bar, '11.7L', 8, y + bar.capHeight);
 
@@ -574,6 +640,7 @@ const fonts: Font[] = [];
 for (const spec of fontSpecs) fonts.push(await buildFont(spec));
 const icons: Icon[] = [];
 for (const spec of iconSpecs) icons.push(await buildIcon(spec));
+icons.push(await buildShrug());
 
 fs.mkdirSync(cppDirectory, { recursive: true });
 fs.writeFileSync(path.join(cppDirectory, 'StripGlyphs.h'), writeCppHeader(fonts, icons));
@@ -592,7 +659,9 @@ for (const font of fonts) {
     `${font.name}: ${font.size}px, ${font.glyphs.length} characters, ${bytes} bytes, ${font.kerning.length} kerning pairs`
   );
 }
-console.log(`Icons: ${icons.map((icon) => icon.name).join(', ')}, ${iconSize}px`);
+console.log(
+  `Icons: ${icons.map((icon) => `${icon.name} ${icon.width}x${icon.height}`).join(', ')}`
+);
 
 const previewIndex = process.argv.indexOf('--preview');
 if (previewIndex >= 0) {

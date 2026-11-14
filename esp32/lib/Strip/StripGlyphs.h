@@ -54,7 +54,7 @@ namespace StripGlyphs
     };
 
     extern const Font batteryFont; // 16px, the percentage in a low battery
-    extern const Font rowFont; // 40px, the top row
+    extern const Font rowFont; // 40px, the top row and its messages
     extern const Font barFont; // 64px, the litres in the bar
     extern const Font helpTitleFont; // 38px, the setup help's title
     extern const Font helpFont; // 22px, the setup help's text
@@ -65,4 +65,5 @@ namespace StripGlyphs
     extern const Icon warningFill; // the inside of the warning sign, drawn yellow under it
     extern const Icon noSignal; // nothing heard from the laser: the Bluetooth symbol, drawn blue
     extern const Icon noSignalStrike; // the line through the Bluetooth symbol, drawn red over it
+    extern const Icon shrug; // no level yet: ¯\_(ツ)_/¯, centred in the bar
 }

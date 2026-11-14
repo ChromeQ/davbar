@@ -14,6 +14,9 @@ namespace Strip
     // 2 pixels a byte, the left one in the high 4 bits, like the rest of the screen.
     constexpr size_t RowBytes = Width / 2;
     constexpr size_t Size = RowBytes * Height;
+    // The red border round anything shown for a test, inside its edge, so it's
+    // never taken for the real thing.
+    constexpr int TestBorder = 5;
 
     // The panel's colour codes.
     enum Colour : uint8_t
@@ -40,11 +43,13 @@ namespace Strip
     {
         // false shows "No laser" and nothing else.
         bool laserChosen;
-        // 1-3 dots, matching the laser's lid. 0 for a laser not in
-        // config/lasers.json, which shows no dots.
+        // 1-3 dots, matching the laser's lid, and the number in the messages
+        // below. 0 for a laser not in config/lasers.json, which shows neither.
         uint8_t laserNumber;
         // The mode chosen for this tap, shown as the brain or leaf icon.
         Mode mode;
+        // Without a level, the top row says "Waiting for laser 1" in place of
+        // the values, and the bar shows a shrug.
         bool hasLevel;
         uint8_t percent;
         uint16_t litresTenths;
@@ -54,8 +59,10 @@ namespace Strip
         uint8_t batteryPercent;
         // The laser has been in the other mode for over an hour.
         bool modeWarning;
-        // Nothing heard from the laser for too long. Hides the mode warning,
-        // as the laser's mode isn't known then.
+        // Nothing heard from the laser for too long: the top row says "Can't
+        // hear laser 1" with the no signal icon, in place of the values, which
+        // are as old as the bar's level. Hides the mode warning, as the laser's
+        // mode isn't known then.
         bool noSignal;
         // Test values from the web app's "Show on device", not the laser's:
         // drawn with a red border inside the strip's edge.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { checkKegLines, MAX_LINE_LENGTH } from '../../scripts/keg-lines.ts';
-import { dateLine, kegLines, pickLine } from './keg-states';
+import { dateFieldValue, dateLine, kegDate, kegLines, pickLine, yesterday } from './keg-states';
 
 describe('the keg states', () => {
   it('never takes the line it took last time', () => {
@@ -27,6 +27,19 @@ describe('the keg states', () => {
 
     expect(dateLine('empty', date)).toBe('Kicked 9 Nov');
     expect(dateLine('ready', date)).toBe('Cleaned 9 Nov');
+  });
+
+  it('takes an earlier date from the date field, never a later one', () => {
+    const now = new Date(2026, 10, 14, 9, 30);
+
+    expect(dateFieldValue(now)).toBe('2026-11-14');
+    expect(dateFieldValue(yesterday(now))).toBe('2026-11-13');
+    expect(dateFieldValue(yesterday(new Date(2026, 2, 1, 0, 5)))).toBe('2026-02-28');
+    expect(kegDate('2026-11-14', now)).toEqual(new Date(2026, 10, 14, 12));
+    expect(kegDate('2026-11-02', now)).toEqual(new Date(2026, 10, 2, 12));
+    expect(kegDate('2026-11-15', now)).toBeNull();
+    expect(kegDate('2026-11-31', now)).toBeNull();
+    expect(kegDate('', now)).toBeNull();
   });
 
   it('reads the lines in config/keg-lines.json, with apostrophes made curly', () => {

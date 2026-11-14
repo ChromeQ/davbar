@@ -39,6 +39,28 @@ void resumeLaserScanner(ScanPause reason);
 // app if the address or mode is wrong or saving fails.
 bool chooseLaser(const String& address, const String& mode, String& error);
 
+// Checks a choice as chooseLaser takes it, without making it: false with a
+// message if it's wrong, otherwise changes says whether it differs from the
+// current choice. For a picture sent with its laser (PLAN.md, step 8d).
+bool checkLaserChoice(const String& address, const String& mode, bool& changes, String& error);
+
+// The laser "Show on device" tests with, which may not be the tap's own.
+struct TestLaser
+{
+    // No laser on purpose: the whole screen, with no strip
+    bool noLaser;
+    // Its number in config/lasers.json, or 0 for a laser not in it or none
+    // chosen yet
+    uint8_t number;
+    bool eco;
+};
+
+// The laser to test with: one picked in the web app's preview and not sent yet
+// (PLAN.md, step 8d), as chooseLaser takes it, so the screen shows what the
+// preview does; or with an empty address, the tap's own. Nothing is saved.
+// Returns false with a message if it's wrong.
+bool readTestLaser(const String& address, const String& mode, TestLaser& laser, String& error);
+
 // Forgets the chosen laser, for a factory reset.
 bool clearLaserChoice();
 

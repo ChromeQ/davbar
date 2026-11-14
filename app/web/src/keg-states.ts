@@ -1,5 +1,6 @@
 // The keg states, "Keg empty" and "Keg ready": always first in the Library, and
-// drawn by the page when picked, so the date is that day's. Each is a pub
+// drawn by the page when picked, so the date is that day's, until Compose
+// changes it (PLAN.md, step 8g). Each is a pub
 // chalkboard with a rubber stamp across it, a line in chalk above, and the date
 // below. The line comes from config/keg-lines.json (see
 // app/scripts/keg-lines.ts), never the one this browser took last time.
@@ -33,9 +34,37 @@ const look = {
   ready: { stamp: 'KEG READY', stampColour: GREEN, lineColour: YELLOW, dateWord: 'Cleaned' },
 };
 
+// "Kicked" or "Cleaned", before the date.
+export const kegDateWord = (state: KegState) => look[state].dateWord;
+
 // "Kicked 9 Nov" or "Cleaned 9 Nov", the date as the Library writes it.
 export const dateLine = (state: KegState, date: Date) =>
-  `${look[state].dateWord} ${date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`;
+  `${kegDateWord(state)} ${date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}`;
+
+// The day as a date field takes it, "2026-11-09", in this browser's time zone.
+export const dateFieldValue = (date: Date) =>
+  [date.getFullYear(), date.getMonth() + 1, date.getDate()]
+    .map((part) => String(part).padStart(2, '0'))
+    .join('-');
+
+// The day before today, at midday, for a keg kicked or cleaned last night.
+export const yesterday = (now = new Date()) =>
+  new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
+
+// A date field's day, at midday, or null if it isn't a whole date or it's after
+// today: a keg can't be kicked or cleaned tomorrow.
+export const kegDate = (value: string, now = new Date()) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+
+  if (!match) {
+    return null;
+  }
+
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
+
+  // A day that doesn't exist, such as 31 November, rolls over into the next month.
+  return dateFieldValue(date) === value && value <= dateFieldValue(now) ? date : null;
+};
 
 // A line from the list, never the one taken last time, unless it's the only one.
 // random gives a number from 0 up to 1, like Math.random.
@@ -141,15 +170,20 @@ const chalk = (
   context.restore();
 };
 
-// A worn rubber stamp across the middle, tilted slightly, its words centred in
-// it however much they shrink to fit.
-const stamp = (context: CanvasRenderingContext2D, words: string, colour: string) => {
+// A worn rubber stamp across the middle, at centreY, tilted slightly, its words
+// centred in it however much they shrink to fit.
+const stamp = (
+  context: CanvasRenderingContext2D,
+  words: string,
+  colour: string,
+  centreY: number
+) => {
   const halfWidth = 156;
   const halfHeight = 52;
   const spacing = 3;
 
   context.save();
-  context.translate(IMAGE_SIZE / 2, IMAGE_SIZE / 2);
+  context.translate(IMAGE_SIZE / 2, centreY);
   context.rotate(-0.17);
   context.strokeStyle = colour;
   context.lineWidth = 9;
@@ -191,27 +225,37 @@ const stamp = (context: CanvasRenderingContext2D, words: string, colour: string)
   context.restore();
 };
 
-// The whole 400 x 400 picture.
+// Where things go on the square board, and on the whole screen of a tap with no
+// laser on purpose, which has more room between them.
+const layouts = {
+  square: { line: 98, lineSize: 40, stamp: 200, date: 338, dateSize: 34 },
+  whole: { line: 150, lineSize: 46, stamp: 300, date: 470, dateSize: 36 },
+};
+
+// The whole picture: the 400 x 400 square, or with height the screen's, the
+// whole 400 x 600 screen, the board's border round all of it.
 export const drawKegState = (
   context: CanvasRenderingContext2D,
   state: KegState,
   line: string,
-  date: Date
+  date: Date,
+  height = IMAGE_SIZE
 ) => {
   const { stamp: stampWords, stampColour, lineColour } = look[state];
+  const layout = height > IMAGE_SIZE ? layouts.whole : layouts.square;
 
   // The board, with a double border
   context.fillStyle = BLACK;
-  context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+  context.fillRect(0, 0, IMAGE_SIZE, height);
   context.strokeStyle = WHITE;
   context.lineWidth = 4;
-  context.strokeRect(18, 18, IMAGE_SIZE - 36, IMAGE_SIZE - 36);
+  context.strokeRect(18, 18, IMAGE_SIZE - 36, height - 36);
   context.lineWidth = 2;
-  context.strokeRect(29, 29, IMAGE_SIZE - 58, IMAGE_SIZE - 58);
+  context.strokeRect(29, 29, IMAGE_SIZE - 58, height - 58);
 
-  chalk(context, line, 98, 40, lineColour);
-  stamp(context, stampWords, stampColour);
-  chalk(context, dateLine(state, date), 338, 34, WHITE);
+  chalk(context, line, layout.line, layout.lineSize, lineColour);
+  stamp(context, stampWords, stampColour, layout.stamp);
+  chalk(context, dateLine(state, date), layout.date, layout.dateSize, WHITE);
 };
 
 // Both fonts, loaded before drawing: a canvas doesn't redraw itself when a font

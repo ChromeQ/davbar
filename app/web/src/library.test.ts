@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  beerOnScreen,
   fetchTapLibrary,
   inBatches,
   namesText,
@@ -215,5 +216,35 @@ describe('removing beers from every tap', () => {
     expect(removalSummary([{ tap: tap(1), removed: [], error: 'Full.' }], [])).toBe(
       "Nothing was removed. Tap 1 couldn't remove them: full."
     );
+  });
+});
+
+describe('the beer on the screen', () => {
+  const uploadedAt = '2026-11-12T13:37:59Z';
+
+  it('is the beer last shown since the picture was uploaded', () => {
+    const beers = [
+      { id: 'aaaaaaaa', shownAt: '2026-11-10T09:00:00Z' },
+      // Saved straight after the upload, maybe in the same second
+      { id: 'bbbbbbbb', shownAt: '2026-11-12T13:37:59Z' },
+      { id: 'cccccccc', shownAt: null },
+    ];
+
+    expect(beerOnScreen(beers, uploadedAt)).toBe('bbbbbbbb');
+    expect(beerOnScreen([{ id: 'bbbbbbbb', shownAt: '2026-11-12T13:38:02Z' }], uploadedAt)).toBe(
+      'bbbbbbbb'
+    );
+  });
+
+  it("is none when the last beer was shown before it, as text and keg states aren't kept", () => {
+    const beers = [{ id: 'aaaaaaaa', shownAt: '2026-11-12T13:30:00Z' }];
+
+    expect(beerOnScreen(beers, uploadedAt)).toBeNull();
+  });
+
+  it("is none when the tap's clock wasn't set, or there are no beers", () => {
+    expect(beerOnScreen([{ id: 'aaaaaaaa', shownAt: '2026-11-12T14:00:00Z' }], null)).toBeNull();
+    expect(beerOnScreen([{ id: 'aaaaaaaa', shownAt: null }], uploadedAt)).toBeNull();
+    expect(beerOnScreen([], uploadedAt)).toBeNull();
   });
 });

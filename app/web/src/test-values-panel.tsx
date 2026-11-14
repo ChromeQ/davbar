@@ -67,6 +67,12 @@ type TestValuesPanelProps = {
   endsAt: number | null;
   // The tap shows the setup help with them.
   showingSetupHelp: boolean;
+  // No laser on purpose, the tap's or picked: there's no strip to test, so only
+  // the setup help is shown, on its own.
+  noLaser: boolean;
+  // A laser picked for the preview that Upload to display hasn't sent. Show on
+  // device tests with it, and the tap keeps its own.
+  laserPicked: boolean;
   // Why the preview can't show the chosen setup help.
   setupHelpError: string;
   sending: 'show' | 'live' | null;
@@ -84,6 +90,8 @@ export const TestValuesPanel = ({
   errors,
   endsAt,
   showingSetupHelp,
+  noLaser,
+  laserPicked,
   setupHelpError,
   sending,
   sendError,
@@ -102,90 +110,118 @@ export const TestValuesPanel = ({
             <h3>Test values</h3>
             <span className="upload-label">Developer mode</span>
           </div>
-          <p className="test-values-hint">
-            The preview shows these. Show on device puts them on the screen for 5 minutes, with a
-            red border, then the tap goes back to the laser's values.
-          </p>
-          <div className="test-values-fields">
-            <div className="text-field test-percent-field">
-              <span id="test-percent-label">Percentage</span>
-              <div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={1}
-                  aria-labelledby="test-percent-label"
-                  value={Number.isFinite(percent) ? Math.min(Math.max(percent, 0), 100) : 0}
-                  onChange={(event) => onInputsChange(withPercent(inputs, event.target.value))}
-                />
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  step={1}
-                  aria-labelledby="test-percent-label"
-                  value={inputs.percent}
-                  onChange={(event) => onInputsChange(withPercent(inputs, event.target.value))}
-                />
-              </div>
-            </div>
-            <label className="text-field">
-              Litres
-              <input
-                type="number"
-                min={0}
-                max={19}
-                step={0.1}
-                value={inputs.litres}
-                onChange={(event) => onInputsChange(withLitres(inputs, event.target.value))}
-              />
-            </label>
-            <label className="text-field">
-              Temperature °C
-              <input
-                type="number"
-                min={-20}
-                max={50}
-                step={0.1}
-                value={inputs.temperature}
-                onChange={(event) => change({ temperature: event.target.value })}
-              />
-            </label>
-            <label className="text-field">
-              Battery %
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                value={inputs.battery}
-                onChange={(event) => change({ battery: event.target.value })}
-              />
-            </label>
-          </div>
-          <div className="test-values-options">
-            <label className="checkbox-option">
-              <input
-                type="checkbox"
-                checked={inputs.modeWarning}
-                onChange={(event) => change({ modeWarning: event.target.checked })}
-              />
-              Mode warning
-            </label>
-            <label className="checkbox-option">
-              <input
-                type="checkbox"
-                checked={inputs.noSignal}
-                onChange={(event) => change({ noSignal: event.target.checked })}
-              />
-              No signal
-            </label>
-          </div>
-          {inputs.modeWarning && inputs.noSignal && (
+          {noLaser ? (
             <p className="test-values-hint">
-              No signal hides the mode warning, as it does on the tap.
+              With no laser, the picture fills the whole screen and there's no strip to test. The
+              setup help can still be previewed and shown on the screen.
             </p>
+          ) : (
+            <>
+              <p className="test-values-hint">
+                The preview shows these. Show on device puts them on the screen for 5 minutes, with
+                a red border, then the tap goes back to the laser's values.
+              </p>
+              <div className="test-values-fields">
+                <div className="text-field test-percent-field">
+                  <span id="test-percent-label">Percentage</span>
+                  <div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      step={1}
+                      aria-labelledby="test-percent-label"
+                      value={Number.isFinite(percent) ? Math.min(Math.max(percent, 0), 100) : 0}
+                      disabled={inputs.noReading}
+                      onChange={(event) => onInputsChange(withPercent(inputs, event.target.value))}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={1}
+                      aria-labelledby="test-percent-label"
+                      value={inputs.percent}
+                      disabled={inputs.noReading}
+                      onChange={(event) => onInputsChange(withPercent(inputs, event.target.value))}
+                    />
+                  </div>
+                </div>
+                <label className="text-field">
+                  Litres
+                  <input
+                    type="number"
+                    min={0}
+                    max={19}
+                    step={0.1}
+                    value={inputs.litres}
+                    disabled={inputs.noReading}
+                    onChange={(event) => onInputsChange(withLitres(inputs, event.target.value))}
+                  />
+                </label>
+                <label className="text-field">
+                  Temperature °C
+                  <input
+                    type="number"
+                    min={-20}
+                    max={50}
+                    step={0.1}
+                    value={inputs.temperature}
+                    disabled={inputs.noReading}
+                    onChange={(event) => change({ temperature: event.target.value })}
+                  />
+                </label>
+                <label className="text-field">
+                  Battery %
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={inputs.battery}
+                    disabled={inputs.noReading}
+                    onChange={(event) => change({ battery: event.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="test-values-options">
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={inputs.modeWarning}
+                    onChange={(event) => change({ modeWarning: event.target.checked })}
+                  />
+                  Mode warning
+                </label>
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={inputs.noSignal}
+                    onChange={(event) => change({ noSignal: event.target.checked })}
+                  />
+                  No signal
+                </label>
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={inputs.noReading}
+                    onChange={(event) => change({ noReading: event.target.checked })}
+                  />
+                  No reading
+                </label>
+              </div>
+              {inputs.modeWarning && inputs.noSignal && (
+                <p className="test-values-hint">
+                  No signal hides the mode warning, as it does on the tap.
+                </p>
+              )}
+              {inputs.noReading && (
+                <p className="test-values-hint">
+                  No reading shows the strip waiting for the laser, or not hearing it with No
+                  signal, so the numbers aren't used.
+                </p>
+              )}
+            </>
           )}
           <div className="test-setup-help">
             <span id="setup-help-label">Setup help</span>
@@ -210,7 +246,7 @@ export const TestValuesPanel = ({
                 ? 'before its Wi-Fi is set up.'
                 : 'on Wi-Fi, until the first picture.'}{' '}
               The preview is the tap's own drawing, with the password left out. Show on device puts
-              it on the screen with the test values.
+              it on the screen{noLaser ? '' : ' with the test values'}.
             </p>
           )}
           {setupHelpError && (
@@ -218,11 +254,18 @@ export const TestValuesPanel = ({
               {setupHelpError}
             </p>
           )}
-          {errors.map((error) => (
-            <p key={error} className="message error-message">
-              {error}
+          {!noLaser &&
+            errors.map((error) => (
+              <p key={error} className="message error-message">
+                {error}
+              </p>
+            ))}
+          {laserPicked && (
+            <p className="test-values-hint">
+              Show on device tests with the laser picked. The tap keeps its own until Upload to
+              display sends it.
             </p>
-          ))}
+          )}
         </>
       )}
       <div className="test-values-actions">
@@ -230,7 +273,7 @@ export const TestValuesPanel = ({
           <button
             className="modal-button primary-modal-button"
             type="button"
-            disabled={errors.length > 0 || sending !== null}
+            disabled={(noLaser ? !inputs.setupHelp : errors.length > 0) || sending !== null}
             onClick={onShow}
           >
             {sending === 'show' ? 'Sending…' : 'Show on device'}
@@ -239,8 +282,12 @@ export const TestValuesPanel = ({
         {endsAt !== null && (
           <>
             <p className="test-countdown">
-              {showingSetupHelp ? 'Setup help and test values' : 'Test values'} on the screen for{' '}
-              <Countdown endsAt={endsAt} onEnd={onEnd} />
+              {showingSetupHelp
+                ? noLaser
+                  ? 'Setup help'
+                  : 'Setup help and test values'
+                : 'Test values'}{' '}
+              on the screen for <Countdown endsAt={endsAt} onEnd={onEnd} />
             </p>
             <button
               className="modal-button"

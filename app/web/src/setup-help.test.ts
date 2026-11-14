@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { IMAGE_BYTES } from './screen';
 import { fetchSetupHelp, setupHelpAddress } from './setup-help';
+import { showSetupHelpTest } from './strip-values';
 
 describe('the setup help preview', () => {
   afterEach(() => {
@@ -36,5 +37,18 @@ describe('the setup help preview', () => {
 
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('Busy', { status: 503 })));
     await expect(fetchSetupHelp('ready')).rejects.toThrow(/status 503/);
+  });
+
+  it('shows the setup help alone on a tap with no laser, with no test values', async () => {
+    vi.stubEnv('DEV', false);
+    const fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true, message: 'Showing.' })));
+    vi.stubGlobal('fetch', fetch);
+
+    await showSetupHelpTest('ready');
+
+    expect(fetch.mock.calls[0]![0]).toBe('/strip/test');
+    expect(String(fetch.mock.calls[0]![1].body)).toBe('setupHelp=ready');
   });
 });

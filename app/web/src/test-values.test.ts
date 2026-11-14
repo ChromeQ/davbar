@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import type { LaserPick } from './laser-pick';
+import { NO_LASER } from './lasers';
 import {
   BATTERY_ERROR,
   DEFAULT_TEST_INPUTS,
@@ -8,6 +10,7 @@ import {
   PERCENT_ERROR,
   PICK_UP_MS,
   readTestInputs,
+  setupHelpTestForm,
   showsSetupHelp,
   TEMPERATURE_ERROR,
   TEST_SECONDS,
@@ -99,6 +102,22 @@ describe('reading the test values', () => {
     expect(errors).toEqual([PERCENT_ERROR, LITRES_ERROR, TEMPERATURE_ERROR, BATTERY_ERROR]);
   });
 
+  it('leaves the numbers off with no reading, as the tap has none while it waits', () => {
+    const { strip, errors } = read({ noReading: true, percent: '101', noSignal: true });
+
+    expect(errors).toEqual([]);
+    expect(strip).toMatchObject({
+      laserChosen: true,
+      laserNumber: 2,
+      percent: null,
+      litresTenths: null,
+      temperatureTenths: null,
+      batteryPercent: null,
+      noSignal: true,
+      test: true,
+    });
+  });
+
   it('turns down numbers outside the limits or not written plainly', () => {
     expect(read({ percent: '-1' }).errors).toEqual([PERCENT_ERROR]);
     expect(read({ litres: '-0.1' }).errors).toEqual([LITRES_ERROR]);
@@ -117,6 +136,15 @@ describe('the form for the tap', () => {
     );
   });
 
+  it('sends no numbers with no reading, only the icons and the setup help', () => {
+    const strip = read({ noReading: true, noSignal: true }).strip;
+
+    expect(testForm(strip, null, true)?.toString()).toBe(
+      'noReading=true&modeWarning=false&noSignal=true'
+    );
+    expect(testForm(strip, 'ready', true)?.get('setupHelp')).toBe('ready');
+  });
+
   it('is not made while a value is missing', () => {
     expect(testForm(read({ percent: '' }).strip)).toBeNull();
     expect(testForm(read({ litres: '' }).strip)).toBeNull();
@@ -128,6 +156,32 @@ describe('the form for the tap', () => {
     expect(testForm(strip, 'join')?.get('setupHelp')).toBe('join');
     expect(testForm(strip, 'ready')?.get('setupHelp')).toBe('ready');
     expect(testForm(strip, null)?.has('setupHelp')).toBe(false);
+  });
+
+  it("tests with a laser picked and not sent yet, or else the tap's own", () => {
+    const strip = read({}).strip;
+    const laser1: LaserPick = {
+      address: 'E5:4C:66:F9:E1:33',
+      mode: 'eco',
+      number: 1,
+      reading: null,
+    };
+
+    expect(testForm(strip, null, false, laser1)?.toString()).toBe(
+      'percent=75&litres=14.2&temperature=4.0&battery=100&modeWarning=false&noSignal=false' +
+        '&laser=E5%3A4C%3A66%3AF9%3AE1%3A33&mode=eco'
+    );
+    expect(testForm(strip, 'join', true, laser1)?.get('laser')).toBe('E5:4C:66:F9:E1:33');
+    expect(testForm(strip)?.has('laser')).toBe(false);
+  });
+
+  it('shows the setup help alone with no laser, picked or not', () => {
+    const noLaser: LaserPick = { address: NO_LASER, mode: 'smart', number: null, reading: null };
+
+    expect(setupHelpTestForm('ready').toString()).toBe('setupHelp=ready');
+    expect(setupHelpTestForm('join', noLaser).toString()).toBe(
+      'setupHelp=join&laser=none&mode=smart'
+    );
   });
 });
 

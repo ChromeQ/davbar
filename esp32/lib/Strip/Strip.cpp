@@ -31,9 +31,8 @@ namespace Strip
         constexpr int IconSize = 32;
         constexpr int GroupGap = 10;
 
-        // Around test values. The content keeps Margin from every edge, so the
-        // border never touches it.
-        constexpr int TestBorder = 5;
+        // Test values get TestBorder (Strip.h). The content keeps Margin from
+        // every edge, so the border never touches it.
 
         // The level bar
         constexpr int BarX = Margin;
@@ -107,17 +106,29 @@ namespace Strip
             }
         }
 
-        // The laser dots, battery and mode icon, with the no signal icon or the
-        // mode warning when needed, centred on the screen so the icons line up
-        // across the taps.
+        // Bluetooth's blue, crossed out in red.
+        void drawNoSignal(const Canvas& canvas, int x, int y)
+        {
+            drawIcon(canvas, StripGlyphs::noSignal, x, y, Blue);
+            drawIcon(canvas, StripGlyphs::noSignalStrike, x, y, Red);
+        }
+
+        // Like a road sign: yellow inside, with a black outline and "!".
+        void drawModeWarning(const Canvas& canvas, int x, int y)
+        {
+            drawIcon(canvas, StripGlyphs::warningFill, x, y, Yellow);
+            drawIcon(canvas, StripGlyphs::warning, x, y, Black);
+        }
+
+        // The laser dots, battery and mode icon, with the mode warning when
+        // needed, centred on the screen so the icons line up across the taps.
         void drawGroup(const Canvas& canvas, const Values& values, int midY)
         {
-            bool warning = values.modeWarning && !values.noSignal;
             int width =
                 DotRadius * 2 + GroupGap +
                 BatteryWidth + NubWidth + GroupGap +
                 IconSize +
-                (values.noSignal || warning ? GroupGap + IconSize : 0);
+                (values.modeWarning ? GroupGap + IconSize : 0);
             int x = Width / 2 - width / 2;
             int iconY = midY - IconSize / 2;
 
@@ -131,38 +142,76 @@ namespace Strip
             }
             x += BatteryWidth + NubWidth + GroupGap;
 
-            // Bluetooth's blue, crossed out in red.
-            if (values.noSignal)
-            {
-                drawIcon(canvas, StripGlyphs::noSignal, x, iconY, Blue);
-                drawIcon(canvas, StripGlyphs::noSignalStrike, x, iconY, Red);
-                x += IconSize + GroupGap;
-            }
-
             const Icon& mode = values.mode == Mode::Eco ? StripGlyphs::leaf : StripGlyphs::brain;
             drawIcon(canvas, mode, x, iconY, Black);
             x += IconSize + GroupGap;
 
-            // Like a road sign: yellow inside, with a black outline and "!".
-            if (warning)
+            if (values.modeWarning)
             {
-                drawIcon(canvas, StripGlyphs::warningFill, x, iconY, Yellow);
-                drawIcon(canvas, StripGlyphs::warning, x, iconY, Black);
+                drawModeWarning(canvas, x, iconY);
             }
+        }
+
+        // In place of the top row while there's no level, or nothing's been heard
+        // from the laser: what the tap's waiting for, in words, with the no signal
+        // icon or the mode warning in front, centred together.
+        void drawMessage(const Canvas& canvas, const Values& values)
+        {
+            const Font& font = StripGlyphs::rowFont;
+            int capTop = (BarY - font.capHeight) / 2;
+            const char* words = values.noSignal ? "Can't hear laser" : "Waiting for laser";
+            char text[24];
+
+            // A laser not in config/lasers.json has no number.
+            if (values.laserNumber > 0)
+            {
+                snprintf(text, sizeof(text), "%s %d", words, values.laserNumber);
+            }
+            else
+            {
+                snprintf(text, sizeof(text), "%s", words);
+            }
+
+            // No signal hides the mode warning, as the laser's mode isn't known.
+            bool warning = values.modeWarning && !values.noSignal;
+            bool icon = values.noSignal || warning;
+            int textWidth = (Draw::textAdvance(font, text) + 15) / 16;
+            int width = (icon ? IconSize + GroupGap : 0) + textWidth;
+            int x = Width / 2 - width / 2;
+            int iconY = capTop + font.capHeight / 2 - IconSize / 2;
+
+            if (values.noSignal)
+            {
+                drawNoSignal(canvas, x, iconY);
+            }
+            else if (warning)
+            {
+                drawModeWarning(canvas, x, iconY);
+            }
+
+            if (icon)
+            {
+                x += IconSize + GroupGap;
+            }
+
+            drawText(canvas, font, text, x, capTop + font.capHeight, Align::Left, plain(Black));
         }
 
         void drawTopRow(const Canvas& canvas, const Values& values)
         {
+            if (!values.hasLevel || values.noSignal)
+            {
+                drawMessage(canvas, values);
+                return;
+            }
+
             const Font& font = StripGlyphs::rowFont;
             int capTop = (BarY - font.capHeight) / 2;
             int baseline = capTop + font.capHeight;
             char text[12];
 
-            if (values.hasLevel)
-            {
-                snprintf(text, sizeof(text), "%d%%", values.percent);
-                drawText(canvas, font, text, Margin, baseline, Align::Left, plain(Black));
-            }
+            snprintf(text, sizeof(text), "%d%%", values.percent);
+            drawText(canvas, font, text, Margin, baseline, Align::Left, plain(Black));
 
             if (values.hasTemperature)
             {
@@ -182,12 +231,22 @@ namespace Strip
         }
 
         // Green from 50%, orange from 25% and red below, with the litres centred.
+        // With no level, a shrug.
         void drawBar(const Canvas& canvas, const Values& values)
         {
             canvas.strokeRect(BarX, BarY, BarWidth, BarHeight, BarBorder, Black);
 
             if (!values.hasLevel)
             {
+                // Centred on its drawn pixels.
+                const Icon& shrug = StripGlyphs::shrug;
+                drawIcon(
+                    canvas,
+                    shrug,
+                    Width / 2 - shrug.width / 2,
+                    BarY + (BarHeight - shrug.height) / 2,
+                    Black
+                );
                 return;
             }
 

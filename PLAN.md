@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done; step 6 (beer library) done on tap 1, still to test sending on one tap and picking on another once tap 2 is running; step 7 (setup help) done on tap 1; step 8 (no laser on purpose) in progress, 8a done on tap 1. Last updated 2026-11-12.
+Status: steps 0 to 5 done; step 6 (beer library) done on tap 1, still to test sending on one tap and picking on another once tap 2 is running; step 7 (setup help) done on tap 1; step 8 (no laser on purpose, 8a to 8h) done on tap 1, still to upload to taps 2 and 3 once they're running. Last updated 2026-11-14.
 
 ## Goal
 
@@ -162,15 +162,24 @@ from real kegs at the next keg change.
     change or restart puts the laser back in Smart Mode.
 - **Special states:**
   - No laser chosen: the strip shows "No laser".
-  - Nothing heard from the laser: keep showing the last values. With Smart chosen,
+  - A laser chosen with no level yet, after the minute's wait for its first reading
+    (heard but not measuring, or not heard yet): the top row says "Waiting for laser
+    1" in place of the values, and the bar shows a shrug, `¯\_(ツ)_/¯`, 48px, centred.
+    The mode warning, which may be why, goes in front of the message. A laser not in
+    `config/lasers.json` drops the number ("Waiting for laser"). Step 8c, below.
+  - Nothing heard from the laser: the bar keeps the last level. With Smart chosen,
     the laser broadcasts constantly, so silence for over 10 minutes (set in step 3)
-    is a real problem: show a no signal icon (a blue Bluetooth symbol crossed out in
-    red) next to the battery icon. It replaces the mode warning, as the laser's mode
-    isn't known while it's silent. One redraw when it appears, one when it clears. With Eco
-    chosen, a steady keg is silent for 10+ hours, so there is no warning. Either way,
-    flat batteries, the likely failure, show as the red battery icon first. No "last
-    updated" time on screen: it would be frozen at the last redraw. The web app's
-    Status dialog shows "last heard" live.
+    is a real problem: the top row says "Can't hear laser 1", with the no signal
+    icon (a blue Bluetooth symbol crossed out in red) in front, in place of the
+    percentage, battery and temperature, which are as old as the level. It replaces
+    the mode warning, as the laser's mode isn't known while it's silent. With no
+    level as well, the bar shows the shrug. One redraw when it appears, one when it
+    clears. With Eco chosen, a steady keg is silent for 10+ hours, so there is no
+    warning. Either way, flat batteries, the likely failure, show as the red battery
+    icon first. No "last updated" time on screen: it would be frozen at the last
+    redraw. The web app's Status dialog shows "last heard" live. (At first the no
+    signal icon sat small in the middle group, with the old values either side,
+    easy to miss across the room.)
   - Temperature or battery missing from an advertisement: keep the last known value.
   - No saved image: show setup help instead. Before Wi-Fi is set up, that is the
     access point name and password; once connected, it is
@@ -281,7 +290,8 @@ Force refresh in the settings menu still redraws on demand.
   goes back to its real readings, so a tap is never left showing made-up numbers.
   `POST /strip/test` takes percent, temperature, battery and optionally litres
   (otherwise worked out from percent for a 19 L keg), modeWarning and noSignal
-  ("true"); `POST /strip/live` goes back early; `/status` gives
+  ("true"), and laser and mode to test with a laser that isn't the tap's own (step
+  8d); `POST /strip/live` goes back early; `/status` gives
   `strip.testSecondsLeft`. Test values have a 5px red border inside the strip's edge,
   clear of the content. They're never saved, so a restart comes back live. Done in
   step 5a; litres added in part 4 of 5b.
@@ -401,7 +411,8 @@ Force refresh in the settings menu still redraws on demand.
 - Developer mode, a switch in Settings (off by default, remembered by each browser;
   each tap's page is its own site to the browser, so each tap remembers it
   separately), adds Test values under the preview: percentage (slider and number
-  input) and litres, temperature, battery, and the Mode warning and No signal icons.
+  input) and litres, temperature, battery, the Mode warning and No signal icons, and
+  No reading, which leaves the numbers off for the strip waiting for the laser.
   The percentage and litres are linked: a percentage gives the litres the tap works
   out for it, and typed litres give the percentage a real reading would show with
   them (11.8 L gives 62%, a pair no percentage alone makes). The
@@ -424,13 +435,15 @@ Force refresh in the settings menu still redraws on demand.
   in Roboto.
   Each page also declares a blank icon, as browsers asked for /favicon.ico and the
   tap answered with the whole page again, a second download on every load.
-- A laser picker next to Send, and on the setup page below the Wi-Fi settings, as
+- A laser picker next to Upload to display, and on the setup page below the Wi-Fi settings, as
   it's optional there and can be changed later in the app. It lists every laser in
   the shared list with its dots and, when heard recently, its reading, mode and when
   it was last heard; a laser in Eco may not be heard yet, so check the dots on its
-  lid. A Save button sends the choice, and it can be skipped. On the setup page the
-  laser and Wi-Fi are one form: its Save sends the laser first (kept whether or not
-  Wi-Fi connects), then joins Wi-Fi. Both pages show which tap it is in a large
+  lid. On the main page, the choice goes in the preview, and Upload to display sends it
+  with everything else (step 8d). On the setup page, which has no preview, a Save
+  button sends the choice, and it can be skipped; the laser and Wi-Fi are one form:
+  its Save sends the laser first (kept whether or not Wi-Fi connects), then joins
+  Wi-Fi. Both pages show which tap it is in a large
   badge (for example "Tap 1"), and so does the browser tab's title. The picker also
   sets the mode this tap expects:
   - Smart (default): screen a few minutes behind a pour, RAPT app works, batteries
@@ -544,12 +557,18 @@ Each step ends with something visible to check.
      stays a square that works on any tap. A beer picked from the library sits in
      the square, with the background in the bands. The keg states are drawn full
      height, with the board's border round the whole screen.
-   - The tap takes a whole-screen picture or a square one. With a laser, or while
-     test values show (so their strip can be checked), it draws a whole-screen
-     picture's middle square, with the strip. With no laser on purpose, a square
-     picture, or the setup help, sits in the middle on white bands until a
-     whole-screen picture is sent.
-   - Choosing a laser, or no laser, redraws the screen when that changes its layout.
+   - The tap takes a whole-screen picture or a square one. With a laser, it draws a
+     whole-screen picture's middle square, with the strip. With no laser on
+     purpose there's never a strip: a square picture, or the setup help, sits in
+     the middle on white bands until a whole-screen picture is sent, and test
+     values are turned down, as there's no strip to test.
+   - Choosing a laser, or no laser, ends any test showing, as it was set up for the
+     old choice, and the strip's redraw rules show the new choice: no laser
+     straight away, and a new laser once its first reading arrives (within a
+     minute), so the strip isn't drawn empty. (At first every choice redrew
+     straight away, which drew a new laser's strip before its first reading.)
+     Going between no laser on purpose and none chosen yet, which the rules can't
+     tell apart, redraws straight away.
    - Done in 8a, tested on tap 1: `POST /laser` takes `address=none`, and the
      laser's answers say `"noLaser"`; the choice is kept over a restart and cleared
      by a factory reset. `POST /image` takes 80,000 or 120,000 bytes. Where the
@@ -560,6 +579,116 @@ Each step ends with something visible to check.
      square was skipped as the same screen, which shows the middle square is cut
      exactly. The redraw log says "whole screen, no laser" in place of the strip's
      values.
+   - Done in 8b, tested against a faked tap on the dev server and on tap 1: the
+     laser picker's No laser choice, first in the list as the dots count up from
+     none (also on the setup page),
+     with the mode hidden; on a no-laser tap the preview shows the whole screen,
+     text and images have the square in the middle with the background over the
+     full height, the Background control always shows, a keg state is drawn full
+     height, Send uploads 120,000 bytes and the library gets the 400 x 400 middle
+     square. The preview places either size of picture as the tap does
+     (`screenBytes` in `web/src/screen.ts`, tested against the same cases as the
+     firmware). The Status dialog and the Laser button say "No laser", and saving a
+     laser asks the tap for its strip straight away. In developer mode on a no-laser
+     tap, the test values' strip fields are hidden with a note, as there's no strip
+     to test, and Show on device shows the chosen setup help alone (`POST
+     /strip/test` with just `setupHelp`), keeping the whole-screen layout. (At
+     first test values could keep the strip on a tap switched to no laser
+     mid-test; now a laser change ends the test, and a no-laser tap never shows a
+     strip.) The setup
+     help shown for a test makes the whole screen a test, so it's never taken for a
+     tap that needs setting up: one red border round the whole screen, with or
+     without a laser, in place of the strip's own, so there's no double line
+     through the middle. Test values alone keep the border round the strip. The
+     preview shows the same. On tap 1: No laser redrew its
+     picture on white bands; a text picture sent from the page was stored as 400 x
+     600 and drawn on the whole screen; the reloaded page previewed it in full; laser
+     1 again drew its middle square with the strip.
+   - (8c) Found while testing 8b: laser 1, heard but not measuring, drew a strip
+     with just its dot and the brain over an empty bar, which looked broken. Chosen
+     from a mockup: the top row says what the tap's waiting for, "Waiting for laser
+     1" or "Can't hear laser 1", with the shrug in an empty bar, and the no signal
+     state says so in words over the last level (see Special states, above). The
+     shrug is drawn whole by `app/scripts/strip-glyphs.ts` as one icon: Roboto has
+     every character but ツ, which the script draws at Roboto Bold's stroke weight.
+     The row's 40px font gains the message's letters. Developer mode's test values
+     get No reading (`noReading=true` to `POST /strip/test`, with no numbers): on
+     its own it shows the waiting strip, with No signal the never-heard one. Laptop
+     tests cover each state, and the web preview matches them.
+   - (8d) Found while testing 8c: the page showed Laser 1 while the tap had no
+     laser, and drew a screen the tap never shows (the square with "No laser" in
+     the strip): the page asked for the tap's laser only when it opened and after
+     its own saves, but for the strip every 15 seconds, so a choice made from
+     another page or a lost answer left the two apart. And choosing a laser
+     changed the screen straight away, while a picture waited for Upload to
+     display. Now nothing reaches the screen until Upload to display:
+     - The laser dialog's Use puts the choice in the preview. The Laser box shows
+       it, marked "not sent yet", and the preview draws its strip from the reading
+       the dialog heard (or waiting for one), or the whole screen for no laser.
+       Picking what the tap has is nothing to send.
+     - Upload to display is enabled for a new picture, a picked laser, or both. A
+       picture goes with its laser in one request (`POST /image?laser=…&mode=…`,
+       as `POST /laser` takes them), checked before the picture is saved, so
+       neither is if the laser is turned down. The tap then leaves the redraw to
+       the laser's own rules, so the screen changes once, when the new laser's
+       first reading arrives (within a minute), or straight away for no laser.
+       Without a picture, the laser goes on its own (`POST /laser`). The upload
+       dialog says when the screen will change.
+     - `GET /strip` includes the laser chosen, and the page follows it, so a
+       choice made from another page shows within 15 seconds.
+     - Developer mode's Show on device tests what the preview shows: a picked
+       laser that hasn't been sent goes with the test (`laser` and `mode` to `POST
+       /strip/test`, as `POST /laser` takes them), and the tap draws its dots,
+       mode icon and layout in place of its own, or for no laser the setup help
+       alone on the whole screen. Nothing is saved, and back to live is the tap's
+       own laser. (At first Show on device waited until the picked laser was
+       sent, which got in the way of building the preview.)
+   - (8e) Found while testing 8d: after a reload Compose is empty and the preview
+     shows the tap's picture, so picking No laser showed white bands with nothing
+     to choose their background from. Now picking No laser with nothing composed
+     loads the picture on the tap into Compose, at Fit, so the Background control
+     shows; an "Edit the picture on the tap" button in Compose's empty box does
+     the same at any time. It's the beer's original from this tap's library, as
+     it was before the six colours, when that's what's on the screen: sending a
+     picture saves it to the library, or marks it shown, straight after the
+     upload, so a beer last shown at or after the picture's upload time (`GET
+     /status`) is that picture. Otherwise, as for text, a keg state, a beer the
+     full library turned away or a tap whose clock wasn't set, it's the tap's
+     six-colour copy, which comes back pixel for pixel at Fit. A whole-screen
+     picture gives its middle square, the beer, as the library keeps it. Tested
+     on tap 1: both ways loaded the original from the library, and a blurred
+     background filled the bands in the preview.
+   - (8f) Found while testing 8e: Keg empty on the whole screen of a tap with no
+     laser, then a laser picked after a reload, previewed the board's middle
+     square, its border cut off at the top and bottom, as the tap would draw it.
+     The page draws a keg state or text for the layout, but the tap keeps only
+     pixels, and after a reload the page can't draw it again: the Library never
+     gives the last line twice, and dates it today. Now Upload to display sends
+     how the page drew it (`source` with `POST /image`: the keg state's state,
+     line and date, or text's words, font, size, colour and background, as JSON,
+     up to 1KB), kept beside the picture, unread, until another picture replaces
+     it, and given back in `GET /status` (`image.source`). With nothing in
+     Compose, picking a laser on a tap with no laser draws it again for the
+     square, and picking No laser, or "Edit the picture on the tap", draws it
+     again for the whole screen. A beer stays as it is, as its middle square is
+     the beer. A keg state moved or zoomed in the square goes as pixels alone.
+   - (8g) A keg kicked or cleaned last night, with the screen not updated till
+     the morning, needs an earlier date. While a keg state is in Compose, its
+     date and line show there in place of Fit, Fill and Zoom: a date field
+     (never after today) with Today and Yesterday, and Another line, which never
+     gives the line showing, and which the Library's next pick then avoids too.
+     Each draws the board again, and its source carries them. With 8f, a screen
+     a day out is fixed by Edit the picture on the tap, Yesterday, then Upload
+     to display.
+   - (8h) The line can be typed too, for a one-off message: a Line field above
+     the date, with a count of its characters (12/24) inside its right end. It
+     has the list's rules, now in `web/src/keg-line-rules.ts`, shared by the
+     build's check of `config/keg-lines.json` and the page: at most 24
+     characters, only those the chalk font has (an error names any other, and the
+     board keeps the last line that works), and an apostrophe between letters
+     drawn curly. A typed line isn't added to the list; it goes to the tap in the
+     picture's source, so a laser change or Edit the picture on the tap brings it
+     back. A line worth keeping goes in `config/keg-lines.json`.
 9. **Fit the enclosure,** once the case parts are printed and the last screens arrive.
    The case's frame may cover a few pixels of each screen, and more on one side
    than the other. Each tap gets its own visible area (how much each edge loses),
@@ -576,7 +705,8 @@ Each step ends with something visible to check.
    behind the same screen.
 10. **Wrap up,** the last commits on `keg-level` before merging into master: move the
    lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
-   the display behaves into the READMEs), then move this plan to
+   the display behaves into the READMEs, calling the main page's button "Upload to
+   display", its name in the app, where older notes here say "Send"), then move this plan to
    `docs/plans/2026-11-keg-level.md` with a line at the top saying it is done and
    when it was merged. After that the archived plan is never edited; fixes go in the
    docs. Ideas still marked Later stay listed there, and each gets its own new plan
@@ -584,6 +714,13 @@ Each step ends with something visible to check.
 11. **Later:** RAPT cloud upload.
 
 ## Open questions and later ideas
+
+- **Show on device's two gaps (2026-11-14), left for later:** a test uses the
+  picture already on the tap, not a new one waiting in Compose, as sending it with
+  the test would need the tap to hold a second picture for the 5 minutes. And the
+  countdown under the preview says what's showing (the setup help, test values or
+  both) from the laser picked now, so picking another laser during a test can make
+  it wrong; `GET /strip` could say whether the tap's test has a strip.
 
 - **The phone can't open the tap's page (2026-11-10), fixed:** on ChromeQ
   (192.168.0.72), the phone got "This site can't be reached" for the tap and even the

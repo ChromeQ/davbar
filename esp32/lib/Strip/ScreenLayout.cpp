@@ -1,12 +1,10 @@
 #include "ScreenLayout.h"
 
+#include "Draw.h"
+#include "Strip.h"
+
 namespace ScreenLayout
 {
-    bool wholeScreen(bool noLaserOnPurpose, bool testValuesShowing)
-    {
-        return noLaserOnPurpose && !testValuesShowing;
-    }
-
     bool pictureSize(size_t bytes)
     {
         return bytes == SquareBytes || bytes == ScreenBytes;
@@ -26,5 +24,13 @@ namespace ScreenLayout
         return wholeScreen
             ? Placement{0, SquareBytes, BandBytes, true}
             : Placement{0, SquareBytes, 0, false};
+    }
+
+    void drawTestBorder(uint8_t* screen)
+    {
+        constexpr int Width = RowBytes * 2;
+        constexpr int Height = ScreenBytes / RowBytes;
+        Draw::Canvas canvas{screen, Width, Height};
+        canvas.strokeRect(0, 0, Width, Height, Strip::TestBorder, Strip::Red);
     }
 }

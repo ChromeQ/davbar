@@ -7,7 +7,6 @@
 
 #include "DEV_Config.h"
 #include "DeviceLog.h"
-#include "LaserScanner.h"
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
 #include "Screen.h"
@@ -133,7 +132,48 @@ void writeImageUploadChunk(
     }
 }
 
-ImageUploadResult finishImageUpload(ImageUploadState* state)
+// How the web app drew the saved picture, if it did (finishImageUpload).
+static const char* sourcePath = "/image.source";
+
+// After the picture is saved. A failure leaves no source, so the web app works
+// from the picture's pixels instead.
+static void saveImageSource(const String& source)
+{
+    File file = DataFS.open(sourcePath, "w");
+    bool written = file && file.print(source) == source.length();
+    if (file)
+    {
+        file.close();
+    }
+
+    if (!written)
+    {
+        removeDataFile(sourcePath);
+        logEvent("storage error", "unable to save how the picture was drawn");
+    }
+}
+
+String imageSource()
+{
+    // Checked first, because opening a missing file logs an error.
+    if (!DataFS.exists(sourcePath))
+    {
+        return String();
+    }
+
+    File file = DataFS.open(sourcePath, "r");
+    if (!file)
+    {
+        return String();
+    }
+
+    String source = file.size() <= MaxImageSourceLength ? file.readString() : String();
+    file.close();
+
+    return source;
+}
+
+ImageUploadResult finishImageUpload(ImageUploadState* state, bool redraw, const String& source)
 {
     if (state && state->file)
     {
@@ -162,6 +202,9 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     removeDataFile("/image.previous");
 
+    // The old picture's source goes first, so it's never left with a new one.
+    removeDataFile(sourcePath);
+
     if (
         DataFS.exists("/image.bin") &&
         !DataFS.rename("/image.bin", "/image.previous")
@@ -183,14 +226,22 @@ ImageUploadResult finishImageUpload(ImageUploadState* state)
 
     removeDataFile("/image.previous");
 
+    if (!source.isEmpty())
+    {
+        saveImageSource(source);
+    }
+
     logEvent("image uploaded", wholeScreen ? "400 x 600" : "400 x 400");
 
-    requestImageUpdate("upload");
+    if (redraw)
+    {
+        requestImageUpdate("upload");
+    }
 
     return { true, ImageUploadError::None, "The display image was uploaded successfully." };
 }
 
-void cancelImageUpload(ImageUploadState* state)
+void cancelImageUpload(ImageUploadState* state, const char* reason)
 {
     if (!state)
     {
@@ -205,7 +256,7 @@ void cancelImageUpload(ImageUploadState* state)
     removeDataFile("/image.upload");
     delete state;
 
-    logEvent("image upload failed", "the connection closed before it finished");
+    logEvent("image upload failed", reason);
 }
 
 void requestImageUpdate(const char* reason)
@@ -223,7 +274,9 @@ void requestForcedImageUpdate()
 
 bool clearScreenImage()
 {
-    return removeDataFile("/image.bin") && removeDataFile(displayedImageCrcPath);
+    return removeDataFile("/image.bin") &&
+        removeDataFile(sourcePath) &&
+        removeDataFile(displayedImageCrcPath);
 }
 
 void processImageManager()
@@ -317,7 +370,8 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
     // In place of the picture while there's none, or to check it on the screen
     SetupHelp::Screen help = setupHelpToDraw(imageSaved);
     // With no laser on purpose, the picture is the whole screen, with no strip.
-    bool wholeScreen = ScreenLayout::wholeScreen(noLaserOnPurpose(), testValuesShowing());
+    // A test may be of a laser that isn't the tap's own, so it decides meanwhile.
+    bool wholeScreen = pictureFillsScreen();
 
     if (help != SetupHelp::Screen::None)
     {
@@ -353,9 +407,21 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
         }
     }
 
+    // The setup help shown for a test makes the whole screen a test: one red
+    // border round all of it, so it's never taken for a tap that really needs
+    // setting up, in place of the strip's own.
+    bool helpTest = help != SetupHelp::Screen::None && testSetupHelp() != SetupHelp::Screen::None;
+
     if (!wholeScreen)
     {
-        Strip::draw(screenBuffer + IMAGE_SIZE, strip);
+        Strip::Values drawn = strip;
+        drawn.test = drawn.test && !helpTest;
+        Strip::draw(screenBuffer + IMAGE_SIZE, drawn);
+    }
+
+    if (helpTest)
+    {
+        ScreenLayout::drawTestBorder(screenBuffer);
     }
 
     // Covers the strip too, so a change to it redraws the screen.

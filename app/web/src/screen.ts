@@ -2,12 +2,26 @@
 // tap draws the keg strip in the 200 rows below it.
 import { decodeSpectra6 } from '@chromeq/davbar-spectra6';
 
+import { TEST_BORDER } from './strip';
+
 export const SCREEN_WIDTH = 400;
 export const SCREEN_HEIGHT = 600;
 // The image is square: this is its width and its height.
 export const IMAGE_SIZE = 400;
 // The image as uploaded and stored on the tap: 2 pixels a byte.
 export const IMAGE_BYTES = (IMAGE_SIZE * IMAGE_SIZE) / 2;
+
+// On a tap with no laser on purpose there's no strip, so the picture is the whole
+// screen: the square in the middle, with its background filling the 100 rows
+// above and below (PLAN.md, step 8). The same rules as the tap's
+// (esp32/lib/Strip/ScreenLayout).
+export const WHOLE_SCREEN_BYTES = (SCREEN_WIDTH * SCREEN_HEIGHT) / 2;
+export const BAND_HEIGHT = (SCREEN_HEIGHT - IMAGE_SIZE) / 2;
+export const BAND_BYTES = (SCREEN_WIDTH / 2) * BAND_HEIGHT;
+
+// A picture is the square or the whole screen.
+export const isPictureSize = (bytes: number) =>
+  bytes === IMAGE_BYTES || bytes === WHOLE_SCREEN_BYTES;
 
 // An image's size in its own pixels. An ImageBitmap is one.
 export type ImageSize = { width: number; height: number };
@@ -126,22 +140,28 @@ export const backgroundColours = (style: BackgroundStyle): BackgroundColour[] =>
 
 export const isGradient = (style: BackgroundStyle) => style === 'linear' || style === 'radial';
 
-// Fills the square with the background. A blurred image is drawn over white by
-// drawImageInSquare.
-export const paintBackground = (context: CanvasRenderingContext2D, background: Background) => {
-  const middle = IMAGE_SIZE / 2;
+// Fills the square with the background, or the whole screen when height is the
+// screen's, with a gradient running over all of it. A blurred image is drawn
+// over white by drawImageInSquare.
+export const paintBackground = (
+  context: CanvasRenderingContext2D,
+  background: Background,
+  height = IMAGE_SIZE
+) => {
+  const middleX = IMAGE_SIZE / 2;
+  const middleY = height / 2;
 
   if (isGradient(background.style)) {
     const gradient =
       background.style === 'linear'
-        ? context.createLinearGradient(0, 0, 0, IMAGE_SIZE)
+        ? context.createLinearGradient(0, 0, 0, height)
         : context.createRadialGradient(
-            middle,
-            middle,
+            middleX,
+            middleY,
             0,
-            middle,
-            middle,
-            Math.hypot(middle, middle)
+            middleX,
+            middleY,
+            Math.hypot(middleX, middleY)
           );
 
     gradient.addColorStop(0, background.colour);
@@ -151,28 +171,43 @@ export const paintBackground = (context: CanvasRenderingContext2D, background: B
     context.fillStyle = background.style === 'solid' ? background.colour : '#ffffff';
   }
 
-  context.fillRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+  context.fillRect(0, 0, IMAGE_SIZE, height);
 };
 
 // How blurred the blurred background is, in the square's pixels.
 const BLUR = 24;
 
+// Draws the image in the square, with the background around it. With height the
+// screen's, the square sits in the middle of the whole screen and the
+// background fills the bands above and below; the image stays in the square.
 export const drawImageInSquare = (
   context: CanvasRenderingContext2D,
-  image: ImageBitmap,
+  image: ImageSize & CanvasImageSource,
   zoom: number,
   pan: Pan,
-  background: Background
+  background: Background,
+  height = IMAGE_SIZE
 ) => {
   const place = placeImage(image, zoom, pan);
+  const top = (height - IMAGE_SIZE) / 2;
 
   context.imageSmoothingQuality = 'high';
-  paintBackground(context, background);
+  paintBackground(context, background, height);
 
-  if (background.style === 'blur' && hasGaps(image, zoom)) {
-    // The image filling the square around the same point, blurred. Drawn bigger
-    // than that, so the blur's faded edges fall outside the square.
-    const cover = placeImage(image, fillZoom(image), pan);
+  if (background.style === 'blur' && (hasGaps(image, zoom) || top > 0)) {
+    // The image filling the square around the same point, or the whole screen
+    // around its middle, blurred. Drawn bigger than that, so the blur's faded
+    // edges fall outside it.
+    const scale = Math.max(IMAGE_SIZE / image.width, height / image.height);
+    const cover =
+      top > 0
+        ? {
+            x: (IMAGE_SIZE - image.width * scale) / 2,
+            y: (height - image.height * scale) / 2,
+            width: image.width * scale,
+            height: image.height * scale,
+          }
+        : placeImage(image, fillZoom(image), pan);
 
     context.filter = `blur(${BLUR}px)`;
     context.drawImage(
@@ -185,15 +220,68 @@ export const drawImageInSquare = (
     context.filter = 'none';
   }
 
-  context.drawImage(image, place.x, place.y, place.width, place.height);
+  context.save();
+  context.beginPath();
+  context.rect(0, top, IMAGE_SIZE, IMAGE_SIZE);
+  context.clip();
+  context.drawImage(image, place.x, top + place.y, place.width, place.height);
+  context.restore();
 };
 
-// The whole screen as it will look. The encoded image's bytes followed by the
-// strip's are the same 120,000 bytes the tap sends to the panel.
-export const screenPixels = (imageBytes: Uint8Array, stripBytes: Uint8Array): ImageData => {
-  const bytes = new Uint8Array(imageBytes.length + stripBytes.length);
-  bytes.set(imageBytes);
-  bytes.set(stripBytes, imageBytes.length);
+// The screen's bytes, the same 120,000 the tap sends to the panel, for a picture
+// of either size: the whole screen when strip is null, otherwise the square
+// above the strip. As on the tap, a whole-screen picture above a strip shows its
+// middle square, and a square picture on the whole screen sits on white bands.
+export const screenBytes = (picture: Uint8Array, strip: Uint8Array | null) => {
+  const bytes = new Uint8Array(WHOLE_SCREEN_BYTES).fill(0x11);
+  const wholePicture = picture.length === WHOLE_SCREEN_BYTES;
+
+  if (strip === null) {
+    bytes.set(picture, wholePicture ? 0 : BAND_BYTES);
+  } else {
+    bytes.set(wholePicture ? picture.subarray(BAND_BYTES, BAND_BYTES + IMAGE_BYTES) : picture);
+    bytes.set(strip, IMAGE_BYTES);
+  }
+
+  return bytes;
+};
+
+// The test values' red border round the whole screen, for the setup help shown
+// by "Show on device", in place of the strip's own, as the tap draws it
+// (esp32/lib/Strip/ScreenLayout). bytes are the screen's.
+export const drawTestBorder = (bytes: Uint8Array) => {
+  const red = 0x3;
+  const height = SCREEN_HEIGHT;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < SCREEN_WIDTH; x++) {
+      const edge =
+        x < TEST_BORDER ||
+        x >= SCREEN_WIDTH - TEST_BORDER ||
+        y < TEST_BORDER ||
+        y >= height - TEST_BORDER;
+
+      if (edge) {
+        const index = y * (SCREEN_WIDTH / 2) + (x >> 1);
+        bytes[index] =
+          x % 2 === 0 ? (bytes[index]! & 0x0f) | (red << 4) : (bytes[index]! & 0xf0) | red;
+      }
+    }
+  }
+};
+
+// The whole screen as it will look (see screenBytes), with the test border round
+// the setup help when it's shown for a test.
+export const screenPixels = (
+  picture: Uint8Array,
+  strip: Uint8Array | null,
+  testBorder = false
+): ImageData => {
+  const bytes = screenBytes(picture, strip);
+
+  if (testBorder) {
+    drawTestBorder(bytes);
+  }
 
   const decoded = decodeSpectra6(bytes, SCREEN_WIDTH, SCREEN_HEIGHT);
   const rgba = new Uint8ClampedArray(SCREEN_WIDTH * SCREEN_HEIGHT * 4);

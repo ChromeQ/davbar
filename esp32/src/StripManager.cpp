@@ -34,6 +34,8 @@ static uint32_t lastReadingCount = 0;
 static unsigned long lastPollAt = 0;
 // While a redraw the strip asked for hasn't happened yet
 static bool redrawRequested = false;
+// No laser on purpose, last time the loop looked.
+static bool lastNoLaser = false;
 static bool hasSaved = false;
 static SavedStrip saved = {};
 
@@ -45,6 +47,9 @@ static unsigned long testStartedAt = 0;
 static Strip::Values testValues = {};
 // The setup help screen shown in place of the picture meanwhile, or None.
 static SetupHelp::Screen testHelp = SetupHelp::Screen::None;
+// Whether the test shows test values in the strip. A test of no laser on
+// purpose shows the setup help alone, on the whole screen.
+static bool testStrip = false;
 
 // Web requests arrive in the web server's task; the loop picks them up, so
 // only the loop changes what the strip shows. The loop also publishes what the
@@ -54,11 +59,14 @@ enum class TestRequest : uint8_t
     None,
     Show,
     Live,
+    // A new laser choice: ends the test without a redraw of its own.
+    LaserChosen,
 };
 static portMUX_TYPE sharedLock = portMUX_INITIALIZER_UNLOCKED;
 static TestRequest testRequest = TestRequest::None;
 static Strip::Values requestedValues = {};
 static SetupHelp::Screen requestedHelp = SetupHelp::Screen::None;
+static bool requestedStrip = false;
 static Strip::Values publishedValues = {};
 
 // Whole seconds since the tap started, which never wrap around like millis().
@@ -171,6 +179,7 @@ void startStripManager()
 {
     poll();
     lastPollAt = millis();
+    lastNoLaser = noLaserOnPurpose();
 
     if (
         lastChosen &&
@@ -200,6 +209,7 @@ static void updateTest()
     TestRequest request = testRequest;
     Strip::Values values = requestedValues;
     SetupHelp::Screen help = requestedHelp;
+    bool strip = requestedStrip;
     testRequest = TestRequest::None;
     portEXIT_CRITICAL(&sharedLock);
 
@@ -209,22 +219,59 @@ static void updateTest()
         testStartedAt = millis();
         testValues = values;
         testHelp = help;
-        logEvent(
-            "test values",
-            stripDescription(values) +
-                (help == SetupHelp::Screen::None
-                    ? String()
-                    : String(", setup help ") + (help == SetupHelp::Screen::JoinWifi ? "join" : "ready"))
-        );
-        requestImageUpdate("test values");
+        testStrip = strip;
+        String helpName = help == SetupHelp::Screen::JoinWifi ? "join" : "ready";
+        if (strip)
+        {
+            logEvent(
+                "test values",
+                stripDescription(values) +
+                    (help == SetupHelp::Screen::None ? String() : ", setup help " + helpName)
+            );
+        }
+        else
+        {
+            logEvent("setup help test", helpName);
+        }
+        requestImageUpdate(strip ? "test values" : "setup help test");
         redrawRequested = true;
+    }
+    else if (testing && request == TestRequest::LaserChosen)
+    {
+        // The strip's redraw rules show the new choice: once its first reading
+        // arrives (within a minute) for a laser, or straight away for none.
+        testing = false;
+        testHelp = SetupHelp::Screen::None;
+        testStrip = false;
+        redrawRequested = false;
+        logEvent("back to live", "laser chosen");
     }
     else if (testing && (request == TestRequest::Live || millis() - testStartedAt >= testDuration))
     {
         testing = false;
         testHelp = SetupHelp::Screen::None;
+        testStrip = false;
         logEvent("back to live", request == TestRequest::Live ? "asked for" : "after 5 minutes");
         requestImageUpdate("back to live");
+        redrawRequested = true;
+    }
+}
+
+// The tracker redraws for a new laser, or for none after a laser, but can't tell
+// no laser on purpose (the whole screen) from none chosen yet (the strip asking
+// for one), so a change between those two redraws here.
+static void watchNoLaser()
+{
+    bool noLaser = noLaserOnPurpose();
+    if (noLaser == lastNoLaser)
+    {
+        return;
+    }
+
+    lastNoLaser = noLaser;
+    if (!lastChosen && !testing)
+    {
+        requestImageUpdate("no laser");
         redrawRequested = true;
     }
 }
@@ -241,6 +288,7 @@ void processStripManager()
     lastPollAt = now;
 
     poll();
+    watchNoLaser();
 
     Strip::Values current = currentValues();
     portENTER_CRITICAL(&sharedLock);
@@ -266,16 +314,13 @@ static Strip::Values currentValues()
 {
     Strip::Values live = tracker.values(uptimeSeconds());
 
-    if (!testing)
+    if (!testing || !testStrip)
     {
         return live;
     }
 
-    // The test numbers, with this tap's real laser dots and mode icon.
+    // The test numbers, with the tested laser's dots and mode icon.
     Strip::Values values = testValues;
-    values.laserChosen = true;
-    values.laserNumber = live.laserNumber;
-    values.mode = live.mode;
     values.test = true;
     return values;
 }
@@ -387,6 +432,17 @@ static bool parseTenths(const String& text, long min, long max, long& tenths)
     return true;
 }
 
+// For the loop to pick up.
+static void requestTestValues(const Strip::Values& values, SetupHelp::Screen setupHelp)
+{
+    portENTER_CRITICAL(&sharedLock);
+    requestedValues = values;
+    requestedHelp = setupHelp;
+    requestedStrip = true;
+    testRequest = TestRequest::Show;
+    portEXIT_CRITICAL(&sharedLock);
+}
+
 bool showTestValues(
     const String& percent,
     const String& litres,
@@ -394,10 +450,31 @@ bool showTestValues(
     const String& battery,
     const String& modeWarning,
     const String& noSignal,
+    const String& noReading,
+    const TestLaser& laser,
     SetupHelp::Screen setupHelp,
     String& error
 )
 {
+    if (laser.noLaser)
+    {
+        error = "With no laser, there's no strip to test.";
+        return false;
+    }
+
+    Strip::Values values = {};
+    values.laserChosen = true;
+    values.laserNumber = laser.number;
+    values.mode = laser.eco ? Strip::Mode::Eco : Strip::Mode::Smart;
+    values.modeWarning = modeWarning == "true";
+    values.noSignal = noSignal == "true";
+
+    if (noReading == "true")
+    {
+        requestTestValues(values, setupHelp);
+        return true;
+    }
+
     long percentValue = 0;
     long litresTenths = 0;
     long temperatureTenths = 0;
@@ -433,8 +510,6 @@ bool showTestValues(
         return false;
     }
 
-    Strip::Values values = {};
-    values.laserChosen = true;
     values.hasLevel = true;
     values.percent = percentValue;
     values.litresTenths = litresTenths;
@@ -442,16 +517,19 @@ bool showTestValues(
     values.temperatureTenths = temperatureTenths;
     values.hasBattery = true;
     values.batteryPercent = batteryValue;
-    values.modeWarning = modeWarning == "true";
-    values.noSignal = noSignal == "true";
-
-    portENTER_CRITICAL(&sharedLock);
-    requestedValues = values;
-    requestedHelp = setupHelp;
-    testRequest = TestRequest::Show;
-    portEXIT_CRITICAL(&sharedLock);
+    requestTestValues(values, setupHelp);
 
     return true;
+}
+
+void showSetupHelpTest(SetupHelp::Screen screen)
+{
+    portENTER_CRITICAL(&sharedLock);
+    requestedValues = {};
+    requestedHelp = screen;
+    requestedStrip = false;
+    testRequest = TestRequest::Show;
+    portEXIT_CRITICAL(&sharedLock);
 }
 
 SetupHelp::Screen testSetupHelp()
@@ -459,9 +537,16 @@ SetupHelp::Screen testSetupHelp()
     return testing ? testHelp : SetupHelp::Screen::None;
 }
 
-bool testValuesShowing()
+bool pictureFillsScreen()
 {
-    return testing;
+    return testing ? !testStrip : noLaserOnPurpose();
+}
+
+void endTestForLaserChoice()
+{
+    portENTER_CRITICAL(&sharedLock);
+    testRequest = TestRequest::LaserChosen;
+    portEXIT_CRITICAL(&sharedLock);
 }
 
 void showLiveValues()
@@ -511,6 +596,10 @@ void addStripStatus(JsonObject strip)
     shown["modeWarning"] = values.modeWarning;
     shown["noSignal"] = values.noSignal;
     shown["test"] = values.test;
+
+    // The laser chosen, so the web app's preview keeps up with a choice made
+    // from another page.
+    addChosenLaser(strip);
 
     // Read from the web server's task; a moment out is fine for a countdown.
     bool showing = testing;
