@@ -1010,7 +1010,7 @@ void processWifiManager()
         {
             if (saveWifiSettings(pendingSsid, pendingPassword))
             {
-                logEvent("wifi saved", pendingSsid);
+                logEventNow("wifi saved", pendingSsid);
                 connectionState = ConnectionState::Success;
             }
             else

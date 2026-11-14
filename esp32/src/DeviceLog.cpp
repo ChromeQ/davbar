@@ -223,7 +223,7 @@ void startDeviceLog()
         }
     );
 
-    logEvent(
+    logEventNow(
         "boot",
         resetReasonText(esp_reset_reason()) + ", firmware " + firmwareId()
     );
@@ -247,6 +247,12 @@ void logEvent(const char* event, const String& details)
     xSemaphoreTake(logMutex, portMAX_DELAY);
     pending += line;
     xSemaphoreGive(logMutex);
+}
+
+void logEventNow(const char* event, const String& details)
+{
+    logEvent(event, details);
+    flushDeviceLog();
 }
 
 void processDeviceLog()

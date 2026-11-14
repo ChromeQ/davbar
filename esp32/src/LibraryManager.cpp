@@ -244,7 +244,7 @@ static void handleRemove(AsyncWebServerRequest* request)
     if (removed > 0)
     {
         saveIndex();
-        logEvent("beers removed", removedIds);
+        logEventNow("beers removed", removedIds);
     }
 
     doc["success"] = !failed;
@@ -514,7 +514,7 @@ static void handleUploadFinished(AsyncWebServerRequest* request)
     }
 
     markShown(id);
-    logEvent("beer saved", String(id.c_str()) + ", " + String(imageBytes) + " bytes");
+    logEventNow("beer saved", String(id.c_str()) + ", " + String(imageBytes) + " bytes");
 
     doc["success"] = true;
     doc["saved"] = true;
