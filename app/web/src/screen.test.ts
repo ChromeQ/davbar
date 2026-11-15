@@ -18,6 +18,9 @@ import {
   placeImage,
   SCREEN_HEIGHT,
   screenBytes,
+  visibleFitZoom,
+  visibleSquare,
+  windowZoom,
   WHOLE_SCREEN_BYTES,
   zoomFromSlider,
   zoomSlider,
@@ -130,6 +133,79 @@ describe('the zoom slider', () => {
   it('keeps the zoom between Fit and its most', () => {
     expect(zoomFromSlider(tall, -1)).toBe(FIT_ZOOM);
     expect(zoomFromSlider(tall, 10)).toBe(maxZoom(tall));
+  });
+});
+
+describe("fitting the case's window", () => {
+  // The case hides 14 pixels at the sides and 9 at the top, so on a tap with a
+  // laser the window shows x 14-386 and y 9-400 of the square, and on one with
+  // none, where the square is mid-screen, x 14-386 and all of its height.
+  const withLaser = visibleSquare(false);
+  const noLaser = visibleSquare(true);
+  const edgeToEdge = { width: 400, height: 400 };
+
+  it('zooms a square image out until its width fits the window', () => {
+    expect(visibleFitZoom(edgeToEdge, withLaser)).toBeCloseTo(372 / 400);
+    expect(visibleFitZoom(edgeToEdge, noLaser)).toBeCloseTo(372 / 400);
+    // A tall one is held by the height, which the window only cuts at the top
+    expect(visibleFitZoom(tall, withLaser)).toBeCloseTo(391 / 400);
+    expect(visibleFitZoom(tall, noLaser)).toBeCloseTo(1);
+  });
+
+  it('centres a smaller image in the window, not the square', () => {
+    const place = placeImage(edgeToEdge, 372 / 400, CENTRED, withLaser);
+
+    expect(place.x).toBeCloseTo(14);
+    expect(place.width).toBeCloseTo(372);
+    // 9.5 pixels of background above it and below it
+    expect(place.y).toBeCloseTo(18.5);
+    expect(400 - place.y - place.height).toBeCloseTo(9.5);
+  });
+
+  it('makes a square image as tall as the window, with no background showing', () => {
+    const zoom = windowZoom(edgeToEdge, withLaser, 'height');
+    const place = placeImage(edgeToEdge, zoom, CENTRED, withLaser);
+
+    expect(zoom).toBeCloseTo(391 / 400);
+    expect(windowZoom(edgeToEdge, withLaser, 'width')).toBeCloseTo(372 / 400);
+    // Top to bottom of the window, and 9.5 pixels under the frame at each side
+    expect(place.y).toBeCloseTo(9);
+    expect(place.y + place.height).toBeCloseTo(400);
+    expect(14 - place.x).toBeCloseTo(9.5);
+    expect(place.x + place.width - 386).toBeCloseTo(9.5);
+  });
+
+  it('snaps to the window width, the window height and Fit, whichever is nearest', () => {
+    const width = windowZoom(edgeToEdge, withLaser, 'width');
+    const height = windowZoom(edgeToEdge, withLaser, 'height');
+
+    expect(zoomFromSlider(edgeToEdge, Math.log(height * 1.005), withLaser)).toBe(height);
+    expect(zoomFromSlider(edgeToEdge, Math.log(height * 0.99), withLaser)).toBe(height);
+    expect(zoomFromSlider(edgeToEdge, Math.log(width * 1.01), withLaser)).toBe(width);
+    expect(zoomFromSlider(edgeToEdge, Math.log(0.995), withLaser)).toBe(FIT_ZOOM);
+  });
+
+  it('keeps an image at Fit in the square, as before', () => {
+    const place = placeImage(edgeToEdge, FIT_ZOOM, CENTRED, withLaser);
+
+    expect([place.x, place.y, place.width, place.height]).toEqual([0, 0, 400, 400]);
+  });
+
+  it('lets the slider go down to the window, snapping to it and to Fit', () => {
+    const slider = zoomSlider(edgeToEdge, withLaser);
+    const fit = visibleFitZoom(edgeToEdge, withLaser);
+
+    expect(slider.min).toBeLessThanOrEqual(Math.log(fit));
+    expect(slider.min).toBeGreaterThan(Math.log(fit) - slider.step);
+    expect(zoomFromSlider(edgeToEdge, slider.min, withLaser)).toBe(fit);
+    expect(zoomFromSlider(edgeToEdge, Math.log(fit * 1.02), withLaser)).toBe(fit);
+    expect(zoomFromSlider(edgeToEdge, Math.log(1.1), withLaser)).toBeCloseTo(1.1);
+  });
+
+  it('snaps to the nearer of two marks close together', () => {
+    // The window's fit for the tall image is 391/400, under 3% from Fit
+    expect(zoomFromSlider(tall, Math.log(0.995), withLaser)).toBe(FIT_ZOOM);
+    expect(zoomFromSlider(tall, Math.log(0.98), withLaser)).toBeCloseTo(391 / 400);
   });
 });
 
@@ -268,19 +344,28 @@ describe('a tap with no laser on purpose', () => {
     const red = 0x3;
     const white = 0x1;
 
-    // Every edge, 5 pixels in, and no line between the square and the strip
+    // Every edge, 5 pixels wide, just inside what the case's frame hides (14 at
+    // the sides, 9 at the top and bottom), and no line between the square and the
+    // strip
     const bytes = new Uint8Array(WHOLE_SCREEN_BYTES).fill(0x11);
     drawTestBorder(bytes);
-    expect([pixel(bytes, 0, 0), pixel(bytes, 399, 599), pixel(bytes, 4, 300)]).toEqual([
-      red,
-      red,
-      red,
-    ]);
     expect([
-      pixel(bytes, 5, 300),
-      pixel(bytes, 200, 594),
+      pixel(bytes, 14, 9),
+      pixel(bytes, 18, 300),
+      pixel(bytes, 385, 300),
+      pixel(bytes, 200, 590),
+      pixel(bytes, 200, 586),
+    ]).toEqual([red, red, red, red, red]);
+    expect([
+      pixel(bytes, 0, 0),
+      pixel(bytes, 13, 300),
+      pixel(bytes, 19, 300),
+      pixel(bytes, 386, 300),
+      pixel(bytes, 200, 8),
+      pixel(bytes, 200, 585),
+      pixel(bytes, 200, 591),
       pixel(bytes, 200, 399),
       pixel(bytes, 200, 400),
-    ]).toEqual([white, white, white, white]);
+    ]).toEqual([white, white, white, white, white, white, white, white, white]);
   });
 });

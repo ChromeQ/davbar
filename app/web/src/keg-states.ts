@@ -5,6 +5,7 @@
 // below. The line comes from config/keg-lines.json (see
 // app/scripts/keg-lines.ts), never the one this browser took last time.
 import { IMAGE_SIZE } from './screen';
+import { HIDDEN_X, HIDDEN_Y } from './strip';
 
 export type KegState = 'empty' | 'ready';
 
@@ -129,14 +130,15 @@ const fitFont = (
   }
 };
 
-// Words in chalk, centred across the square, with tiny specks knocked out of the
-// letters as chalk leaves on a board.
+// Words in chalk, centred across the square, no wider than maxWidth, with tiny
+// specks knocked out of the letters as chalk leaves on a board.
 const chalk = (
   context: CanvasRenderingContext2D,
   words: string,
   baseline: number,
   size: number,
-  colour: string
+  colour: string,
+  maxWidth: number
 ) => {
   const centre = IMAGE_SIZE / 2;
 
@@ -144,7 +146,7 @@ const chalk = (
   context.textAlign = 'center';
   context.textBaseline = 'alphabetic';
   context.fillStyle = colour;
-  fitFont(context, words, (px) => `${px}px ${CHALK_FONT}`, size, 320);
+  fitFont(context, words, (px) => `${px}px ${CHALK_FONT}`, size, maxWidth);
   context.fillText(words, centre, baseline);
 
   const box = context.measureText(words);
@@ -171,15 +173,16 @@ const chalk = (
 };
 
 // A worn rubber stamp across the middle, at centreY, tilted slightly, its words
-// centred in it however much they shrink to fit.
+// centred in it however much they shrink to fit. halfWidth is half its width;
+// its height keeps the stamp's shape.
 const stamp = (
   context: CanvasRenderingContext2D,
   words: string,
   colour: string,
-  centreY: number
+  centreY: number,
+  halfWidth: number
 ) => {
-  const halfWidth = 156;
-  const halfHeight = 52;
+  const halfHeight = Math.round((halfWidth * 52) / 156);
   const spacing = 3;
 
   context.save();
@@ -226,14 +229,18 @@ const stamp = (
 };
 
 // Where things go on the square board, and on the whole screen of a tap with no
-// laser on purpose, which has more room between them.
+// laser on purpose, which has more room between them, as heights on a board with
+// nothing hidden.
 const layouts = {
   square: { line: 98, lineSize: 40, stamp: 200, date: 338, dateSize: 34 },
   whole: { line: 150, lineSize: 46, stamp: 300, date: 470, dateSize: 36 },
 };
 
 // The whole picture: the 400 x 400 square, or with height the screen's, the
-// whole 400 x 600 screen, the board's border round all of it.
+// whole 400 x 600 screen. The board's border goes round what the case's frame
+// leaves to see (HIDDEN_X and HIDDEN_Y), at the sides and top, and at the bottom
+// on the whole screen; on the square, the bottom meets the strip. Everything in it
+// keeps its distance from the border, and its lines spread over the height left.
 export const drawKegState = (
   context: CanvasRenderingContext2D,
   state: KegState,
@@ -242,20 +249,28 @@ export const drawKegState = (
   height = IMAGE_SIZE
 ) => {
   const { stamp: stampWords, stampColour, lineColour } = look[state];
-  const layout = height > IMAGE_SIZE ? layouts.whole : layouts.square;
+  const whole = height > IMAGE_SIZE;
+  const layout = whole ? layouts.whole : layouts.square;
+  const left = HIDDEN_X;
+  const top = HIDDEN_Y;
+  const width = IMAGE_SIZE - HIDDEN_X * 2;
+  const shown = height - HIDDEN_Y - (whole ? HIDDEN_Y : 0);
+  const y = (heightOnBoard: number) => Math.round(top + (heightOnBoard * shown) / height);
+  // As much narrower as the board is than the picture
+  const narrower = IMAGE_SIZE - width;
 
   // The board, with a double border
   context.fillStyle = BLACK;
   context.fillRect(0, 0, IMAGE_SIZE, height);
   context.strokeStyle = WHITE;
   context.lineWidth = 4;
-  context.strokeRect(18, 18, IMAGE_SIZE - 36, height - 36);
+  context.strokeRect(left + 18, top + 18, width - 36, shown - 36);
   context.lineWidth = 2;
-  context.strokeRect(29, 29, IMAGE_SIZE - 58, height - 58);
+  context.strokeRect(left + 29, top + 29, width - 58, shown - 58);
 
-  chalk(context, line, layout.line, layout.lineSize, lineColour);
-  stamp(context, stampWords, stampColour, layout.stamp);
-  chalk(context, dateLine(state, date), layout.date, layout.dateSize, WHITE);
+  chalk(context, line, y(layout.line), layout.lineSize, lineColour, 320 - narrower);
+  stamp(context, stampWords, stampColour, y(layout.stamp), 156 - narrower / 2);
+  chalk(context, dateLine(state, date), y(layout.date), layout.dateSize, WHITE, 320 - narrower);
 };
 
 // Both fonts, loaded before drawing: a canvas doesn't redraw itself when a font

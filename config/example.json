@@ -2,5 +2,10 @@
   "brandName": "MyBar",
   "deviceName": "Tap 1",
   "deviceId": "tap1",
-  "hostname": "mybar"
+  "hostname": "mybar",
+  "fit": {
+    "shiftX": 0,
+    "shiftY": 0,
+    "bottomSlant": 0
+  }
 }

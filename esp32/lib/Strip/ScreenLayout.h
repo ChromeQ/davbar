@@ -39,7 +39,28 @@ namespace ScreenLayout
     Placement place(size_t pictureBytes, bool wholeScreen);
 
     // The test values' red border (Strip::TestBorder) round the whole screen,
-    // for the setup help shown by "Show on device", in place of the strip's own.
+    // just inside what the case's frame hides (Strip::HiddenX and HiddenY), for
+    // the setup help shown by "Show on device", in place of the strip's own.
     // screen is the screen's bytes.
     void drawTestBorder(uint8_t* screen);
+
+    // A tap's fit to its case's window, from its config (PLAN.md, step 9).
+    struct Fit
+    {
+        // Moves the whole screen right and down, in pixels (negative for left
+        // and up), so it's centred in the window.
+        int shiftX;
+        int shiftY;
+        // For a window whose bottom edge isn't level: how many pixels higher the
+        // edge is at the right than at the left. The bottom 200 rows (the strip,
+        // on a tap with a laser) follow it: their left end moves down by half of
+        // it and their right end up by half, each column by whole pixels.
+        int bottomSlant;
+    };
+
+    // Applies the fit to the finished screen, just before it's drawn, so the web
+    // app's preview never needs to know about it. Pixels only move, by whole
+    // pixels, so nothing is blurred. What moves off the screen was under the
+    // frame, and what opens up repeats the nearest pixel, under the frame too.
+    void applyFit(uint8_t* screen, const Fit& fit);
 }

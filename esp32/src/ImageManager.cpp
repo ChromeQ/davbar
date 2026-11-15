@@ -6,6 +6,7 @@
 #include <new>
 
 #include "DEV_Config.h"
+#include "DeviceConfig.h"
 #include "DeviceLog.h"
 #include "EPD_4in0e.h"
 #include "ImageLoader.h"
@@ -423,6 +424,14 @@ static void drawScreen(bool force, const char* reason, const Strip::Values& stri
     {
         ScreenLayout::drawTestBorder(screenBuffer);
     }
+
+    // Centres the screen in the case's window, from this tap's config. Last, so
+    // the picture, strip and border all move together, and before the check
+    // below, so a new fit redraws the screen.
+    ScreenLayout::applyFit(
+        screenBuffer,
+        {DeviceConfig::FitShiftX, DeviceConfig::FitShiftY, DeviceConfig::FitBottomSlant}
+    );
 
     // Covers the strip too, so a change to it redraws the screen.
     uint32_t imageCrc = esp_crc32_le(0, screenBuffer, SCREEN_SIZE);

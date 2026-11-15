@@ -230,6 +230,64 @@ h2 {
   background: var(--accent-hover);
 }
 
+/* The window's width or height, as a dropdown that looks like the buttons
+   beside it, with a chevron to show it opens. Its label is drawn here, and the
+   dropdown lies over it, unseen, so a click or tap opens its menu. */
+.window-pick {
+  position: relative;
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 68px;
+  padding: 7px 9px 7px 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.window-label {
+  display: grid;
+  justify-items: center;
+}
+
+.window-label > span {
+  grid-area: 1 / 1;
+}
+
+.window-label > span + span {
+  visibility: hidden;
+}
+
+.window-pick select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.window-pick:has(select:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.window-pick.active {
+  color: #fff;
+  background: var(--accent);
+}
+
+.window-pick.active:hover {
+  background: var(--accent-hover);
+}
+
+.window-pick option {
+  color: var(--ink);
+  background: #fff;
+}
+
 .canvas-stage {
   position: relative;
   display: grid;
@@ -289,9 +347,15 @@ h2 {
 
 .fit-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   margin-top: 14px;
+}
+
+/* On a phone, Zoom goes below the four buttons rather than squeezing beside them */
+.fit-row .zoom-field {
+  min-width: 180px;
 }
 
 .fit-row .mode-switch {
@@ -885,6 +949,63 @@ h2 {
 .preview-stage {
   border-style: solid;
   background: #fff;
+}
+
+/* The case's frame round the preview. What it covers has red and yellow stripes,
+   like hazard tape, all at the same angle, and a little see-through, so what it
+   hides can still be made out. The
+   window's edge is a line in the opposite colour to whatever is under it, so it
+   shows on any picture, even a black keg board. --hidden-x and --hidden-y are
+   how far the frame reaches in, set by the app. */
+.preview-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The stripes cover the whole preview, with the window cut out, so they meet
+   at the corners */
+.preview-hatch {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(214, 40, 40, 0.85) 0 5px,
+    rgba(255, 204, 0, 0.85) 5px 10px
+  );
+  clip-path: polygon(
+    evenodd,
+    0 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 0,
+    var(--hidden-x) var(--hidden-y),
+    calc(100% - var(--hidden-x)) var(--hidden-y),
+    calc(100% - var(--hidden-x)) calc(100% - var(--hidden-y)),
+    var(--hidden-x) calc(100% - var(--hidden-y)),
+    var(--hidden-x) var(--hidden-y)
+  );
+}
+
+/* Apart from the hatching, as its line is blended with the picture */
+.preview-window {
+  position: absolute;
+  inset: var(--hidden-y) var(--hidden-x);
+}
+
+.preview-window::after {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid #fff;
+  content: '';
+  mix-blend-mode: difference;
+}
+
+.panel-heading .frame-button.active {
+  color: #fff;
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .pixel-mark {

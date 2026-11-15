@@ -54,7 +54,8 @@ namespace StripGlyphs
     };
 
     extern const Font batteryFont; // 16px, the percentage in a low battery
-    extern const Font rowFont; // 40px, the top row and its messages
+    extern const Font rowFont; // 40px, the top row
+    extern const Font messageFont; // 36px, the top row's messages
     extern const Font barFont; // 64px, the litres in the bar
     extern const Font helpTitleFont; // 38px, the setup help's title
     extern const Font helpFont; // 22px, the setup help's text

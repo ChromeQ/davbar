@@ -17,6 +17,14 @@ namespace Strip
     // The red border round anything shown for a test, inside its edge, so it's
     // never taken for the real thing.
     constexpr int TestBorder = 5;
+    // How far the case's frame reaches over the edges of the screen, once each
+    // tap's fit (in its config) has centred its screen in the window: 14 pixels
+    // at the left and right, 9 at the top and bottom, the most any of the taps
+    // hides plus a pixel (PLAN.md, step 9). The strip, the test border and the
+    // web app's keg boards keep inside it, so the same picture looks the same on
+    // every tap.
+    constexpr int HiddenX = 14;
+    constexpr int HiddenY = 9;
 
     // The panel's colour codes.
     enum Colour : uint8_t

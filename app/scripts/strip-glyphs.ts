@@ -59,9 +59,18 @@ const fontSpecs: FontSpec[] = [
   {
     name: 'rowFont',
     size: 40,
-    // With "No laser", "Waiting for laser 1" and "Can't hear laser 1"
-    characters: "0123456789%.°- NolaserWitngfC'h",
-    use: 'the top row and its messages',
+    // With "No laser"
+    characters: '0123456789%.°- Nolaser',
+    use: 'the top row',
+  },
+  {
+    name: 'messageFont',
+    size: 36,
+    // "Waiting for laser 1" and "Can't hear laser 1", a little smaller than the
+    // row's values, so with an icon in front they keep inside what the case's
+    // frame hides
+    characters: "123456789 WaitngforlsC'he",
+    use: "the top row's messages",
   },
   {
     name: 'barFont',

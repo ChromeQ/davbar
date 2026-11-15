@@ -4,3 +4,6 @@
 
 node_modules/
 config/secrets.json
+
+# Screenshots and logs from browser checks with Playwright
+.playwright-mcp/

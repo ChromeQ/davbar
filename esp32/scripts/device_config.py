@@ -45,6 +45,21 @@ if len(access_point_name.encode("utf-8")) > 32:
 
 mdns_hostname = f'{config["hostname"]}-{config["deviceId"]}'
 
+# How this tap's screen sits in its case's window (PLAN.md, step 9), applied to
+# the screen just before every redraw: a shift to centre it, and a slant for a
+# window whose bottom edge isn't level. Optional; all 0 without it.
+fit_keys = ("shiftX", "shiftY", "bottomSlant")
+fit = config.get("fit", {})
+if not isinstance(fit, dict) or set(fit) - set(fit_keys):
+    raise RuntimeError(f'Device config {config_path}: "fit" can only have {", ".join(fit_keys)}.')
+for key in fit_keys:
+    value = fit.get(key, 0)
+    if not isinstance(value, int) or isinstance(value, bool) or not -30 <= value <= 30:
+        raise RuntimeError(
+            f'Device config {config_path}: fit "{key}" must be a whole number of pixels from -30 to 30.'
+        )
+fit = {key: fit.get(key, 0) for key in fit_keys}
+
 # Passwords live in a git-ignored file, shared by every tap, so they stay out of
 # the repository and the web app.
 secrets_path = repository_directory / "config/secrets.json"
@@ -116,6 +131,11 @@ header_path.write_text(
     f'    constexpr char AccessPointPassword[] = {json.dumps(secrets["accessPointPassword"])};\n'
     f'    constexpr char OtaPasswordHash[] = {json.dumps(ota_password_hash)};\n'
     "\n"
+    "    // This tap's fit to its case's window (ScreenLayout::Fit)\n"
+    f'    constexpr int FitShiftX = {fit["shiftX"]};\n'
+    f'    constexpr int FitShiftY = {fit["shiftY"]};\n'
+    f'    constexpr int FitBottomSlant = {fit["bottomSlant"]};\n'
+    "\n"
     "    struct Laser\n"
     "    {\n"
     "        uint8_t number;\n"
@@ -151,5 +171,6 @@ print(f'Brand: {config["brandName"]}')
 print(f'Device: {config["deviceName"]} ({config["deviceId"]})')
 print(f"Access point: {access_point_name}")
 print(f"Hostname: {mdns_hostname}.local")
+print(f'Fit: shift {fit["shiftX"]}, {fit["shiftY"]}, bottom slant {fit["bottomSlant"]}')
 if os.environ.get("DEVICE_OTA") == "1":
     print(f"Upload: over Wi-Fi to {mdns_hostname}.local")

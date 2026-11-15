@@ -7,6 +7,7 @@ import {
   batteryFont,
   brain,
   leaf,
+  messageFont,
   noSignal,
   noSignalStrike,
   rowFont,
@@ -60,7 +61,20 @@ export type StripValues = {
   test: boolean;
 };
 
+// How far the case's frame reaches over the edges of the screen, once each
+// tap's fit (in its config) has centred its screen in the window: 14 pixels at
+// the left and right, 9 at the top and bottom (HiddenX and HiddenY in
+// esp32/lib/Strip/Strip.h). The strip, the test border and the keg boards keep
+// inside it, so the same picture looks the same on every tap.
+export const HIDDEN_X = 14;
+export const HIDDEN_Y = 9;
+
+// The content keeps this far inside what the frame hides, at the left, right and
+// bottom.
 const MARGIN = 16;
+const LEFT = HIDDEN_X + MARGIN;
+const RIGHT = STRIP_WIDTH - HIDDEN_X - MARGIN;
+const BOTTOM = STRIP_HEIGHT - HIDDEN_Y - MARGIN;
 
 // The top row: the percentage, the middle group and the temperature, centred
 // between the image and the bar.
@@ -77,15 +91,15 @@ const NUB_HEIGHT = 10;
 const ICON_SIZE = 32;
 const GROUP_GAP = 10;
 
-// Around test values. The content keeps MARGIN from every edge, so the border never
-// touches it.
+// Around test values, just inside what the frame hides, and the content keeps
+// MARGIN from what it hides, so the border never touches it.
 export const TEST_BORDER = 5;
 
-// The level bar
-const BAR_X = MARGIN;
-const BAR_Y = 88;
-const BAR_WIDTH = STRIP_WIDTH - MARGIN * 2;
+// The level bar, at the bottom
+const BAR_X = LEFT;
+const BAR_WIDTH = RIGHT - LEFT;
 const BAR_HEIGHT = 96;
+const BAR_Y = BOTTOM - BAR_HEIGHT;
 const BAR_BORDER = 4;
 
 // Integer division, rounding towards zero like C++.
@@ -324,17 +338,19 @@ const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
 // the laser: what the tap's waiting for, in words, with the no signal icon or the
 // mode warning in front, centred together.
 const drawMessage = (canvas: Canvas, values: StripValues) => {
-  const capTop = divide(BAR_Y - rowFont.capHeight, 2);
+  // An odd spare pixel goes above, as round letters reach a pixel past the cap
+  // height.
+  const capTop = divide(BAR_Y - messageFont.capHeight + 1, 2);
   const words = values.noSignal ? "Can't hear laser" : 'Waiting for laser';
   // A laser not in config/lasers.json has no number.
   const text = values.laserNumber > 0 ? `${words} ${values.laserNumber}` : words;
   // No signal hides the mode warning, as the laser's mode isn't known.
   const showWarning = values.modeWarning && !values.noSignal;
   const icon = values.noSignal || showWarning;
-  const textWidth = divide(textAdvance(rowFont, text) + 15, 16);
+  const textWidth = divide(textAdvance(messageFont, text) + 15, 16);
   const width = (icon ? ICON_SIZE + GROUP_GAP : 0) + textWidth;
   let x = divide(STRIP_WIDTH, 2) - divide(width, 2);
-  const iconY = capTop + divide(rowFont.capHeight, 2) - divide(ICON_SIZE, 2);
+  const iconY = capTop + divide(messageFont.capHeight, 2) - divide(ICON_SIZE, 2);
 
   if (values.noSignal) {
     drawNoSignal(canvas, x, iconY);
@@ -346,7 +362,7 @@ const drawMessage = (canvas: Canvas, values: StripValues) => {
     x += ICON_SIZE + GROUP_GAP;
   }
 
-  drawText(canvas, rowFont, text, x, capTop + rowFont.capHeight, 'left', plain(BLACK));
+  drawText(canvas, messageFont, text, x, capTop + messageFont.capHeight, 'left', plain(BLACK));
 };
 
 const drawTopRow = (canvas: Canvas, values: StripValues) => {
@@ -355,16 +371,16 @@ const drawTopRow = (canvas: Canvas, values: StripValues) => {
     return;
   }
 
-  const capTop = divide(BAR_Y - rowFont.capHeight, 2);
+  const capTop = divide(BAR_Y - rowFont.capHeight + 1, 2);
   const baseline = capTop + rowFont.capHeight;
 
-  drawText(canvas, rowFont, `${values.percent}%`, MARGIN, baseline, 'left', plain(BLACK));
+  drawText(canvas, rowFont, `${values.percent}%`, LEFT, baseline, 'left', plain(BLACK));
 
   if (values.temperatureTenths !== null) {
     const tenths = Math.abs(values.temperatureTenths);
     const sign = values.temperatureTenths < 0 ? '-' : '';
     const text = `${sign}${divide(tenths, 10)}.${tenths % 10}°`;
-    drawText(canvas, rowFont, text, STRIP_WIDTH - MARGIN, baseline, 'right', plain(BLACK));
+    drawText(canvas, rowFont, text, RIGHT, baseline, 'right', plain(BLACK));
   }
 
   drawGroup(canvas, values, capTop + divide(rowFont.capHeight, 2));
@@ -417,7 +433,7 @@ export const drawStrip = (values: StripValues): Uint8Array => {
       rowFont,
       'No laser',
       divide(STRIP_WIDTH, 2),
-      divide(STRIP_HEIGHT + rowFont.capHeight, 2),
+      divide(STRIP_HEIGHT - HIDDEN_Y + rowFont.capHeight, 2),
       'centre',
       plain(BLACK)
     );
@@ -428,7 +444,16 @@ export const drawStrip = (values: StripValues): Uint8Array => {
   drawBar(canvas, values);
 
   if (values.test) {
-    canvas.strokeRect(0, 0, STRIP_WIDTH, STRIP_HEIGHT, TEST_BORDER, RED);
+    // Just inside what the frame hides, and along the top, where the strip meets
+    // the picture.
+    canvas.strokeRect(
+      HIDDEN_X,
+      0,
+      STRIP_WIDTH - HIDDEN_X * 2,
+      STRIP_HEIGHT - HIDDEN_Y,
+      TEST_BORDER,
+      RED
+    );
   }
 
   return canvas.bytes;

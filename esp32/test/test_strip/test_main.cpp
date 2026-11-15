@@ -77,10 +77,14 @@ static unsigned bit(Colour colour)
     return 1u << colour;
 }
 
-// The bar's inside is x 20-379 and y 92-179.
-static const int BarInsideX = 20;
-static const int BarInsideY = 92;
-static const int BarInsideWidth = 360;
+// The bar's outline starts at x 30 and y 79, 16 pixels inside what the case's
+// frame hides (Strip::HiddenX and HiddenY), and its inside is x 34-365 and
+// y 83-170. The top row is above it.
+static const int BarLeft = 30;
+static const int BarTop = 79;
+static const int BarInsideX = 34;
+static const int BarInsideY = 83;
+static const int BarInsideWidth = 332;
 static const int BarInsideHeight = 88;
 
 static void testBarTextSplitsAtTheFill()
@@ -88,7 +92,7 @@ static void testBarTextSplitsAtTheFill()
     drawAndSave("full-keg", fullKeg());
 
     int fill = (BarInsideWidth * 62 + 50) / 100;
-    TEST_ASSERT_EQUAL_UINT8(Strip::Black, pixel(16, 88));
+    TEST_ASSERT_EQUAL_UINT8(Strip::Black, pixel(BarLeft, BarTop));
     // The filled part holds the green fill and white text, and no black text.
     // The empty part holds the white background and black text, and no green.
     TEST_ASSERT_EQUAL_HEX(
@@ -227,9 +231,9 @@ static void testWaitingForTheFirstReading()
         bit(Strip::White) | bit(Strip::Black),
         coloursIn(0, 0, Strip::Width, Strip::Height)
     );
-    Ink message = inkIn(0, 0, Strip::Width, 88);
-    TEST_ASSERT_LESS_THAN(50, message.left);
-    TEST_ASSERT_GREATER_THAN(350, message.right);
+    Ink message = inkIn(0, 0, Strip::Width, BarTop);
+    TEST_ASSERT_LESS_THAN(65, message.left);
+    TEST_ASSERT_GREATER_THAN(335, message.right);
     TEST_ASSERT_INT_WITHIN(6, Strip::Width - 1, message.left + message.right);
     assertShrugInTheBar();
 }
@@ -238,12 +242,12 @@ static void testWaitingForTheFirstReading()
 static void testWaitingForALaserWithNoNumber()
 {
     Strip::draw(strip, noReading());
-    int withNumber = inkIn(0, 0, Strip::Width, 88).right - inkIn(0, 0, Strip::Width, 88).left;
+    int withNumber = inkIn(0, 0, Strip::Width, BarTop).right - inkIn(0, 0, Strip::Width, BarTop).left;
 
     Strip::Values values = noReading();
     values.laserNumber = 0;
     drawAndSave("waiting-no-number", values);
-    Ink message = inkIn(0, 0, Strip::Width, 88);
+    Ink message = inkIn(0, 0, Strip::Width, BarTop);
 
     TEST_ASSERT_LESS_THAN(withNumber - 20, message.right - message.left);
     assertShrugInTheBar();
@@ -256,13 +260,14 @@ static void testWaitingShowsTheModeWarning()
     values.modeWarning = true;
     drawAndSave("waiting-mode-warning", values);
 
-    // The sign at the left end, and all of it clear of the test border.
-    Ink sign = inkIn(0, 0, Strip::Width, 88, Strip::Yellow);
-    Ink row = inkIn(0, 0, Strip::Width, 88);
+    // The sign at the left end, and the widest message, all of it within the
+    // bar's width, well clear of the test border and the case's frame.
+    Ink sign = inkIn(0, 0, Strip::Width, BarTop, Strip::Yellow);
+    Ink row = inkIn(0, 0, Strip::Width, BarTop);
     TEST_ASSERT_INT_WITHIN(3, row.left, sign.left);
-    TEST_ASSERT_GREATER_OR_EQUAL(Strip::TestBorder, row.left);
-    TEST_ASSERT_LESS_THAN(Strip::Width - Strip::TestBorder, row.right);
-    TEST_ASSERT_GREATER_THAN(350, row.right);
+    TEST_ASSERT_GREATER_OR_EQUAL(BarLeft, row.left);
+    TEST_ASSERT_LESS_THAN(Strip::Width - BarLeft, row.right);
+    TEST_ASSERT_GREATER_THAN(340, row.right);
 }
 
 // No reading, and nothing heard: "Can't hear laser 1", with the no signal icon in
@@ -276,10 +281,10 @@ static void testCantHearALaserNeverHeard()
 
     TEST_ASSERT_EQUAL_HEX(
         bit(Strip::White) | bit(Strip::Black) | bit(Strip::Blue) | bit(Strip::Red),
-        coloursIn(0, 0, Strip::Width, 88)
+        coloursIn(0, 0, Strip::Width, BarTop)
     );
-    Ink icon = inkIn(0, 0, Strip::Width, 88, Strip::Blue);
-    Ink text = inkIn(0, 0, Strip::Width, 88, Strip::Black);
+    Ink icon = inkIn(0, 0, Strip::Width, BarTop, Strip::Blue);
+    Ink text = inkIn(0, 0, Strip::Width, BarTop, Strip::Black);
     TEST_ASSERT_LESS_THAN(text.left, icon.right);
     assertShrugInTheBar();
 }
@@ -292,7 +297,7 @@ static void testCantHearALaserKeepsTheLevel()
     values.noSignal = true;
     drawAndSave("cant-hear", values);
 
-    unsigned row = coloursIn(0, 0, Strip::Width, 88);
+    unsigned row = coloursIn(0, 0, Strip::Width, BarTop);
     // No battery fill
     TEST_ASSERT_FALSE(row & bit(Strip::Green));
     TEST_ASSERT_TRUE(row & bit(Strip::Blue));
@@ -300,9 +305,9 @@ static void testCantHearALaserKeepsTheLevel()
     static uint8_t withSignal[Strip::Size];
     Strip::draw(withSignal, fullKeg());
     TEST_ASSERT_EQUAL_MEMORY(
-        withSignal + 88 * Strip::RowBytes,
-        strip + 88 * Strip::RowBytes,
-        (Strip::Height - 88) * Strip::RowBytes
+        withSignal + BarTop * Strip::RowBytes,
+        strip + BarTop * Strip::RowBytes,
+        (Strip::Height - BarTop) * Strip::RowBytes
     );
 }
 
@@ -316,26 +321,26 @@ static void testNoLaserShowsOnlyText()
         coloursIn(0, 0, Strip::Width, Strip::Height)
     );
     // No bar outline.
-    TEST_ASSERT_EQUAL_UINT8(Strip::White, pixel(16, 88));
+    TEST_ASSERT_EQUAL_UINT8(Strip::White, pixel(BarLeft, BarTop));
 }
 
 // The first and last rows with anything drawn, in the given columns above the bar.
 static void inkRows(int x, int width, int& top, int& bottom)
 {
     top = 0;
-    while (top < 88 && coloursIn(x, top, width, 1) == bit(Strip::White))
+    while (top < BarTop && coloursIn(x, top, width, 1) == bit(Strip::White))
     {
         top++;
     }
 
-    bottom = 87;
+    bottom = BarTop - 1;
     while (bottom > 0 && coloursIn(x, bottom, width, 1) == bit(Strip::White))
     {
         bottom--;
     }
 }
 
-// Centred between the image (above y 0) and the bar (from y 88), to within a
+// Centred between the image (above y 0) and the bar (from y 79), to within a
 // pixel, as an odd space can't split evenly.
 static void testTopRowIsCentredAboveTheBar()
 {
@@ -349,7 +354,7 @@ static void testTopRowIsCentredAboveTheBar()
         int bottom;
         inkRows(column[0], column[1], top, bottom);
         int above = top;
-        int below = 88 - 1 - bottom;
+        int below = BarTop - 1 - bottom;
         TEST_ASSERT_INT_WITHIN(1, above, below);
     }
 }
@@ -364,11 +369,19 @@ static void testTestValuesHaveARedBorder()
     values.test = true;
     drawAndSave("test-values", values);
 
+    // Just inside what the case's frame hides at the left, right and bottom,
+    // and along the top, where the strip meets the picture.
+    const int left = Strip::HiddenX;
+    const int right = Strip::Width - Strip::HiddenX;
+    const int bottom = Strip::Height - Strip::HiddenY;
+    const int width = Strip::TestBorder;
     for (int y = 0; y < Strip::Height; y++)
     {
         for (int x = 0; x < Strip::Width; x++)
         {
-            bool border = x < 5 || x >= Strip::Width - 5 || y < 5 || y >= Strip::Height - 5;
+            bool inside = x >= left && x < right && y < bottom;
+            bool border = inside &&
+                (x < left + width || x >= right - width || y < width || y >= bottom - width);
             if (border)
             {
                 TEST_ASSERT_EQUAL_UINT8(Strip::Red, pixel(x, y));
@@ -457,19 +470,19 @@ static void testMatchesTheWebAppsPreview()
     neverHeard.noSignal = true;
 
     const Case cases[] = {
-        {"full keg", full, 0x8A974B40},
-        {"orange", orange, 0x5BBB82C2},
-        {"red", red, 0x50AAE884},
-        {"low battery", lowBattery, 0x53E20D63},
-        {"mode warning", modeWarning, 0x2889C7DD},
-        {"no signal", noSignal, 0xB4A55ABB},
-        {"full and cold", fullAndCold, 0xA4FD7742},
-        {"test values", test, 0x227369F7},
-        {"no laser", noLaser, 0x15D02483},
-        {"waiting", waiting, 0xF24CD5D5},
-        {"waiting, no number", noNumber, 0x3C88CEDF},
-        {"waiting, mode warning", waitingWarning, 0x30F6B2D2},
-        {"never heard", neverHeard, 0x6A2A49B4},
+        {"full keg", full, 0xA256B4E6},
+        {"orange", orange, 0xB36A43A7},
+        {"red", red, 0x1AB38D76},
+        {"low battery", lowBattery, 0x275E7510},
+        {"mode warning", modeWarning, 0x9BC375DF},
+        {"no signal", noSignal, 0x49224344},
+        {"full and cold", fullAndCold, 0xCF0FA36F},
+        {"test values", test, 0xBB2FB6BB},
+        {"no laser", noLaser, 0x5C3E9A7C},
+        {"waiting", waiting, 0x8211F0EC},
+        {"waiting, no number", noNumber, 0xF41AF8AA},
+        {"waiting, mode warning", waitingWarning, 0x982153F0},
+        {"never heard", neverHeard, 0xA8E6A1A7},
     };
 
     // All printed first (pio test -v shows them), then checked.

@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type MouseEvent,
   type PointerEvent,
@@ -13,8 +14,10 @@ import { createRoot } from 'react-dom/client';
 import {
   Activity,
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
   Download,
+  Frame,
   FlaskConical,
   Gauge,
   ImageUp,
@@ -100,12 +103,14 @@ import {
   SCREEN_WIDTH,
   screenPixels,
   zoomFromSlider,
+  visibleSquare,
+  windowZoom,
   zoomSlider,
   type Background,
   type BackgroundColour,
   type Pan,
 } from './screen';
-import { drawStrip, STRIP_SIZE } from './strip';
+import { drawStrip, HIDDEN_X, HIDDEN_Y, STRIP_SIZE } from './strip';
 import { showLiveValues, showSetupHelpTest, showTestValues, useStripState } from './strip-values';
 import { sourceText, TEXT_FONTS, type PictureSource } from './picture-source';
 import { fetchTapImage, fetchTapImageInfo, tapPictureBlob, type TapImageInfo } from './tap-image';
@@ -121,6 +126,31 @@ import {
 } from './test-values';
 import { fetchSetupHelp } from './setup-help';
 import { loadDeveloperMode, saveDeveloperMode, TestValuesPanel } from './test-values-panel';
+
+// Whether the preview shows what the case's frame covers, remembered by this
+// browser for each tap's page. On unless turned off, and if the browser keeps
+// nothing.
+const SHOW_FRAME_KEY = 'davbar-show-frame';
+
+const loadShowFrame = () => {
+  try {
+    return window.localStorage.getItem(SHOW_FRAME_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+};
+
+const saveShowFrame = (on: boolean) => {
+  try {
+    if (on) {
+      window.localStorage.removeItem(SHOW_FRAME_KEY);
+    } else {
+      window.localStorage.setItem(SHOW_FRAME_KEY, 'off');
+    }
+  } catch {
+    // Not remembered: it still changes for this page.
+  }
+};
 import './common.style.css';
 import './app.style.css';
 
@@ -477,6 +507,7 @@ const App = () => {
   // The strip the tap will draw for the pick
   const pickedStrip = pick ? pickedStripValues(pick) : null;
   const [developerMode, setDeveloperMode] = useState(loadDeveloperMode);
+  const [showFrame, setShowFrame] = useState(loadShowFrame);
   const [testInputs, setTestInputs] = useState<TestInputs>(DEFAULT_TEST_INPUTS);
   const [testRequest, setTestRequest] = useState<TestRequest | null>(null);
   const [sendingTest, setSendingTest] = useState<TestRequest['kind'] | null>(null);
@@ -533,7 +564,18 @@ const App = () => {
   const previewImage = setupHelpShown?.bytes ?? binary ?? tapImage;
   const showingHelpPreview = Boolean(setupHelpShown?.bytes);
   const canPan = mode === 'image' && image !== null && overflows(image, zoom);
-  const slider = image ? zoomSlider(image) : null;
+  // The part of the square the case's window shows, for zooming an image down
+  // to fit it
+  const visible = visibleSquare(noLaser);
+  const slider = image ? zoomSlider(image, visible) : null;
+  // Which of the window's sides the image is fitted to, if either
+  const windowSide = !image
+    ? null
+    : zoom === windowZoom(image, visible, 'width')
+      ? 'width'
+      : zoom === windowZoom(image, visible, 'height')
+        ? 'height'
+        : null;
   const showingKeg = kegPick !== null && kegPick.image === image;
   // How the page drew what's in Compose, if it did, kept on the tap with it so
   // it can be drawn again for the other layout (PLAN.md, step 8f). A keg state
@@ -1838,6 +1880,51 @@ const App = () => {
                 {image && !showingKeg && (
                   <div className="fit-row">
                     <div className="mode-switch" aria-label="How the image fills the square">
+                      {/* The window's width or height, picked from a dropdown to keep
+                          the row short. It reads "Frame" until one is picked, then
+                          "Frame: W" or "Frame: H", while the menu says Width and
+                          Height: the label is drawn here, with the dropdown over it,
+                          unseen, so a click or tap still opens its menu. */}
+                      <span
+                        className={`window-pick ${windowSide ? 'active' : ''}`}
+                        title={
+                          windowSide === 'height'
+                            ? "As tall as the case's window"
+                            : windowSide === 'width'
+                              ? "As wide as the case's window"
+                              : "As wide or as tall as the case's window"
+                        }
+                      >
+                        {/* The widest label is there unseen too, so picking one
+                            doesn't move the buttons beside it. */}
+                        <span className="window-label" aria-hidden="true">
+                          <span>
+                            {windowSide === 'width'
+                              ? 'Frame: W'
+                              : windowSide === 'height'
+                                ? 'Frame: H'
+                                : 'Frame'}
+                          </span>
+                          <span>Frame: W</span>
+                        </span>
+                        <ChevronDown aria-hidden="true" size={14} strokeWidth={2.2} />
+                        <select
+                          aria-label="Fit the case's window"
+                          value={windowSide ?? ''}
+                          onChange={(event) => {
+                            const side = event.target.value;
+                            if (side === 'width' || side === 'height') {
+                              setZoom(windowZoom(image, visible, side));
+                            }
+                          }}
+                        >
+                          <option value="" disabled hidden>
+                            Frame
+                          </option>
+                          <option value="width">Width</option>
+                          <option value="height">Height</option>
+                        </select>
+                      </span>
                       <button
                         className={zoom === FIT_ZOOM ? 'active' : ''}
                         type="button"
@@ -1857,13 +1944,13 @@ const App = () => {
                       <span>Zoom</span>
                       <input
                         type="range"
-                        min={0}
+                        min={slider?.min}
                         max={slider?.max}
                         step={slider?.step}
                         value={Math.log(zoom)}
                         list="zoom-marks"
                         onChange={(event) =>
-                          setZoom(zoomFromSlider(image, Number(event.target.value)))
+                          setZoom(zoomFromSlider(image, Number(event.target.value), visible))
                         }
                       />
                       <datalist id="zoom-marks">
@@ -1938,6 +2025,19 @@ const App = () => {
           <div className="panel-heading">
             <div>
               <h2>Preview</h2>
+              <button
+                className={`reset-button frame-button ${showFrame ? 'active' : ''}`}
+                type="button"
+                aria-pressed={showFrame}
+                aria-label="Show what the case's frame covers"
+                title={showFrame ? "Hide the case's frame" : "Show what the case's frame covers"}
+                onClick={() => {
+                  setShowFrame(!showFrame);
+                  saveShowFrame(!showFrame);
+                }}
+              >
+                <Frame aria-hidden="true" size={15} strokeWidth={1.8} />
+              </button>
             </div>
             <span className={`preview-state ${binary ? 'ready' : ''}`}>
               {setupHelpShown?.bytes
@@ -1952,6 +2052,23 @@ const App = () => {
 
           <div className={`canvas-stage preview-stage ${previewImage ? 'has-image' : ''}`}>
             <canvas ref={previewCanvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
+            {previewImage && showFrame && (
+              // What the case's frame covers, once each tap's fit has centred its
+              // screen in the window, so a picture can be framed to suit
+              <div
+                className="preview-frame"
+                aria-hidden="true"
+                style={
+                  {
+                    '--hidden-x': `${(HIDDEN_X / SCREEN_WIDTH) * 100}%`,
+                    '--hidden-y': `${(HIDDEN_Y / SCREEN_HEIGHT) * 100}%`,
+                  } as CSSProperties
+                }
+              >
+                <div className="preview-hatch" />
+                <div className="preview-window" />
+              </div>
+            )}
             {!previewImage && (
               <div className="canvas-placeholder preview-placeholder">
                 <span className="pixel-mark" aria-hidden="true">

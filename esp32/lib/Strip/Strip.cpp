@@ -14,7 +14,12 @@ namespace Strip
         using StripGlyphs::Font;
         using StripGlyphs::Icon;
 
+        // The content keeps this far inside what the case's frame hides
+        // (HiddenX and HiddenY, Strip.h), at the left, right and bottom.
         constexpr int Margin = 16;
+        constexpr int Left = HiddenX + Margin;
+        constexpr int Right = Width - HiddenX - Margin;
+        constexpr int Bottom = Height - HiddenY - Margin;
 
         // The top row: the percentage, the middle group and the temperature,
         // centred between the image and the bar.
@@ -31,14 +36,15 @@ namespace Strip
         constexpr int IconSize = 32;
         constexpr int GroupGap = 10;
 
-        // Test values get TestBorder (Strip.h). The content keeps Margin from
-        // every edge, so the border never touches it.
+        // Test values get TestBorder (Strip.h) just inside what the frame hides,
+        // and the content keeps Margin from what it hides, so the border never
+        // touches it.
 
-        // The level bar
-        constexpr int BarX = Margin;
-        constexpr int BarY = 88;
-        constexpr int BarWidth = Width - Margin * 2;
+        // The level bar, at the bottom
+        constexpr int BarX = Left;
+        constexpr int BarWidth = Right - Left;
         constexpr int BarHeight = 96;
+        constexpr int BarY = Bottom - BarHeight;
         constexpr int BarBorder = 4;
 
         using Draw::Align;
@@ -157,8 +163,10 @@ namespace Strip
         // icon or the mode warning in front, centred together.
         void drawMessage(const Canvas& canvas, const Values& values)
         {
-            const Font& font = StripGlyphs::rowFont;
-            int capTop = (BarY - font.capHeight) / 2;
+            const Font& font = StripGlyphs::messageFont;
+            // An odd spare pixel goes above, as round letters reach a pixel past
+            // the cap height.
+            int capTop = (BarY - font.capHeight + 1) / 2;
             const char* words = values.noSignal ? "Can't hear laser" : "Waiting for laser";
             char text[24];
 
@@ -206,12 +214,14 @@ namespace Strip
             }
 
             const Font& font = StripGlyphs::rowFont;
-            int capTop = (BarY - font.capHeight) / 2;
+            // An odd spare pixel goes above, as round letters reach a pixel past
+            // the cap height.
+            int capTop = (BarY - font.capHeight + 1) / 2;
             int baseline = capTop + font.capHeight;
             char text[12];
 
             snprintf(text, sizeof(text), "%d%%", values.percent);
-            drawText(canvas, font, text, Margin, baseline, Align::Left, plain(Black));
+            drawText(canvas, font, text, Left, baseline, Align::Left, plain(Black));
 
             if (values.hasTemperature)
             {
@@ -224,7 +234,7 @@ namespace Strip
                     tenths / 10,
                     tenths % 10
                 );
-                drawText(canvas, font, text, Width - Margin, baseline, Align::Right, plain(Black));
+                drawText(canvas, font, text, Right, baseline, Align::Right, plain(Black));
             }
 
             drawGroup(canvas, values, capTop + font.capHeight / 2);
@@ -313,7 +323,7 @@ namespace Strip
                 font,
                 "No laser",
                 Width / 2,
-                (Height + font.capHeight) / 2,
+                (Height - HiddenY + font.capHeight) / 2,
                 Align::Centre,
                 plain(Black)
             );
@@ -325,7 +335,9 @@ namespace Strip
 
         if (values.test)
         {
-            canvas.strokeRect(0, 0, Width, Height, TestBorder, Red);
+            // Just inside what the frame hides, and along the top, where the
+            // strip meets the picture.
+            canvas.strokeRect(HiddenX, 0, Width - HiddenX * 2, Height - HiddenY, TestBorder, Red);
         }
     }
 }

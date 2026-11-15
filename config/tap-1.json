@@ -2,5 +2,10 @@
   "brandName": "DavBar",
   "deviceName": "Tap 1",
   "deviceId": "tap1",
-  "hostname": "davbar"
+  "hostname": "davbar",
+  "fit": {
+    "shiftX": 0,
+    "shiftY": -1,
+    "bottomSlant": 6
+  }
 }

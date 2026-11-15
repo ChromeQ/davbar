@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 5 done; step 6 (beer library) done on tap 1, still to test sending on one tap and picking on another once tap 2 is running; step 7 (setup help) done on tap 1; step 8 (no laser on purpose, 8a to 8h) done on tap 1, still to upload to taps 2 and 3 once they're running. Last updated 2026-11-14.
+Status: steps 0 to 8 done, and all three taps run them; step 9 (fit the enclosure) next. Last updated 2026-11-14.
 
 ## Goal
 
@@ -512,8 +512,9 @@ Each step ends with something visible to check.
    the factory reset option; (6b) saving on Send and the Library grid from all taps;
    (6c) removing several and the prompt when full; (6d) the keg states. 6a done,
    tested on tap 1; 6b and 6c built, tested against faked taps and on tap 1; 6d built,
-   tested against faked taps and on tap 1's screen. Still to do: send a beer on one
-   tap and pick it on another, once tap 2 is running.
+   tested against faked taps and on tap 1's screen. Tested across taps on
+   2026-11-14: a beer sent on tap 2 was listed in tap 3's Library as "Tap 2 · 14
+   Nov", and Upload to display put it on tap 3's screen.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
    planned here, were done in step 5a. Done, and checked on tap 1's screen; chosen
    from mockups:
@@ -644,7 +645,10 @@ Each step ends with something visible to check.
        mode icon and layout in place of its own, or for no laser the setup help
        alone on the whole screen. Nothing is saved, and back to live is the tap's
        own laser. (At first Show on device waited until the picked laser was
-       sent, which got in the way of building the preview.)
+       sent, which got in the way of building the preview.) Tested on tap 1's
+       screen on 2026-11-14: No laser picked and not sent, with the Ready setup
+       help, drew it alone on the whole screen while tap 1 kept laser 1, and Back
+       to live drew its own board and strip.
    - (8e) Found while testing 8d: after a reload Compose is empty and the preview
      shows the tap's picture, so picking No laser showed white bands with nothing
      to choose their background from. Now picking No laser with nothing composed
