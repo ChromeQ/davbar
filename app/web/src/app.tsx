@@ -1921,8 +1921,8 @@ const App = () => {
                           <option value="" disabled hidden>
                             Frame
                           </option>
-                          <option value="width">Width</option>
                           <option value="height">Height</option>
+                          <option value="width">Width</option>
                         </select>
                       </span>
                       <button
