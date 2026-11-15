@@ -952,11 +952,10 @@ h2 {
 }
 
 /* The case's frame round the preview. What it covers has red and yellow stripes,
-   like hazard tape, all at the same angle, and a little see-through, so what it
-   hides can still be made out. The
-   window's edge is a line in the opposite colour to whatever is under it, so it
-   shows on any picture, even a black keg board. --hidden-x and --hidden-y are
-   how far the frame reaches in, set by the app. */
+   like hazard tape, all at the same angle, and see-through, so what it hides can
+   still be made out. The window's edge is a line in the opposite colour to
+   whatever is under it, so it shows on any picture, even a black keg board.
+   --hidden-x and --hidden-y are how far the frame reaches in, set by the app. */
 .preview-frame {
   position: absolute;
   inset: 0;
@@ -964,14 +963,16 @@ h2 {
 }
 
 /* The stripes cover the whole preview, with the window cut out, so they meet
-   at the corners */
+   at the corners. The picture under them is blurred, so its dithered dots
+   don't show through and make the stripes look dotted too. */
 .preview-hatch {
   position: absolute;
   inset: 0;
+  backdrop-filter: blur(2px);
   background: repeating-linear-gradient(
     -45deg,
-    rgba(214, 40, 40, 0.85) 0 5px,
-    rgba(255, 204, 0, 0.85) 5px 10px
+    rgba(214, 40, 40, 0.5) 0 5px,
+    rgba(255, 204, 0, 0.5) 5px 10px
   );
   clip-path: polygon(
     evenodd,
