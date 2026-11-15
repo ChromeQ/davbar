@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 8 done, and all three taps run them; step 9 (fit the enclosure) next. Last updated 2026-11-14.
+Status: steps 0 to 9 done, and all three taps run them; step 9's last check and step 10 (wrap up) next. Last updated 2026-11-15.
 
 ## Goal
 
@@ -307,7 +307,8 @@ Force refresh in the settings menu still redraws on demand.
   them within 3%. Where the image is bigger than the square, dragging it chooses which
   part shows; zooming keeps the same point in the middle. A new image starts at Fit,
   or at Fill if the last one was at Fill. Text mode renders at 400 x 400. Uploads are
-  80,000 bytes. Done in parts 2 and 3 of 5b, tested on tap 1.
+  80,000 bytes. Done in parts 2 and 3 of 5b, tested on tap 1. Step 9 took the slider
+  below Fit, down to the case's window, with Frame: W and Frame: H.
   Ways to give it an image:
   - Browse for a file, or drop one on the image, as before.
   - One field, "Paste an image or its address", beside Browse. Pasting an image's
@@ -377,7 +378,7 @@ Force refresh in the settings menu still redraws on demand.
     couldn't be reached, and under each beer where and when it was last shown
     ("Tap 2 · 11 Nov", or "Tap 2 · June 2025" for an earlier year). Thumbnails
     come one at a time from each tap, this tap's own first. Tested in the browser
-    against faked taps; still to try on the real taps.
+    against faked taps, and across the real taps on 2026-11-14 (step 6).
   - Two keg states always first in the grid, which can't be removed or ticked: "Keg
     empty" and "Keg ready" (cleaned and ready to fill). Sending one adds the date, as
     a reminder of when the keg was emptied or cleaned. The strip still shows the
@@ -695,21 +696,42 @@ Each step ends with something visible to check.
      drawn curly. A typed line isn't added to the list; it goes to the tap in the
      picture's source, so a laser change or Edit the picture on the tap brings it
      back. A line worth keeping goes in `config/keg-lines.json`.
-9. **Fit the enclosure,** once the case parts are printed and the last screens arrive.
-   The case's frame may cover a few pixels of each screen, and more on one side
-   than the other. Each tap gets its own visible area (how much each edge loses),
-   set in the web app with "Show on device" to check it: the strip centres in the
-   visible area, the test values' red border moves in with it, and the preview
-   shades what the frame hides, so images can be framed to match. The screen won't
-   move once it's screwed in, so a factory reset keeps it: it's saved in the tap's
-   settings (NVS), which updates and uploads don't touch, and the factory reset
-   leaves it out (its dialog says so). Tuning needs no flashing: the saved fit takes
-   effect straight away. Once it looks right, `pnpm device:save-fit --config
-   config/tap-1.json` reads the tap's fit over Wi-Fi and writes it into that tap's
-   profile, to commit. The firmware uses the profile's fit only when the saved one
-   is missing, such as after erasing the whole chip or swapping in a new ESP32
-   behind the same screen.
-10. **Wrap up,** the last commits on `keg-level` before merging into master: move the
+9. **Fit the enclosure.** Done 2026-11-15, on all three taps. The case's frame
+   covers a few pixels of each screen, more on some sides than others, and tap 1's
+   window has a bottom edge that isn't level. Calibration screens, with numbered
+   bars along each edge, were read by eye and from photos, and gave each tap a fit
+   in its profile (`"fit"` in `config/tap-N.json`):
+   - `shiftX` and `shiftY` move the whole screen by whole pixels, so it's centred
+     in the window.
+   - `bottomSlant` moves each column of the bottom 200 rows up or down, so the
+     strip follows a window edge that's higher at one side (6 pixels on tap 1).
+
+   The fit is built into the firmware, with no route or saved setting: the screen
+   won't move once it's screwed in, so it's set once and kept in the repo, and a
+   factory reset or a new ESP32 keeps it. Changing it means changing the profile
+   and uploading the firmware. The firmware applies it to the finished screen just
+   before drawing (`ScreenLayout::applyFit`), so the web app and its preview are
+   the same on every tap.
+
+   Once centred, the frame hides 14 pixels at the sides and 9 at the top and
+   bottom on every tap (`Strip::HiddenX` and `HiddenY`, the most any tap hides
+   plus a pixel). The strip, the test borders and the keg boards keep inside that,
+   and the strip's messages have a smaller font (36 px) so they still fit. After
+   the fit, the gauges on all three taps were within a bar of each other.
+
+   In the web app, the preview shows what the frame hides with red and yellow
+   stripes, half see-through, with the picture under them blurred, and a line
+   along the window's edge that shows on any picture. A button beside the preview's heading
+   turns it off, remembered by that browser. Zoom goes below Fit, and the Frame
+   dropdown fits a picture to the window's width or height (Frame: W or Frame: H),
+   which the slider snaps to as well.
+
+   Still to check: the same picture on all three taps, to see that they match. If
+   one is off, its fit changes in its profile.
+10. **Wrap up,** the last commits on `keg-level` before merging into master. First,
+   with the Keg ready boards and lasers back on the taps: the calibration with the
+   jug (below), and a night with all three taps on, their logs then read for
+   crashes, Wi-Fi drops and redraws. Then move the
    lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
    the display behaves into the READMEs, calling the main page's button "Upload to
    display", its name in the app, where older notes here say "Send"), then move this plan to
