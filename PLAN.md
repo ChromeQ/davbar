@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 9 done, and all three taps run them; step 9's last check and step 10 (wrap up) next. Last updated 2026-11-15.
+Status: steps 0 to 9 done, and all three taps run them; step 10 (wrap up) next. Last updated 2026-11-15.
 
 ## Goal
 
@@ -704,7 +704,10 @@ Each step ends with something visible to check.
    - `shiftX` and `shiftY` move the whole screen by whole pixels, so it's centred
      in the window.
    - `bottomSlant` moves each column of the bottom 200 rows up or down, so the
-     strip follows a window edge that's higher at one side (6 pixels on tap 1).
+     strip follows a window edge that's higher at one side. It's 0 on every tap:
+     tap 1 had 6, but the bar's straight lines showed the steps, so its bar is
+     straight, and about 3 pixels nearer the frame at one end, which hardly shows
+     against the white.
 
    The fit is built into the firmware, with no route or saved setting: the screen
    won't move once it's screwed in, so it's set once and kept in the repo, and a
@@ -726,8 +729,8 @@ Each step ends with something visible to check.
    dropdown fits a picture to the window's width or height (Frame: W or Frame: H),
    which the slider snaps to as well.
 
-   Still to check: the same picture on all three taps, to see that they match. If
-   one is off, its fit changes in its profile.
+   The same picture on all three taps, with and without the strip, looked the same
+   in each window (2026-11-15).
 10. **Wrap up,** the last commits on `keg-level` before merging into master. First,
    with the Keg ready boards and lasers back on the taps: the calibration with the
    jug (below), and a night with all three taps on, their logs then read for
