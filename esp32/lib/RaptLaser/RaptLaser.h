@@ -75,22 +75,32 @@ namespace RaptLaser
         }
     };
 
+    // How much closer the laser reads with the float's ball under it: it sees
+    // the top of the ball instead of the beer (533 mm without it, 508 mm with
+    // it, in the same filling on 2026-11-16).
+    constexpr uint16_t BallAboveBeerMm = 25;
+
     // A 19 L Corny keg with the RAPT lid kit and a floating dip tube, filled
     // from a jug on 2026-11-16 (PLAN.md, "Calibration"):
-    // - The domed bottom, up to 3 L, is every point measured, 0.5 L apart.
+    // - The domed bottom, up to 3 L, is every point measured, 0.5 L apart, from
+    //   a second filling with the float tied up out of the beam, then moved
+    //   BallAboveBeerMm closer. Down there the float's ball tends to sit under
+    //   the laser, which then reads the top of the ball instead of the beer. So
+    //   with the ball in the beam the bottom shows what's there, and with it
+    //   out of the way up to about 1 L less: never more.
     // - Above it the keg is a straight cylinder: one line, 27.2 mm a litre,
-    //   fitted to the readings from 5 L to 18.5 L. From 3 L to 5 L it joins the
-    //   dome to the line.
+    //   fitted to the readings from 5 L to 18.5 L, where the float hangs clear.
+    //   From 3 L to 5 L it joins the bottom to the line.
     // - The laser reads short this close, so 29 mm or nearer is full.
     // Keep it the same as CORNY_KEG_19L in app/rapt-laser.
     constexpr KegPoint Corny19LPoints[] = {
-        {566, 0},
-        {557, 5},
-        {546, 10},
-        {528, 15},
-        {512, 20},
-        {487, 25},
-        {467, 30},
+        {564 - BallAboveBeerMm, 0},
+        {557 - BallAboveBeerMm, 5},
+        {533 - BallAboveBeerMm, 10},
+        {519 - BallAboveBeerMm, 15},
+        {502 - BallAboveBeerMm, 20},
+        {482 - BallAboveBeerMm, 25},
+        {465 - BallAboveBeerMm, 30},
         {399, 50},
         {45, 180},
         {29, 190},

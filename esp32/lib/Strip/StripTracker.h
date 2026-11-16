@@ -11,9 +11,10 @@ namespace Strip
     // away. A rise this big is a refill, and shows once the level has stayed
     // within 1 point for SettleSeconds (a keg change involves a lot of moving).
     // Within 1 point, as a reading on the line between two percentages flickers
-    // between them. Smaller rises are noise and never show.
+    // between them. Smaller rises are noise and never show, such as the float's
+    // ball drifting under the laser, which reads up to about 5 points high.
     constexpr int32_t SettleSeconds = 60;
-    constexpr uint8_t RefillPoints = 5;
+    constexpr uint8_t RefillPoints = 10;
     // The battery shows the highest reading of the last hour, to ignore sags
     // while the laser fires. A rise this big is new batteries.
     constexpr int32_t BatteryWindowSeconds = 3600;

@@ -210,17 +210,38 @@ struct ShownLevel
     uint8_t percent;
 };
 
-// What the tap shows at each reading from the jug calibration on 2026-11-16,
-// with what was in the keg alongside.
-static const ShownLevel JugReadings[] = {
-    {566, 0, 0},     // 0 L
-    {557, 5, 2},     // 0.5 L
-    {546, 10, 5},    // 1 L
-    {528, 15, 7},    // 1.5 L
-    {512, 20, 10},   // 2 L
-    {487, 25, 13},   // 2.5 L
-    {467, 30, 15},   // 3 L
-    {402, 49, 25},   // 5 L
+// What the tap shows at readings from the jug calibration on 2026-11-16, with
+// what was in the keg alongside.
+
+// The bottom 3 L with the float's ball in the beam: what's there. The second
+// filling's readings 25 mm closer, then two readings with the ball seen there.
+static const ShownLevel BallInTheBeam[] = {
+    {539, 0, 0},    // 0 L
+    {532, 5, 2},    // 0.5 L
+    {508, 10, 5},   // 1 L
+    {494, 15, 7},   // 1.5 L
+    {477, 20, 10},  // 2 L
+    {457, 25, 13},  // 2.5 L
+    {440, 30, 15},  // 3 L
+    {548, 0, 0},    // 0 L, the ball on the bottom
+    {508, 10, 5},   // 1.5 L, the ball floating
+};
+
+// The bottom 3 L with the ball out of the way: less, never more. The second
+// filling, with the float tied up.
+static const ShownLevel BallOutOfTheWay[] = {
+    {564, 0, 0},    // 0 L
+    {557, 0, 0},    // 0.5 L
+    {533, 4, 2},    // 1 L
+    {519, 7, 4},    // 1.5 L
+    {502, 12, 6},   // 2 L
+    {482, 18, 9},   // 2.5 L
+    {465, 23, 12},  // 3 L
+};
+
+// The straight part, from the first filling.
+static const ShownLevel StraightPart[] = {
+    {402, 48, 25},   // 5 L
     {343, 70, 37},   // 7 L
     {288, 90, 47},   // 9 L
     {236, 109, 57},  // 11 L
@@ -238,11 +259,11 @@ static const ShownLevel JugReadings[] = {
 
 // Between the points, beyond empty and nearer than full.
 static const ShownLevel OtherLevels[] = {
-    // Halfway between 1 L and 1.5 L, in the domed bottom
-    {537, 12, 6},
+    // Halfway between the points for 1 L and 1.5 L
+    {501, 12, 6},
     // Half of 19 L, on the straight line
     {276, 95, 50},
-    {567, 0, 0},
+    {540, 0, 0},
     {600, 0, 0},
     // What the laser read with the lid off
     {21, 190, 100},
@@ -263,14 +284,26 @@ static void checkLevels(const ShownLevel* levels, size_t count)
     }
 }
 
-static void testKegLevelMatchesTheJug()
+#define CHECK_LEVELS(levels) checkLevels(levels, sizeof(levels) / sizeof(levels[0]))
+
+static void testKegLevelWithTheBallInTheBeam()
 {
-    checkLevels(JugReadings, sizeof(JugReadings) / sizeof(JugReadings[0]));
+    CHECK_LEVELS(BallInTheBeam);
+}
+
+static void testKegLevelWithTheBallOutOfTheWay()
+{
+    CHECK_LEVELS(BallOutOfTheWay);
+}
+
+static void testKegLevelInTheStraightPart()
+{
+    CHECK_LEVELS(StraightPart);
 }
 
 static void testKegLevelBetweenAndBeyondThePoints()
 {
-    checkLevels(OtherLevels, sizeof(OtherLevels) / sizeof(OtherLevels[0]));
+    CHECK_LEVELS(OtherLevels);
 }
 
 static void testKegCapacity()
@@ -323,7 +356,9 @@ int main()
     RUN_TEST(testModeNames);
     RUN_TEST(testParsesAddress);
     RUN_TEST(testRejectsBadAddress);
-    RUN_TEST(testKegLevelMatchesTheJug);
+    RUN_TEST(testKegLevelWithTheBallInTheBeam);
+    RUN_TEST(testKegLevelWithTheBallOutOfTheWay);
+    RUN_TEST(testKegLevelInTheStraightPart);
     RUN_TEST(testKegLevelBetweenAndBeyondThePoints);
     RUN_TEST(testKegCapacity);
     RUN_TEST(testKegLevelWithAnotherCalibration);

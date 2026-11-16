@@ -185,6 +185,41 @@ static void testSmallRiseNeverShows()
     TEST_ASSERT_EQUAL_UINT8(80, tracker.values(1000).percent);
 }
 
+// The float's ball under the laser reads about 25 mm closer: in the straight
+// part of the keg that's 0.9 L, and 5 points from the nearest distance that
+// still shows 50%.
+static void testBallUnderTheLaserNeverShows()
+{
+    chooseLaser1(0);
+    tracker.addReading(10, reading(distanceFor(51) + 1));
+    redrawIfDue(10);
+    TEST_ASSERT_EQUAL_UINT8(50, tracker.values(10).percent);
+
+    tracker.addReading(100, reading(distanceFor(51) + 1 - 25));
+    TEST_ASSERT_EQUAL_UINT8(55, RaptLaser::kegLevel(distanceFor(51) + 1 - 25).percent);
+    TEST_ASSERT_NULL(reasonAt(1000));
+    TEST_ASSERT_EQUAL_UINT8(50, tracker.values(1000).percent);
+}
+
+static void testRiseJustUnderARefillNeverShows()
+{
+    showFirstReading(50);
+
+    tracker.addReading(100, reading(distanceFor(59)));
+    TEST_ASSERT_NULL(reasonAt(1000));
+    TEST_ASSERT_EQUAL_UINT8(50, tracker.values(1000).percent);
+}
+
+static void testSmallestRefillShowsOnceSettled()
+{
+    showFirstReading(50);
+
+    tracker.addReading(100, reading(distanceFor(60)));
+    TEST_ASSERT_NULL(reasonAt(159));
+    TEST_ASSERT_EQUAL_STRING("refill", reasonAt(160));
+    TEST_ASSERT_EQUAL_UINT8(60, tracker.values(160).percent);
+}
+
 static void testRefillShowsOnceSettled()
 {
     showFirstReading(20);
@@ -424,6 +459,9 @@ int main()
     RUN_TEST(testFlickerAfterADropRedrawsOnce);
     RUN_TEST(testFlickeringJustUnderARefillNeverShows);
     RUN_TEST(testSmallRiseNeverShows);
+    RUN_TEST(testBallUnderTheLaserNeverShows);
+    RUN_TEST(testRiseJustUnderARefillNeverShows);
+    RUN_TEST(testSmallestRefillShowsOnceSettled);
     RUN_TEST(testRefillShowsOnceSettled);
     RUN_TEST(testLitresWithinThePercentageWaitForTheNextRedraw);
     RUN_TEST(testBatteryIgnoresSagsWithinTheHour);

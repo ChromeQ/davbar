@@ -2,16 +2,46 @@ import { describe, expect, it } from 'vitest';
 import { CORNY_KEG_19L, kegLevel } from '../src/index.js';
 
 describe('kegLevel', () => {
-  // What the tap shows at each reading from the jug calibration on 2026-11-16.
+  // What the tap shows at readings from the jug calibration on 2026-11-16.
+
+  // The second filling's readings 25 mm closer, then two readings with the
+  // ball seen there.
   it.each([
-    [566, 0, 0, 0],
-    [557, 0.5, 0.5, 2],
-    [546, 1, 1, 5],
-    [528, 1.5, 1.5, 7],
-    [512, 2, 2, 10],
-    [487, 2.5, 2.5, 13],
-    [467, 3, 3, 15],
-    [402, 5, 4.9, 25],
+    [539, 0, 0, 0],
+    [532, 0.5, 0.5, 2],
+    [508, 1, 1, 5],
+    [494, 1.5, 1.5, 7],
+    [477, 2, 2, 10],
+    [457, 2.5, 2.5, 13],
+    [440, 3, 3, 15],
+    [548, 0, 0, 0],
+    [508, 1.5, 1, 5],
+  ])(
+    "shows what's there with the float's ball in the beam: at %i mm, with %f L, shows %f L and %i%%",
+    (distanceMm, _inKeg, litres, percent) => {
+      expect(kegLevel(distanceMm)).toEqual({ litres, percent });
+    }
+  );
+
+  // The second filling, with the float tied up.
+  it.each([
+    [564, 0, 0, 0],
+    [557, 0.5, 0, 0],
+    [533, 1, 0.4, 2],
+    [519, 1.5, 0.7, 4],
+    [502, 2, 1.2, 6],
+    [482, 2.5, 1.8, 9],
+    [465, 3, 2.3, 12],
+  ])(
+    'shows less, never more, with the ball out of the way: at %i mm, with %f L, shows %f L and %i%%',
+    (distanceMm, _inKeg, litres, percent) => {
+      expect(kegLevel(distanceMm)).toEqual({ litres, percent });
+    }
+  );
+
+  // The first filling.
+  it.each([
+    [402, 5, 4.8, 25],
     [343, 7, 7, 37],
     [288, 9, 9, 47],
     [236, 11, 10.9, 57],
@@ -26,15 +56,15 @@ describe('kegLevel', () => {
     [32, 18.5, 18.8, 99],
     [29, 19, 19, 100],
   ])(
-    'at %i mm, with %f L in the keg, shows %f L and %i%%',
+    'follows the straight part: at %i mm, with %f L, shows %f L and %i%%',
     (distanceMm, _inKeg, litres, percent) => {
       expect(kegLevel(distanceMm)).toEqual({ litres, percent });
     }
   );
 
-  it('follows the domed bottom between its points', () => {
-    // Halfway between 1 L and 1.5 L
-    expect(kegLevel(537)).toEqual({ litres: 1.2, percent: 6 });
+  it('goes in a straight line between the points', () => {
+    // Halfway between the points for 1 L and 1.5 L
+    expect(kegLevel(501)).toEqual({ litres: 1.2, percent: 6 });
   });
 
   it('gives the percentage of a full keg', () => {
@@ -43,7 +73,7 @@ describe('kegLevel', () => {
   });
 
   it('is empty beyond the first point', () => {
-    expect(kegLevel(567)).toEqual({ litres: 0, percent: 0 });
+    expect(kegLevel(540)).toEqual({ litres: 0, percent: 0 });
     expect(kegLevel(600)).toEqual({ litres: 0, percent: 0 });
   });
 

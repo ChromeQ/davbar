@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 9 done, and all three taps run them; step 10 (wrap up) next. Last updated 2026-11-15.
+Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16); step 10 (wrap up) next. Last updated 2026-11-17.
 
 ## Goal
 
@@ -115,15 +115,19 @@ beyond the first point the keg is empty, and nearer than the last it is full.
 
 | Distance | Litres | Why |
 | --- | --- | --- |
-| 566 mm or more | 0 | Empty |
-| 557, 546, 528, 512, 487, 467 mm | 0.5, 1, 1.5, 2, 2.5, 3 | The domed bottom, as measured |
-| 399 mm | 5 | Where the dome joins the straight sides |
-| 45 mm | 18 | The straight sides: one line, 27.2 mm a litre, fitted to the readings from 5 L to 18.5 L |
+| 539 mm or more | 0 | Empty |
+| 532, 508, 494, 477, 457, 440 mm | 0.5, 1, 1.5, 2, 2.5, 3 | The domed bottom as measured on the second filling, with the float tied up, then 25 mm closer: the float's ball tends to sit under the laser down there, and the laser then reads the top of the ball, about 25 mm above the beer |
+| 399 mm | 5 | Where the bottom joins the straight sides |
+| 45 mm | 18 | The straight sides: one line, 27.2 mm a litre, fitted to the readings from 5 L to 18.5 L, where the float hangs clear |
 | 29 mm or less | 19 | Full: the laser reads short this close |
 
 The litres are rounded down to 0.1 L, and the percentage is of 19 L, rounded down. The
 points are `RaptLaser::Corny19L` in the firmware and `CORNY_KEG_19L` in
 app/rapt-laser, which must stay the same; both are tested against the jug readings.
+
+So the bottom 3 L never show more than is in the keg: right with the ball in the
+beam, and up to about 1 L less with it out of the way, a pint or two to spare at the
+end rather than one that isn't there. From 5 L up the screen is within 0.2 L.
 
 Before the calibration it was a straight line from 552 mm (empty) to 22 mm (19 L),
 which matched the RAPT app's own figures but read up to 0.8 L low in the last 3 L.
@@ -191,7 +195,7 @@ something shown changes.
 
 | Value | Rule |
 | --- | --- |
-| Level | 1% steps, rounded down. Only goes down, and a drop redraws as soon as the laser reports it, so a pour shows straight away. If the laser measured mid-pour, its next reading (about 35s later in Session Mode) redraws again with the final level; a redraw can't be cut short, as stopping the panel part-way can leave lasting ghosting. A rise of 5 points or more is a refill, shown once the level has stayed within 1 point for 1 minute, as a keg change involves a lot of moving; it then shows the lowest reading in that minute. Within 1 point, as a reading on the line between two percentages flickers between them. Smaller rises never show. |
+| Level | 1% steps, rounded down. Only goes down, and a drop redraws as soon as the laser reports it, so a pour shows straight away. If the laser measured mid-pour, its next reading (about 35s later in Session Mode) redraws again with the final level; a redraw can't be cut short, as stopping the panel part-way can leave lasting ghosting. A rise of 10 points or more (5 until 2026-11-16, raised as the float's ball under the laser reads up to about 5 points high) is a refill, shown once the level has stayed within 1 point for 1 minute, as a keg change involves a lot of moving; it then shows the lowest reading in that minute. Within 1 point, as a reading on the line between two percentages flickers between them. Smaller rises never show. |
 | Battery | Use the highest reading from the last hour, to ignore sags while the laser fires. That value only goes down; a large rise (new batteries) shows immediately. |
 | Temperature | Updated whenever the screen redraws. On its own, it triggers a redraw only if it has moved 0.5° or more and the last redraw was at least an hour ago. |
 
@@ -862,18 +866,92 @@ Each step ends with something visible to check.
   - With the old formula the domed bottom read low: up to 0.8 L in the last 3 L,
     so at 1 L left the tap said 0.2 L, just when it matters whether there's
     another pint.
-  - The steady +0.3 L in the middle may be the jug: 10 ml over on each of 30
-    fills adds up to that. The tap now follows the jug, so if the jug ran over it
-    reads about 0.3 L low in the middle. Weighing the keg empty and full (1 kg a
-    litre) would tell.
+  - The old formula read a steady +0.3 L high in the middle. It wasn't the jug:
+    weighing (below) found 19.1 kg of water for the jug's 19 L, so the jug was
+    right, and the tap now follows it.
+  - Weighing, on bathroom scales, weighed holding the keg less weighed without
+    it, with the lid, laser and dip tube on (1 kg of water is about 1 L):
+    - Full, 19 L by the jug (2026-11-16): 123.2 kg less 99.8 kg, so 23.4 kg.
+    - Empty (2026-11-16): 4.3 kg, the same on the scales alone and as 104.3 kg
+      less 100.0 kg, twice.
+    - So the water weighed 19.1 kg: 0.1 L over the jug's count, within what the
+      scales can tell (about 0.2 kg).
+  - Emptied again (2026-11-16), the keg read 548-556 mm (up to 0.9 L) with the
+    float's ball lying under the beam, and 559-564 mm (0.1-0.3 L) once it was
+    moved, against 566-568 mm dry the night before. Left as it is: under a pint
+    still shows as under a pint, and moving the 0 L point to 560 mm would squeeze
+    the first 0.5 L into 3 mm. With beer in, the ball floats on the surface.
+  - The float's ball can sit under the beam. Refilling to 1.5 L (2026-11-16) with
+    the float in, the reading crept from 533 mm to 508 mm once the ball drifted
+    under the laser, and stayed there for an hour; moved away, it drifted back
+    within 3 minutes. That reads about 0.5 L high near the bottom. Turning the
+    lid made no difference with the keg empty; not tried with the ball floating.
+    To fix in the keg, not the code: keep the ball out of the beam, for example
+    with a shorter tube, or the lid turned so the laser is on the far side.
+  - The ball is 42 mm across. Floating, about 25 mm of it sits above the beer,
+    which the table allows for (`BallAboveBeerMm`). Resting on the bottom of an
+    empty keg, its top could be up to 42 mm above the bottom. On the empty keg
+    it only read 8-16 mm closer (548-556 mm against 564 mm), probably the beam
+    catching its side, as the curved bottom rolls it to the middle and the laser
+    is off-centre. Those readings show 0.0 L. The worst case, the top of a
+    resting ball right under the beam, would read about 522 mm on an empty keg
+    and show 0.7 L. The table can't allow for it: 0.7 L with the ball floating
+    also reads about 522 mm, and treating that as empty would read about 2
+    pints low whenever the ball is out of the way.
+  - To check at the end of a real keg: what the screen shows when it runs dry.
+    More than about 0.3 L would mean the ball's full height reaches the beam,
+    and the empty point should go deeper, by up to 42 mm.
+  - Second run of the bottom 3 L (2026-11-16), the float tied up out of the way,
+    the bottom dried first (a few mm of water left in it read 4-6 mm closer):
+
+    | In keg | First run (mm) | Second run (mm) | The tap showed then (first table) |
+    | --- | --- | --- | --- |
+    | 0 L | 566 | 564 (563-566) | 0.1 L |
+    | 0.5 L | 557 | 557 (556-558) | 0.5 L |
+    | 1 L | 546 | 533 (531-534), the same with the lid reseated | 1.3 L |
+    | 1.5 L | 528 | 519 (519-524) | 1.7 L |
+    | 2 L | 512 | 502 (499-504) | 2.2 L |
+    | 2.5 L | 487 | 482 (481-484), creeping to 475-478 over 15 minutes | 2.6 L |
+    | 3 L | 467 | 465 (463-465) | 3.0 L |
+    | 5 L | 402 | 399, settling to 402 | 4.9 L |
+    | 7 L | 343 | 344 (343-345) | 7.0 L |
+    | 9 L | 288 | 291 (290-291) | 8.9 L |
+
+    The two runs agree at 0, 0.5 and 3 L. Between them the second run read up to
+    13 mm closer, all of it from the pour from 0.5 L to 1 L; after that both rose
+    about the same with each pour. So the bottom repeats to about 0.3 L between
+    fillings, likely from how soon the water reaches the beam's spot, which is
+    off-centre in the curved bottom. From 5 L up the two runs agree within 3 mm,
+    so the ball wasn't in the first run's straight part, and the big step from
+    3 L to 5 L (65 mm against 54 mm for 2 L of straight sides) is the keg itself.
+
+    The table's bottom 3 L now come from the second run, moved 25 mm closer for
+    the float's ball (see "Litres and percentage"). Both float-down fillings
+    read the bottom further than the tied-up one, which only shows less. With
+    the ball in the beam it shows what's there; out of the way, less:
+
+    | In keg | Ball in the beam | Second run, tied up | First run, float down |
+    | --- | --- | --- | --- |
+    | 0 L | 0.0 L (548-556 mm) | 0.0 L | 0.0 L |
+    | 0.5 L | | 0.0 L | 0.0 L |
+    | 1 L | | 0.4 L | 0.0 L |
+    | 1.5 L | 1.0 L (508 mm) | 0.7 L | 0.5 L |
+    | 2 L | | 1.2 L | 0.9 L |
+    | 2.5 L | | 1.8 L | 1.7 L |
+    | 3 L | | 2.3 L | 2.2 L |
+    | 5 L | | 4.8-5.0 L | 4.8 L |
   - Above 18.5 L the laser is as close as it can measure: 19 L read only 3 mm
     nearer than 18.5 L, and the laser read 21-23 mm whenever the lid was lifted
     off. So anything at 29 mm or less is full.
-  - The floating ball didn't show: readings settled within 2-3 mm at every level,
-    apart from 17.5 L (55-60 mm before settling).
+  - In the first run the floating ball didn't show: readings settled within 2-3
+    mm at every level, apart from 17.5 L (55-60 mm before settling). With more
+    beer in, the float's silicone tube seems to curl round the keg's side, out of
+    the beam; near the bottom it hangs straight down, and the curved bottom
+    steers the ball towards the middle, under the laser.
 
   What changed (2026-11-16): the tap works out the litres from these points (see
-  "Litres and percentage"). The domed bottom is every point up to 3 L; above it
+  "Litres and percentage"), with the bottom 3 L later replaced by the second
+  run's (below). The domed bottom is every point up to 3 L; above it
   the keg is one straight line, fitted to the readings from 5 L to 18.5 L, which
   are all within 0.2 L; and 29 mm or less is full. Only 18.5 L is further out
   (18.8 L), where the laser is near its closest. One table for every keg, as the

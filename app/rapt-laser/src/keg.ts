@@ -12,24 +12,36 @@ export type KegPoint = {
 export type KegCalibration = readonly KegPoint[];
 
 /**
+ * How much closer the laser reads with the float's ball under it: it sees the
+ * top of the ball instead of the beer (533 mm without it, 508 mm with it, in
+ * the same filling on 2026-11-16).
+ */
+const BALL_ABOVE_BEER_MM = 25;
+
+/**
  * A 19 L Corny keg with the RAPT lid kit and a floating dip tube, filled from a
  * jug on 2026-11-16 (PLAN.md, "Calibration"):
- * - The domed bottom, up to 3 L, is every point measured, 0.5 L apart.
+ * - The domed bottom, up to 3 L, is every point measured, 0.5 L apart, from a
+ *   second filling with the float tied up out of the beam, then moved
+ *   BALL_ABOVE_BEER_MM closer. Down there the float's ball tends to sit under
+ *   the laser, which then reads the top of the ball instead of the beer. So
+ *   with the ball in the beam the bottom shows what's there, and with it out
+ *   of the way up to about 1 L less: never more.
  * - Above it the keg is a straight cylinder: one line, 27.2 mm a litre, fitted
- *   to the readings from 5 L to 18.5 L. From 3 L to 5 L it joins the dome to
- *   the line.
+ *   to the readings from 5 L to 18.5 L, where the float hangs clear. From 3 L
+ *   to 5 L it joins the bottom to the line.
  * - The laser reads short this close, so 29 mm or nearer is full.
  *
  * Keep it the same as RaptLaser::Corny19L in the firmware.
  */
 export const CORNY_KEG_19L: KegCalibration = [
-  { distanceMm: 566, litres: 0 },
-  { distanceMm: 557, litres: 0.5 },
-  { distanceMm: 546, litres: 1 },
-  { distanceMm: 528, litres: 1.5 },
-  { distanceMm: 512, litres: 2 },
-  { distanceMm: 487, litres: 2.5 },
-  { distanceMm: 467, litres: 3 },
+  { distanceMm: 564 - BALL_ABOVE_BEER_MM, litres: 0 },
+  { distanceMm: 557 - BALL_ABOVE_BEER_MM, litres: 0.5 },
+  { distanceMm: 533 - BALL_ABOVE_BEER_MM, litres: 1 },
+  { distanceMm: 519 - BALL_ABOVE_BEER_MM, litres: 1.5 },
+  { distanceMm: 502 - BALL_ABOVE_BEER_MM, litres: 2 },
+  { distanceMm: 482 - BALL_ABOVE_BEER_MM, litres: 2.5 },
+  { distanceMm: 465 - BALL_ABOVE_BEER_MM, litres: 3 },
   { distanceMm: 399, litres: 5 },
   { distanceMm: 45, litres: 18 },
   { distanceMm: 29, litres: 19 },
