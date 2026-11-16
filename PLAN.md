@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 10 (wrap up): the docs are written, the overnight run is under way, then the branch review, archiving this plan and the merge. Last updated 2026-11-17.
+Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 10 (wrap up): the docs are written and the overnight run passed; next the branch review, archiving this plan and the merge. Last updated 2026-11-17.
 
 ## Goal
 
@@ -743,8 +743,14 @@ Each step ends with something visible to check.
    in each window (2026-11-15).
 10. **Wrap up,** the last commits on `keg-level` before merging into master. First,
    a night with all three taps on, their logs then read for crashes, Wi-Fi drops and
-   redraws: started 2026-11-17 at 00:39, with the lasers on their delivery boxes
-   (taps 2 and 3 both on laser 2) and each tap's status recorded every minute. Then
+   redraws: done 2026-11-17, 00:39 to 09:00, with the lasers on their delivery boxes
+   (taps 2 and 3 both on laser 2) and each tap's status recorded every minute. All
+   three stayed up all night, answering every minute, with no Wi-Fi drops (signal
+   -42 to -60 dBm). Each heard its laser about every 2s, the longest gap 29s. Free
+   memory held at 71-74 KB, and its lowest since startup never moved (41 KB on tap 1,
+   55 KB on taps 2 and 3). The only redraws were tap 1's level, when its laser went
+   onto its box, and temperature ones as the room cooled, at most one an hour (three
+   on tap 1, one each on taps 2 and 3). Then
    move the lasting facts into docs: done 2026-11-17, in `docs/rapt-laser-sensor.md`
    (the sensor and the litres), `docs/display.md` (the screen, the strip, the redraw
    rules, setup help, no laser and the fit) and `docs/web-app.md` (Compose, the
