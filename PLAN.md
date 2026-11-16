@@ -16,13 +16,17 @@ from a KegLand RAPT Laser Level Sensor in the keg lid. The displays are now alwa
 - 3 RAPT Laser Level Sensors (Cornelius keg lid kits), all on 19 L corny kegs, labelled
   with 1-3 dots. Kegs move between positions (back left, back right, centre front) and
   taps, so the laser each tap shows is chosen in its web app and changes over time.
-  Addresses (as registered in the RAPT app):
+  Addresses, as in `config/lasers.json`:
 
   | Laser | Address |
   | --- | --- |
-  | 1 | `E5:4C:66:F9:E1:33` |
-  | 2 | `C4:A3:DF:A2:C5:1B` |
+  | 1 | `C4:A3:DF:A2:C5:1B` |
+  | 2 | `E5:4C:66:F9:E1:33` |
   | 3 | `D9:EB:DE:7E:BE:48` |
+
+  Numbers 1 and 2 were swapped part-way through, as the first laser 1's housing
+  didn't clasp its body down reliably. Earlier notes here may call
+  `E5:4C:66:F9:E1:33` (now laser 2) laser 1, as the captures and the first logs do.
 - Signal at the font with a sensor inside the kegerator: about -80 to -90 dBm,
   measured with a phone.
 
