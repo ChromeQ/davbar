@@ -1,5 +1,5 @@
 // Runs on the laptop: pio test -d esp32 -e native
-// The strip's redraw rules from PLAN.md, with time in seconds since the tap
+// The strip's redraw rules from docs/display.md, with time in seconds since the tap
 // started.
 
 #include <RaptLaser.h>

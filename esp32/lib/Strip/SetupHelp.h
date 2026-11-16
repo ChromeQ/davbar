@@ -1,9 +1,9 @@
 #pragma once
 
 // The setup help, drawn in place of a picture when the tap has none: a newly
-// flashed tap, or one just factory reset (PLAN.md, step 7). First how to join the
-// tap's own Wi-Fi to set it up, then, once it's on the home Wi-Fi, where to send
-// a picture. Never in place of a saved picture.
+// flashed tap, or one just factory reset (docs/display.md, Setup help). First
+// how to join the tap's own Wi-Fi to set it up, then, once it's on the home
+// Wi-Fi, where to send a picture. Never in place of a saved picture.
 //
 // It has no Arduino code, so it is tested on the laptop too (pio test -e
 // native). The QR code's modules come from the caller, as the generator is the

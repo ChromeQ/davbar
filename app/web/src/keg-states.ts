@@ -1,6 +1,6 @@
 // The keg states, "Keg empty" and "Keg ready": always first in the Library, and
 // drawn by the page when picked, so the date is that day's, until Compose
-// changes it (PLAN.md, step 8g). Each is a pub
+// changes it (docs/web-app.md, Keg states). Each is a pub
 // chalkboard with a rubber stamp across it, a line in chalk above, and the date
 // below. The line comes from config/keg-lines.json (see
 // app/scripts/keg-lines.ts), never the one this browser took last time.

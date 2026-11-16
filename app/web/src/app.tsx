@@ -175,7 +175,7 @@ type SourceFrame = {
   pixels: Uint8ClampedArray;
   // On a tap with no laser on purpose, the whole 400 x 600 screen, which is sent
   // instead: the square in the middle with its background above and below
-  // (PLAN.md, step 8). Otherwise null.
+  // (docs/display.md, No laser on purpose). Otherwise null.
   whole: Uint8ClampedArray | null;
 };
 
@@ -328,8 +328,8 @@ type LaserDialogProps = {
 };
 
 // Its own component so the tap only searches every laser while it's open. The
-// choice goes in the preview, and "Upload to display" sends it (PLAN.md, step
-// 8d).
+// choice goes in the preview, and "Upload to display" sends it (docs/display.md,
+// A picture and its laser together).
 const LaserDialog = ({ start, onClose, onPick }: LaserDialogProps) => {
   const picker = useLaserPicker(start);
 
@@ -495,14 +495,15 @@ const App = () => {
     strip?.tapLaser && (!knownTapLaser || strip.receivedAt > knownTapLaser.at)
       ? strip.tapLaser
       : knownTapLaser?.laser;
-  // A laser picked for the preview, which Upload to display sends (PLAN.md, step
-  // 8d). null once sent, or when the tap already has it.
+  // A laser picked for the preview, which Upload to display sends (docs/display.md,
+  // A picture and its laser together). null once sent, or when the tap already has it.
   const [pickedLaser, setPickedLaser] = useState<LaserPick | null>(null);
   const pick = pickedLaser && !(tapLaser && tapHasPick(pickedLaser, tapLaser)) ? pickedLaser : null;
   // The preview shows the pick, or what the tap has.
   const shownLaser = pick ? pickedTapLaser(pick) : tapLaser;
   const chosenLaser = shownLaser?.laser;
-  // No laser on purpose: the picture is the whole screen (PLAN.md, step 8).
+  // No laser on purpose: the picture is the whole screen (docs/display.md, No
+  // laser on purpose).
   const noLaser = shownLaser?.noLaser ?? false;
   // The strip the tap will draw for the pick
   const pickedStrip = pick ? pickedStripValues(pick) : null;
@@ -578,9 +579,9 @@ const App = () => {
         : null;
   const showingKeg = kegPick !== null && kegPick.image === image;
   // How the page drew what's in Compose, if it did, kept on the tap with it so
-  // it can be drawn again for the other layout (PLAN.md, step 8f). A keg state
-  // moved or zoomed in the square isn't as it would be drawn again, so it's sent
-  // as a picture.
+  // it can be drawn again for the other layout (docs/display.md, How the page
+  // drew it). A keg state moved or zoomed in the square isn't as it would be
+  // drawn again, so it's sent as a picture.
   const composedSource: PictureSource | null =
     mode === 'text'
       ? {
@@ -961,10 +962,11 @@ const App = () => {
 
   // Compose gets the picture on the tap, to edit, such as choosing the
   // background for a tap with no laser. A keg state or text the page drew is
-  // drawn again from how it was drawn, for the layout now (PLAN.md, step 8f).
-  // Otherwise it's the beer's original from this tap's library when it's there
-  // (see beerOnScreen), or the tap's six-colour copy (step 8e). onlyDrawn leaves
-  // Compose empty for a picture the page didn't draw.
+  // drawn again from how it was drawn, for the layout now (docs/display.md, How
+  // the page drew it). Otherwise it's the beer's original from this tap's
+  // library when it's there (see beerOnScreen), or the tap's six-colour copy
+  // (docs/web-app.md, Compose). onlyDrawn leaves Compose empty for a picture the
+  // page didn't draw.
   const editTapPicture = async (onlyDrawn = false) => {
     const bytes = tapImage;
 
@@ -1043,7 +1045,7 @@ const App = () => {
   };
 
   // The keg state in Compose drawn again with another date, for a keg kicked or
-  // cleaned before today, or another line (PLAN.md, step 8g).
+  // cleaned before today, or another line (docs/web-app.md, Keg states).
   const redrawKeg = (changes: { date?: Date; line?: string }) => {
     if (!kegPick) {
       return;
@@ -1075,8 +1077,9 @@ const App = () => {
     redrawKeg({ line });
   };
 
-  // A line of your own, drawn as it's typed (PLAN.md, step 8h). It isn't added to
-  // the list, but goes to the tap in the picture's source, so it comes back.
+  // A line of your own, drawn as it's typed (docs/web-app.md, Keg states). It
+  // isn't added to the list, but goes to the tap in the picture's source, so it
+  // comes back.
   const typeKegLine = (text: string) => {
     const line = tidyLine(text);
 
@@ -1321,8 +1324,8 @@ const App = () => {
   };
 
   // "Upload to display": the new picture, if there is one, and the laser picked,
-  // if there is one, together, so the screen redraws once for both (PLAN.md,
-  // step 8d).
+  // if there is one, together, so the screen redraws once for both (docs/display.md,
+  // A picture and its laser together).
   const send = async () => {
     const picture = binary && sourceFrame ? { binary, frame: sourceFrame } : null;
 
@@ -2308,9 +2311,9 @@ const App = () => {
 
             // With nothing composed, the preview shows the tap's picture as it
             // is. For no laser, Compose takes it, so the bands' background can be
-            // chosen (step 8e). For a laser after none, a keg state or text the
-            // page drew is drawn again for the square (step 8f); a beer's middle
-            // square is the beer, so it stays as it is.
+            // chosen. For a laser after none, a keg state or text the page drew
+            // is drawn again for the square (docs/display.md, How the page drew
+            // it); a beer's middle square is the beer, so it stays as it is.
             if (changed && !binary) {
               if (next.address === NO_LASER) {
                 void editTapPicture();

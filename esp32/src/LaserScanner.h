@@ -32,16 +32,17 @@ void pauseLaserScanner(ScanPause reason);
 void resumeLaserScanner(ScanPause reason);
 
 // Chooses this tap's laser by address ("E5:4C:66:F9:E1:33"), and the mode it
-// expects ("smart", the default, or "eco"), and saves them in settings.
-// "none" chooses no laser on purpose, for a tap without one: its picture is
-// then the whole screen (PLAN.md, step 8). An empty address forgets the choice,
-// so the strip asks for a laser again. Returns false with a message for the web
-// app if the address or mode is wrong or saving fails.
+// expects ("smart", the default, or "eco"), and saves them in settings. "none"
+// chooses no laser on purpose, for a tap without one: its picture is then the
+// whole screen (docs/display.md, No laser on purpose). An empty address forgets
+// the choice, so the strip asks for a laser again. Returns false with a message
+// for the web app if the address or mode is wrong or saving fails.
 bool chooseLaser(const String& address, const String& mode, String& error);
 
 // Checks a choice as chooseLaser takes it, without making it: false with a
 // message if it's wrong, otherwise changes says whether it differs from the
-// current choice. For a picture sent with its laser (PLAN.md, step 8d).
+// current choice. For a picture sent with its laser (docs/display.md, A picture
+// and its laser together).
 bool checkLaserChoice(const String& address, const String& mode, bool& changes, String& error);
 
 // The laser "Show on device" tests with, which may not be the tap's own.
@@ -56,9 +57,9 @@ struct TestLaser
 };
 
 // The laser to test with: one picked in the web app's preview and not sent yet
-// (PLAN.md, step 8d), as chooseLaser takes it, so the screen shows what the
-// preview does; or with an empty address, the tap's own. Nothing is saved.
-// Returns false with a message if it's wrong.
+// (docs/display.md, A picture and its laser together), as chooseLaser takes it,
+// so the screen shows what the preview does; or with an empty address, the
+// tap's own. Nothing is saved. Returns false with a message if it's wrong.
 bool readTestLaser(const String& address, const String& mode, TestLaser& laser, String& error);
 
 // Forgets the chosen laser, for a factory reset.

@@ -1,6 +1,6 @@
 // A laser picked in the page's preview: nothing reaches the tap until "Upload to
 // display" sends it, with the picture if there's a new one, so the screen redraws
-// once for both (PLAN.md, step 8d).
+// once for both (docs/display.md, A picture and its laser together).
 import { NO_LASER, type ChosenMode, type LaserReading, type TapLaser } from './lasers';
 import type { StripValues } from './strip';
 

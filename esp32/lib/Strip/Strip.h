@@ -6,7 +6,7 @@
 // Draws the keg strip, the 400 x 200 area below the image, from the laser's
 // values. It has no Arduino code, so it is tested on the laptop too
 // (pio test -e native). The layout matches the mock-ups agreed on tap 1's
-// screen; PLAN.md describes it.
+// screen; docs/display.md describes it.
 namespace Strip
 {
     constexpr int Width = 400;
@@ -20,9 +20,9 @@ namespace Strip
     // How far the case's frame reaches over the edges of the screen, once each
     // tap's fit (in its config) has centred its screen in the window: 14 pixels
     // at the left and right, 9 at the top and bottom, the most any of the taps
-    // hides plus a pixel (PLAN.md, step 9). The strip, the test border and the
-    // web app's keg boards keep inside it, so the same picture looks the same on
-    // every tap.
+    // hides plus a pixel (docs/display.md, Fitting the case's window). The
+    // strip, the test border and the web app's keg boards keep inside it, so the
+    // same picture looks the same on every tap.
     constexpr int HiddenX = 14;
     constexpr int HiddenY = 9;
 

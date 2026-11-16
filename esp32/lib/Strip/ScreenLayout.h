@@ -1,10 +1,10 @@
 #pragma once
 
-// Where the picture goes on the 400 x 600 screen (PLAN.md, step 8). Usually it's
-// the 400 x 400 square above the strip. A tap with no laser on purpose has no
-// strip, so its picture is the whole screen: the web app sends the square in the
-// middle with its background filling the 100 rows above and below. Either size of
-// picture can be saved, and shows on either layout.
+// Where the picture goes on the 400 x 600 screen (docs/display.md, No laser on
+// purpose). Usually it's the 400 x 400 square above the strip. A tap with no
+// laser on purpose has no strip, so its picture is the whole screen: the web app
+// sends the square in the middle with its background filling the 100 rows above
+// and below. Either size of picture can be saved, and shows on either layout.
 //
 // It has no Arduino code, so it is tested on the laptop too (pio test -e native).
 
@@ -44,7 +44,8 @@ namespace ScreenLayout
     // screen is the screen's bytes.
     void drawTestBorder(uint8_t* screen);
 
-    // A tap's fit to its case's window, from its config (PLAN.md, step 9).
+    // A tap's fit to its case's window, from its config (docs/display.md,
+    // Fitting the case's window).
     struct Fit
     {
         // Moves the whole screen right and down, in pixels (negative for left

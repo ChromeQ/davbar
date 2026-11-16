@@ -10,8 +10,8 @@
 #include "DeviceLog.h"
 #include "Settings.h"
 
-// The radio is shared with WiFi, so it listens for half of each 100 ms. The
-// catch rate tests in step 3 check this is enough.
+// The radio is shared with WiFi, so it listens for half of each 100 ms, which
+// hears each laser about 36 times a minute (docs/rapt-laser-sensor.md).
 static const uint16_t scanIntervalMs = 100;
 static const uint16_t scanWindowMs = 50;
 

@@ -14,7 +14,7 @@
 void startStripManager();
 
 // Follows the chosen laser's readings and asks for a redraw when the strip
-// should change, by the redraw rules in PLAN.md. Call from loop().
+// should change, by the redraw rules in docs/display.md. Call from loop().
 void processStripManager();
 
 // What the strip should show now. Every redraw uses it, whatever its reason.

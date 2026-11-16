@@ -1,7 +1,7 @@
 // What a keg state's line can be: the lines in config/keg-lines.json, checked
 // when the web app is built (app/scripts/keg-lines.ts), and a line typed in
-// Compose (PLAN.md, step 8h). It imports nothing, so the build's scripts can use
-// it too.
+// Compose (docs/web-app.md, Keg states). It imports nothing, so the build's
+// scripts can use it too.
 
 const range = (first: number, last: number) =>
   String.fromCodePoint(...Array.from({ length: last - first + 1 }, (_, index) => first + index));

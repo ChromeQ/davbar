@@ -3,7 +3,7 @@
 // or text. A picture drawn for one layout doesn't suit the other: a keg state's
 // border goes round the square or the whole screen, and text is centred on
 // either. So with nothing in Compose, a new layout draws the tap's picture again
-// for it, with the same line and date or words (PLAN.md, step 8f).
+// for it, with the same line and date or words (docs/display.md, How the page drew it).
 import { isObject } from './device-json';
 import { KEG_STATES, type KegState } from './keg-states';
 import type { Background, BackgroundStyle } from './screen';

@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16); step 10 (wrap up) next. Last updated 2026-11-17.
+Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 10 (wrap up): the docs are written, the overnight run is under way, then the branch review, archiving this plan and the merge. Last updated 2026-11-17.
 
 ## Goal
 
@@ -369,7 +369,10 @@ Force refresh in the settings menu still redraws on demand.
     to remove the ones it has, 10 at a time. (A Select button first started this,
     but didn't say it was for removing.) A tap that couldn't be reached keeps its
     copies, and the grid says so. While taps haven't answered, the grid says which
-    it's still asking. Tested against faked taps; still to try on the real taps.
+    it's still asking. Tested against faked taps, and on the real taps on
+    2026-11-17: four test beers saved straight to the taps (one on taps 2 and 3,
+    one on each tap alone) were ticked in tap 1's Library and removed with
+    "Remove 4", each tap removing only its own, and each tap's own beer stayed.
   - Done in 6b: Send in image mode saves the composed square (before the six
     colours) as a JPEG, lowering the quality until it fits (a 400 x 400 square of
     random noise, the worst case, came to 62 KB), with a 200 x 200 thumbnail. A
@@ -517,7 +520,8 @@ Each step ends with something visible to check.
    tested on tap 1; 6b and 6c built, tested against faked taps and on tap 1; 6d built,
    tested against faked taps and on tap 1's screen. Tested across taps on
    2026-11-14: a beer sent on tap 2 was listed in tap 3's Library as "Tap 2 · 14
-   Nov", and Upload to display put it on tap 3's screen.
+   Nov", and Upload to display put it on tap 3's screen. Removing several across
+   the real taps tested on 2026-11-17.
 7. **Setup help screen.** The redraw rules and the strip's special states, first
    planned here, were done in step 5a. Done, and checked on tap 1's screen; chosen
    from mockups:
@@ -734,11 +738,16 @@ Each step ends with something visible to check.
    The same picture on all three taps, with and without the strip, looked the same
    in each window (2026-11-15).
 10. **Wrap up,** the last commits on `keg-level` before merging into master. First,
-   with the Keg ready boards and lasers back on the taps, a night with all three
-   taps on, their logs then read for crashes, Wi-Fi drops and redraws. Then move the
-   lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
-   the display behaves into the READMEs, calling the main page's button "Upload to
-   display", its name in the app, where older notes here say "Send"), then move this plan to
+   a night with all three taps on, their logs then read for crashes, Wi-Fi drops and
+   redraws: started 2026-11-17 at 00:39, with the lasers on their delivery boxes
+   (taps 2 and 3 both on laser 2) and each tap's status recorded every minute. Then
+   move the lasting facts into docs: done 2026-11-17, in `docs/rapt-laser-sensor.md`
+   (the sensor and the litres), `docs/display.md` (the screen, the strip, the redraw
+   rules, setup help, no laser and the fit) and `docs/web-app.md` (Compose, the
+   Library, the keg states and developer mode), linked from the READMEs, which now
+   cover the `fit` profile key and the routes, and calling the main page's button
+   "Upload to display". Code comments point to the docs, not this plan. Then, after a
+   review of the whole branch, move this plan to
    `docs/plans/2026-11-keg-level.md` with a line at the top saying it is done and
    when it was merged. After that the archived plan is never edited; fixes go in the
    docs. Ideas still marked Later stay listed there, and each gets its own new plan
@@ -761,9 +770,10 @@ Each step ends with something visible to check.
   17's local network permission, which Settings calls Nearby devices: Chrome had it,
   but it wasn't in effect (Settings warned it was set for an older Android version).
   Turning it off and on again fixed it. The phone that hosts the hotspot can't look up
-  the taps' `.local` names, so it uses the tap's address there. Still to check at home:
-  the phone on ChromeQ reaching a tap on ChromeQ_2.4 (the same router's 2.4 GHz
-  band), by name and by address.
+  the taps' `.local` names, so it uses the tap's address there. Checked at home on
+  2026-11-17: the phone on ChromeQ reaches `davbar-tap1.local` on ChromeQ_2.4 (the
+  same router's 2.4 GHz band), but not with NordVPN on, which hides the local
+  network.
 
 - **Smart or Eco, a per-tap choice (2026-11-02):** default Smart, because the screen
   stays a few minutes behind a pour and a silent sensor can be flagged. Eco (Ultra

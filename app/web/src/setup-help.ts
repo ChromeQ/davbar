@@ -1,5 +1,5 @@
-// The setup help the tap draws in place of a picture while it has none (PLAN.md,
-// step 7). Developer mode's preview shows it as the tap draws it, from GET
+// The setup help the tap draws in place of a picture while it has none (docs/display.md,
+// Setup help). Developer mode's preview shows it as the tap draws it, from GET
 // /setup-help, rather than drawing it again here. The password is left out.
 import { deviceConfig } from './device-config';
 import { IMAGE_BYTES } from './screen';

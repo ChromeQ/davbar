@@ -30,7 +30,7 @@ export type ChosenLaser = {
 };
 
 // The address that chooses no laser on purpose, for a tap without one: its
-// picture is then the whole screen (PLAN.md, step 8).
+// picture is then the whole screen (docs/display.md, No laser on purpose).
 export const NO_LASER = 'none';
 
 // This tap's laser: the chosen one, or null, and whether null is on purpose

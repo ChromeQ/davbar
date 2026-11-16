@@ -13,7 +13,7 @@ export const IMAGE_BYTES = (IMAGE_SIZE * IMAGE_SIZE) / 2;
 
 // On a tap with no laser on purpose there's no strip, so the picture is the whole
 // screen: the square in the middle, with its background filling the 100 rows
-// above and below (PLAN.md, step 8). The same rules as the tap's
+// above and below (docs/display.md, No laser on purpose). The same rules as the tap's
 // (esp32/lib/Strip/ScreenLayout).
 export const WHOLE_SCREEN_BYTES = (SCREEN_WIDTH * SCREEN_HEIGHT) / 2;
 export const BAND_HEIGHT = (SCREEN_HEIGHT - IMAGE_SIZE) / 2;

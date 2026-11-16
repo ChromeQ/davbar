@@ -32,7 +32,7 @@ namespace Strip
     constexpr int32_t FirstReadingSeconds = 60;
 
     // Decides what the strip shows from the chosen laser's readings, following
-    // the redraw rules in PLAN.md. Times are whole seconds since the tap started.
+    // the redraw rules in docs/display.md. Times are whole seconds since the tap started.
     class Tracker
     {
     public:

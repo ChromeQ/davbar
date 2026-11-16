@@ -422,7 +422,8 @@ static void handleStatus(AsyncWebServerRequest* request)
 
         image.close();
 
-        // How the web app drew it, if it did, for it to read (PLAN.md, step 8f)
+        // How the web app drew it, if it did, for it to read (docs/display.md,
+        // How the page drew it)
         String source = imageSource();
         if (source.isEmpty())
         {
@@ -631,8 +632,8 @@ static void handleImageUpload(
 
 // The web app sends the laser chosen in its preview with the picture, as laser
 // and mode in the address (as POST /laser takes them), so the screen redraws
-// once for both (PLAN.md, step 8d), and source, how it drew the picture, if it
-// did (finishImageUpload).
+// once for both (docs/display.md, A picture and its laser together), and
+// source, how it drew the picture, if it did (finishImageUpload).
 static void handleImageUploadFinished(AsyncWebServerRequest* request)
 {
     ImageUploadState* state = static_cast<ImageUploadState*>(request->_tempObject);

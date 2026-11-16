@@ -45,9 +45,10 @@ if len(access_point_name.encode("utf-8")) > 32:
 
 mdns_hostname = f'{config["hostname"]}-{config["deviceId"]}'
 
-# How this tap's screen sits in its case's window (PLAN.md, step 9), applied to
-# the screen just before every redraw: a shift to centre it, and a slant for a
-# window whose bottom edge isn't level. Optional; all 0 without it.
+# How this tap's screen sits in its case's window (docs/display.md, Fitting the
+# case's window), applied to the screen just before every redraw: a shift to
+# centre it, and a slant for a window whose bottom edge isn't level. Optional;
+# all 0 without it.
 fit_keys = ("shiftX", "shiftY", "bottomSlant")
 fit = config.get("fit", {})
 if not isinstance(fit, dict) or set(fit) - set(fit_keys):

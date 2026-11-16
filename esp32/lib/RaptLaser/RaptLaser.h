@@ -81,7 +81,7 @@ namespace RaptLaser
     constexpr uint16_t BallAboveBeerMm = 25;
 
     // A 19 L Corny keg with the RAPT lid kit and a floating dip tube, filled
-    // from a jug on 2026-11-16 (PLAN.md, "Calibration"):
+    // from a jug on 2026-11-16 (docs/rapt-laser-sensor.md, "Calibration"):
     // - The domed bottom, up to 3 L, is every point measured, 0.5 L apart, from
     //   a second filling with the float tied up out of the beam, then moved
     //   BallAboveBeerMm closer. Down there the float's ball tends to sit under
