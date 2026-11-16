@@ -137,24 +137,62 @@ namespace RaptLaser
         );
     }
 
+    static bool inOrder(const KegCalibration& keg)
+    {
+        if (keg.points == nullptr || keg.count < 2)
+        {
+            return false;
+        }
+
+        for (uint8_t i = 1; i < keg.count; i++)
+        {
+            if (keg.points[i].distanceMm >= keg.points[i - 1].distanceMm ||
+                keg.points[i].litresTenths <= keg.points[i - 1].litresTenths)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     KegLevel kegLevel(uint16_t distanceMm, const KegCalibration& keg)
     {
-        if (keg.emptyDistanceMm <= keg.fullDistanceMm)
+        if (!inOrder(keg))
         {
             return {0, 0};
         }
 
-        uint32_t range = keg.emptyDistanceMm - keg.fullDistanceMm;
-        uint32_t depth = distanceMm >= keg.emptyDistanceMm ? 0 : keg.emptyDistanceMm - distanceMm;
-        if (depth > range)
+        const KegPoint& empty = keg.points[0];
+        const KegPoint& full = keg.points[keg.count - 1];
+        if (distanceMm > empty.distanceMm)
         {
-            depth = range;
+            distanceMm = empty.distanceMm;
         }
+        if (distanceMm < full.distanceMm)
+        {
+            distanceMm = full.distanceMm;
+        }
+
+        // The two points either side: far, then the next one nearer.
+        uint8_t next = 1;
+        while (next < keg.count - 1 && keg.points[next].distanceMm > distanceMm)
+        {
+            next++;
+        }
+        const KegPoint& far = keg.points[next - 1];
+        const KegPoint& near = keg.points[next];
+
+        // The litres times the gap between the points, so it stays a whole
+        // number until the end.
+        uint32_t gap = far.distanceMm - near.distanceMm;
+        uint32_t risen = far.distanceMm - distanceMm;
+        uint32_t scaled = far.litresTenths * gap + (near.litresTenths - far.litresTenths) * risen;
 
         // Whole-number division rounds down, the same as Math.floor in TypeScript.
         return {
-            static_cast<uint16_t>(keg.capacityTenthsLitres * depth / range),
-            static_cast<uint8_t>(100 * depth / range),
+            static_cast<uint16_t>(scaled / gap),
+            static_cast<uint8_t>(100 * scaled / (gap * full.litresTenths)),
         };
     }
 }

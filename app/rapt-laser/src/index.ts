@@ -8,4 +8,4 @@ export {
 } from './decode.js';
 export type { LaserMode, LaserReading } from './decode.js';
 export { CORNY_KEG_19L, kegLevel } from './keg.js';
-export type { KegCalibration, KegLevel } from './keg.js';
+export type { KegCalibration, KegLevel, KegPoint } from './keg.js';

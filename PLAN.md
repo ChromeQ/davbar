@@ -108,27 +108,25 @@ them (the advertisement ends after `...54504152`):
 
 ### Litres and percentage
 
-```text
-litres     = capacity x (emptyDistance - distance) / (emptyDistance - fullDistance)
-             clamped to 0..capacity, shown rounded down to 0.1 L
-percentage = floor(litres / capacity x 100)
-```
+The laser only gives a distance, so the tap works out the litres itself, from points
+measured on a real keg (the jug calibration on 2026-11-16, under "Open questions and
+later ideas"). Between two points the litres are on the straight line between them;
+beyond the first point the keg is empty, and nearer than the last it is full.
 
-Constants: capacity 19 L, `emptyDistance` 552 mm and `fullDistance` 22 mm (about
-27.9 mm per litre), rounding down like the RAPT app. This matches every app reading so
-far. The first guess, from the app's custom 19 L vessel (563 mm and 17 mm), gave 7.0 L
-at 359 mm instead of 6.9 L. Keep the constants in one place so they can be updated
-from real kegs at the next keg change.
-
-| App distance | App volume | 552/22, rounded down |
+| Distance | Litres | Why |
 | --- | --- | --- |
-| About 17 mm | 19 L | 19.18, capped at 19 |
-| 133 mm | 15.0 L | 15.02 -> 15.0 |
-| 134 mm | 14.9 L | 14.98 -> 14.9 |
-| 135 mm | 14.9 L | 14.94 -> 14.9 |
-| 136 mm | 14.9 L | 14.91 -> 14.9 |
-| 250 mm | 10.8 L | 10.82 -> 10.8 |
-| 359 mm | 6.9 L | 6.91 -> 6.9 |
+| 566 mm or more | 0 | Empty |
+| 557, 546, 528, 512, 487, 467 mm | 0.5, 1, 1.5, 2, 2.5, 3 | The domed bottom, as measured |
+| 399 mm | 5 | Where the dome joins the straight sides |
+| 45 mm | 18 | The straight sides: one line, 27.2 mm a litre, fitted to the readings from 5 L to 18.5 L |
+| 29 mm or less | 19 | Full: the laser reads short this close |
+
+The litres are rounded down to 0.1 L, and the percentage is of 19 L, rounded down. The
+points are `RaptLaser::Corny19L` in the firmware and `CORNY_KEG_19L` in
+app/rapt-laser, which must stay the same; both are tested against the jug readings.
+
+Before the calibration it was a straight line from 552 mm (empty) to 22 mm (19 L),
+which matched the RAPT app's own figures but read up to 0.8 L low in the last 3 L.
 
 ## Display
 
@@ -732,9 +730,8 @@ Each step ends with something visible to check.
    The same picture on all three taps, with and without the strip, looked the same
    in each window (2026-11-15).
 10. **Wrap up,** the last commits on `keg-level` before merging into master. First,
-   with the Keg ready boards and lasers back on the taps: the calibration with the
-   jug (below), and a night with all three taps on, their logs then read for
-   crashes, Wi-Fi drops and redraws. Then move the
+   with the Keg ready boards and lasers back on the taps, a night with all three
+   taps on, their logs then read for crashes, Wi-Fi drops and redraws. Then move the
    lasting facts into docs (the sensor details into `docs/rapt-laser-sensor.md`, how
    the display behaves into the READMEs, calling the main page's button "Upload to
    display", its name in the app, where older notes here say "Send"), then move this plan to
@@ -827,20 +824,62 @@ Each step ends with something visible to check.
   nothing at all. Soon after the app was closed, it went from Session into Live
   Stream for 3.5 minutes with no button pressed, perhaps left over from the app's
   connection.
-- **Calibration:** measure an empty keg filled from a graduated jug. Note the
-  broadcast distance and the RAPT app's litres when empty, then after each fill, in
-  1 L steps near the bottom and top and larger ones in between. Near full the
-  straight line is off: on 2026-11-07 the RAPT app showed laser 1 at 83 mm with
-  15.8 L remaining (Diagnostics), where the formula gives 16.8 L, though the app
-  readings at 133-359 mm fit it exactly. The app has 0.9 L between 83 and 133 mm
-  where the straight line has 1.8 L, which fits the keg's domed top holding less
-  per mm (the bottom is domed too). If so, the litres come from a table of measured
-  points, interpolated between them, instead of one straight line.
-  The distance is measured from about where the laser rests, the underside of the
-  lid, not the bottom of its housing: each laser read 84-89 mm on its 85 mm delivery
-  box, with the bottom of the housing about 70 mm above the table. So the housing
-  hangs about 15 mm below the lid, and a full keg can't read much less than that.
-  Every reading has the same offset, so the constants already include it.
+- **Calibration (2026-11-16), done, and the taps use it:** an empty
+  Corny keg with its floating dip tube in, filled with tap water from a 0.5 L jug,
+  laser 1 in Smart, watched through tap 1. After each pour the lid went back on and
+  the laser's Bluetooth button was held for about 2s to start Live Stream; a point
+  counts once 4 readings in a row agree within 2 mm. The bottom 3 L and the top
+  went in 0.5 L at a time, the middle 2 L at a time.
+
+  | In keg | Laser (mm) | Readings, range | Old 552/22 formula | Shown now |
+  | --- | --- | --- | --- | --- |
+  | 0 L | 566 | 9, 566-568 | 0.0 L (0) | 0.0 L |
+  | 0.5 L | 557 | 4, 556-558 | 0.0 L (-0.5) | 0.5 L |
+  | 1 L | 546 | 5, 545-548 | 0.2 L (-0.8) | 1.0 L |
+  | 1.5 L | 528 | 5, 527-530 | 0.8 L (-0.7) | 1.5 L |
+  | 2 L | 512 | 5, 511-514 | 1.4 L (-0.6) | 2.0 L |
+  | 2.5 L | 487 | 4, 486-488 | 2.3 L (-0.2) | 2.5 L |
+  | 3 L | 467 | 5, 465-468 | 3.0 L (0) | 3.0 L |
+  | 5 L | 402 | 4, 401-403 | 5.3 L (+0.3) | 4.9 L |
+  | 7 L | 343 | 6, 342-347 | 7.4 L (+0.4) | 7.0 L |
+  | 9 L | 288 | 6, 286-290 | 9.4 L (+0.4) | 9.0 L |
+  | 11 L | 236 | 4, 235-236 | 11.3 L (+0.3) | 10.9 L |
+  | 13 L | 180 | 4, 179-180 | 13.3 L (+0.3) | 13.0 L |
+  | 15 L | 126 | 6, 124-127 | 15.2 L (+0.2) | 15.0 L |
+  | 15.5 L | 110 | 4, 110 | 15.8 L (+0.3) | 15.6 L |
+  | 16 L | 97 | 4, 96-98 | 16.3 L (+0.3) | 16.0 L |
+  | 16.5 L | 85 | 5, 84-87 | 16.7 L (+0.2) | 16.5 L |
+  | 17 L | 72 | 4, 71-72 | 17.2 L (+0.2) | 17.0 L |
+  | 17.5 L | 58 | 10, 55-60 | 17.7 L (+0.2) | 17.5 L |
+  | 18 L | 49 | 4, 47-49 | 18.0 L (0) | 17.8 L |
+  | 18.5 L | 32 | 4, 32-34 | 18.6 L (+0.1) | 18.8 L |
+  | 19 L | 29 | 5, 27-31 | 18.7 L (-0.3) | 19.0 L |
+
+  What it shows:
+  - The middle is a straight line all the way to the top, and the old formula
+    was within 0.4 L from 3 L to 18.5 L. The domed top doesn't show: the RAPT app's
+    15.8 L at 83 mm (2026-11-07) was the app's own figure, not the keg's shape.
+  - With the old formula the domed bottom read low: up to 0.8 L in the last 3 L,
+    so at 1 L left the tap said 0.2 L, just when it matters whether there's
+    another pint.
+  - The steady +0.3 L in the middle may be the jug: 10 ml over on each of 30
+    fills adds up to that. The tap now follows the jug, so if the jug ran over it
+    reads about 0.3 L low in the middle. Weighing the keg empty and full (1 kg a
+    litre) would tell.
+  - Above 18.5 L the laser is as close as it can measure: 19 L read only 3 mm
+    nearer than 18.5 L, and the laser read 21-23 mm whenever the lid was lifted
+    off. So anything at 29 mm or less is full.
+  - The floating ball didn't show: readings settled within 2-3 mm at every level,
+    apart from 17.5 L (55-60 mm before settling).
+
+  What changed (2026-11-16): the tap works out the litres from these points (see
+  "Litres and percentage"). The domed bottom is every point up to 3 L; above it
+  the keg is one straight line, fitted to the readings from 5 L to 18.5 L, which
+  are all within 0.2 L; and 29 mm or less is full. Only 18.5 L is further out
+  (18.8 L), where the laser is near its closest. One table for every keg, as the
+  lasers sit alike in their lids (each read 84-89 mm on its 85 mm delivery box).
+  The distance is from about the underside of the lid, as the laser's housing
+  hangs about 15 mm below it.
 - **Signal margin:** watch signal strength in step 3 and move the antenna if readings
   are missed.
 - **RAPT cloud:** the public API has no level device type. External Devices (paid

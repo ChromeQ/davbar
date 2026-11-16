@@ -479,7 +479,7 @@ bool showTestValues(
     long litresTenths = 0;
     long temperatureTenths = 0;
     long batteryValue = 0;
-    const long kegTenths = RaptLaser::Corny19L.capacityTenthsLitres;
+    const long kegTenths = RaptLaser::Corny19L.capacityTenthsLitres();
 
     if (!parseWhole(percent, 0, 100, percentValue))
     {

@@ -23,10 +23,15 @@ void setUp()
 
 void tearDown() {}
 
-// The laser distance for a whole percentage of a 19 L keg.
+// The farthest laser distance that shows a whole percentage of a 19 L keg.
 static uint16_t distanceFor(uint8_t percent)
 {
-    return 552 - (percent * 53 + 9) / 10;
+    uint16_t distanceMm = 600;
+    while (RaptLaser::kegLevel(distanceMm).percent < percent)
+    {
+        distanceMm--;
+    }
+    return distanceMm;
 }
 
 static RaptLaser::Reading reading(
@@ -190,15 +195,15 @@ static void testRefillShowsOnceSettled()
     TEST_ASSERT_EQUAL_UINT8(99, tracker.values(160).percent);
 }
 
-// 330 mm deep is 62% and 11.8 L; 329 mm is still 62% but 11.7 L.
+// 213 mm is 62% and 11.8 L; 214 mm is still 62% but 11.7 L.
 static void testLitresWithinThePercentageWaitForTheNextRedraw()
 {
     chooseLaser1(0);
-    tracker.addReading(10, reading(552 - 330));
+    tracker.addReading(10, reading(213));
     redrawIfDue(10);
     TEST_ASSERT_EQUAL_UINT16(118, tracker.values(10).litresTenths);
 
-    tracker.addReading(100, reading(552 - 329));
+    tracker.addReading(100, reading(214));
     TEST_ASSERT_NULL(reasonAt(1000));
     TEST_ASSERT_EQUAL_UINT8(62, tracker.values(1000).percent);
     TEST_ASSERT_EQUAL_UINT16(117, tracker.values(1000).litresTenths);

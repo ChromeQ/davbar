@@ -1,5 +1,5 @@
 // Runs on the laptop: pio test -d esp32 -e native
-// The captures and RAPT app readings match app/rapt-laser/tests, so the C++ and
+// The captures and keg levels match app/rapt-laser/tests, so the C++ and
 // TypeScript decoders are checked against the same data.
 
 #include <RaptLaser.h>
@@ -203,33 +203,57 @@ static void testRejectsBadAddress()
     }
 }
 
-struct AppReading
+struct ShownLevel
 {
     uint16_t distanceMm;
     uint16_t litresTenths;
     uint8_t percent;
 };
 
-// Distances and volumes read from the RAPT app, plus full, empty and beyond.
-static const AppReading AppReadings[] = {
-    {17, 190, 100},
-    {133, 150, 79},
-    {134, 149, 78},
-    {135, 149, 78},
-    {136, 149, 78},
-    {250, 108, 56},
-    {359, 69, 36},
-    {22, 190, 100},
-    {552, 0, 0},
-    {600, 0, 0},
-    // 106 mm of beer is exactly 3.8 L and 20%
-    {446, 38, 20},
+// What the tap shows at each reading from the jug calibration on 2026-11-16,
+// with what was in the keg alongside.
+static const ShownLevel JugReadings[] = {
+    {566, 0, 0},     // 0 L
+    {557, 5, 2},     // 0.5 L
+    {546, 10, 5},    // 1 L
+    {528, 15, 7},    // 1.5 L
+    {512, 20, 10},   // 2 L
+    {487, 25, 13},   // 2.5 L
+    {467, 30, 15},   // 3 L
+    {402, 49, 25},   // 5 L
+    {343, 70, 37},   // 7 L
+    {288, 90, 47},   // 9 L
+    {236, 109, 57},  // 11 L
+    {180, 130, 68},  // 13 L
+    {126, 150, 79},  // 15 L
+    {110, 156, 82},  // 15.5 L
+    {97, 160, 84},   // 16 L
+    {85, 165, 87},   // 16.5 L
+    {72, 170, 89},   // 17 L
+    {58, 175, 92},   // 17.5 L
+    {49, 178, 93},   // 18 L
+    {32, 188, 99},   // 18.5 L
+    {29, 190, 100},  // 19 L
 };
 
-static void testKegLevelMatchesRaptApp()
+// Between the points, beyond empty and nearer than full.
+static const ShownLevel OtherLevels[] = {
+    // Halfway between 1 L and 1.5 L, in the domed bottom
+    {537, 12, 6},
+    // Half of 19 L, on the straight line
+    {276, 95, 50},
+    {567, 0, 0},
+    {600, 0, 0},
+    // What the laser read with the lid off
+    {21, 190, 100},
+    {0, 190, 100},
+};
+
+static void checkLevels(const ShownLevel* levels, size_t count)
 {
-    for (const AppReading& expected : AppReadings)
+    for (size_t i = 0; i < count; i++)
     {
+        const ShownLevel& expected = levels[i];
         char message[24];
         snprintf(message, sizeof(message), "%u mm", expected.distanceMm);
 
@@ -239,10 +263,27 @@ static void testKegLevelMatchesRaptApp()
     }
 }
 
+static void testKegLevelMatchesTheJug()
+{
+    checkLevels(JugReadings, sizeof(JugReadings) / sizeof(JugReadings[0]));
+}
+
+static void testKegLevelBetweenAndBeyondThePoints()
+{
+    checkLevels(OtherLevels, sizeof(OtherLevels) / sizeof(OtherLevels[0]));
+}
+
+static void testKegCapacity()
+{
+    TEST_ASSERT_EQUAL_UINT16(190, RaptLaser::Corny19L.capacityTenthsLitres());
+}
+
 static void testKegLevelWithAnotherCalibration()
 {
+    static const RaptLaser::KegPoint points[] = {{300, 0}, {20, 95}};
+
     // Half of 9.5 L is 4.75, shown as 4.7
-    RaptLaser::KegLevel level = RaptLaser::kegLevel(160, {95, 300, 20});
+    RaptLaser::KegLevel level = RaptLaser::kegLevel(160, {points, 2});
 
     TEST_ASSERT_EQUAL_UINT16(47, level.litresTenths);
     TEST_ASSERT_EQUAL_UINT8(50, level.percent);
@@ -250,10 +291,23 @@ static void testKegLevelWithAnotherCalibration()
 
 static void testKegLevelWithInvalidCalibration()
 {
-    RaptLaser::KegLevel level = RaptLaser::kegLevel(100, {190, 22, 552});
+    static const RaptLaser::KegPoint distancesUp[] = {{22, 0}, {552, 190}};
+    static const RaptLaser::KegPoint litresDown[] = {{552, 190}, {22, 0}};
+    static const RaptLaser::KegPoint onePoint[] = {{552, 0}};
+    const RaptLaser::KegCalibration calibrations[] = {
+        {distancesUp, 2},
+        {litresDown, 2},
+        {onePoint, 1},
+        {nullptr, 0},
+    };
 
-    TEST_ASSERT_EQUAL_UINT16(0, level.litresTenths);
-    TEST_ASSERT_EQUAL_UINT8(0, level.percent);
+    for (const RaptLaser::KegCalibration& keg : calibrations)
+    {
+        RaptLaser::KegLevel level = RaptLaser::kegLevel(100, keg);
+
+        TEST_ASSERT_EQUAL_UINT16(0, level.litresTenths);
+        TEST_ASSERT_EQUAL_UINT8(0, level.percent);
+    }
 }
 
 int main()
@@ -269,7 +323,9 @@ int main()
     RUN_TEST(testModeNames);
     RUN_TEST(testParsesAddress);
     RUN_TEST(testRejectsBadAddress);
-    RUN_TEST(testKegLevelMatchesRaptApp);
+    RUN_TEST(testKegLevelMatchesTheJug);
+    RUN_TEST(testKegLevelBetweenAndBeyondThePoints);
+    RUN_TEST(testKegCapacity);
     RUN_TEST(testKegLevelWithAnotherCalibration);
     RUN_TEST(testKegLevelWithInvalidCalibration);
     return UNITY_END();
