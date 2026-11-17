@@ -1,0 +1,190 @@
+.laser-picker {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+
+.laser-picker-heading {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.laser-picker-heading:not(:first-child) {
+  margin-top: 8px;
+}
+
+.laser-picker-label {
+  color: #58574f;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.laser-searching {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.laser-spinner {
+  flex: 0 0 auto;
+  animation: laser-spin 0.9s linear infinite;
+}
+
+@keyframes laser-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.laser-options,
+.laser-modes {
+  display: grid;
+  gap: 8px;
+}
+
+.laser-modes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.laser-option,
+.laser-mode {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--ink);
+  background: #fff;
+  text-align: left;
+}
+
+.laser-option {
+  display: grid;
+  min-height: 64px;
+  padding: 11px 12px;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 12px;
+}
+
+.laser-mode {
+  display: grid;
+  padding: 11px 12px;
+  align-content: start;
+  gap: 4px;
+}
+
+.laser-option:hover:not(:disabled),
+.laser-mode:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.laser-option[aria-pressed='true'],
+.laser-mode[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: rgba(239, 45, 86, 0.06);
+}
+
+.laser-option:disabled,
+.laser-mode:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.laser-dots {
+  display: flex;
+  justify-content: center;
+  gap: 3px;
+}
+
+.laser-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.laser-dots-unknown {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.laser-option-text {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.laser-option-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.laser-option-name strong,
+.laser-mode strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.86rem;
+}
+
+.laser-option[aria-pressed='true'] .laser-option-name strong,
+.laser-mode[aria-pressed='true'] strong {
+  color: var(--accent);
+}
+
+.laser-option-name small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.laser-option-detail,
+.laser-mode small {
+  color: #66645c;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.laser-option-warning {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 6px;
+  color: #a72e1c;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.laser-option-warning svg {
+  margin-top: 2px;
+}
+
+.laser-option-state {
+  display: grid;
+  place-items: center;
+  color: var(--accent);
+}
+
+.laser-picker .laser-picker-note,
+.laser-picker .laser-picker-error {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.laser-picker .laser-picker-note {
+  color: var(--muted);
+}
+
+.laser-picker .laser-picker-error {
+  color: #a72e1c;
+  font-weight: 500;
+}

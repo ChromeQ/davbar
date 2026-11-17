@@ -2,35 +2,167 @@
 
 This PlatformIO project contains the Arduino firmware for a Seeed Studio XIAO ESP32-S3 connected to a 4-inch Spectra 6 e-paper display.
 
-At startup, the firmware mounts LittleFS and connects to the saved Wi-Fi network.
-If no network is saved or the connection fails, it starts a setup access point
-instead. Once connected, it advertises `<hostname>-<deviceId>.local` over mDNS and
-serves the web app from LittleFS.
+The device is powered over USB and always on. At startup, the firmware mounts its
+two filesystems and joins the saved Wi-Fi network. Once connected, it advertises
+`<hostname>-<deviceId>.local` over mDNS and serves the web app.
 
-If the stored image (`/image.bin`) differs from the one last drawn, the firmware
-renders it, puts the panel to sleep, and enters ESP32 deep sleep. Otherwise it
-stays awake until a new image is uploaded, which triggers the same render and
-deep sleep. No wake-up source is configured, so the device sleeps until it is reset
-or power-cycled. A forced refresh from the web app redraws without entering deep
-sleep.
+With no saved network, it starts a setup access point. With a saved network, it
+retries every 30 seconds and never gives up. After 5 minutes without Wi-Fi it also
+opens the setup access point, so the network can be changed, and closes it once
+Wi-Fi connects. Retries pause while a phone is connected to the access point,
+because searching for the router disturbs it.
+
+The screen shows the stored picture with the keg strip below it, drawn from the
+chosen laser's readings, or setup help while there's no picture. The firmware
+redraws only when something shown changes, and at startup only if the screen would
+differ from the one it last drew; a forced refresh from the web app redraws it
+anyway. [The display](../docs/display.md) describes the screen, the strip, the redraw
+rules and each tap's fit to its case.
+
+## Building and uploading
 
 The normal build and upload workflow runs from `../app`:
 
 ```bash
-pnpm device:build
-pnpm device:upload
+pnpm device:build --config config/tap-1.json
+pnpm device:upload --config config/tap-1.json
+pnpm device:upload --config config/tap-1.json --ota
 ```
 
 These commands build the web filesystem and firmware with the same shared device
 profile. See the [project README](../README.md) for profile fields and all commands.
 
 Raw PlatformIO commands are intended for firmware-only development. From the
-repository root, set `DEVICE_CONFIG` explicitly when using a non-default profile:
+repository root, set `DEVICE_CONFIG` to choose the tap. Without it, raw builds
+(including the IDE's) use `config/example.json`, so they compile but shouldn't be
+uploaded:
 
 ```bash
-DEVICE_CONFIG=config/davbar-tap-1.json ~/.platformio/penv/bin/platformio run -d esp32
-DEVICE_CONFIG=config/davbar-tap-1.json ~/.platformio/penv/bin/platformio run -d esp32 --target upload
+DEVICE_CONFIG=config/tap-1.json ~/.platformio/penv/bin/platformio run -d esp32
+DEVICE_CONFIG=config/tap-1.json ~/.platformio/penv/bin/platformio run -d esp32 --target upload
 ```
 
 Profile paths are resolved relative to the repository root. A raw firmware upload
-does not rebuild or upload the LittleFS web filesystem.
+does not rebuild or upload the LittleFS web filesystem. Every build needs
+`config/secrets.json` (see the project README).
+
+## Storage
+
+`partitions.csv` splits the 8 MB flash:
+
+| Partition | Size | Holds |
+| --- | --- | --- |
+| `nvs` | 20 KB | Settings, such as the saved Wi-Fi network |
+| `app0`, `app1` | 1.75 MB each | Two firmware slots, for over-the-air updates |
+| `spiffs` | 512 KB | The web app (two gzipped pages), replaced by every filesystem upload |
+| `store` | 3.9 MB | The screen image (and how the web app drew it), the device log and the beer library |
+| `coredump` | 64 KB | Crash dumps |
+
+Filesystem and firmware uploads never touch `nvs` or `store`. `store` has a custom
+subtype because PlatformIO uploads the filesystem to the last `spiffs`, `fat` or
+`littlefs` partition it finds.
+
+Changing the partition table needs one full erase, which also clears the saved
+Wi-Fi and image. From the repository root:
+
+```bash
+~/.platformio/penv/bin/platformio run -d esp32 --target erase
+```
+
+Then upload everything again over USB from `../app` with `pnpm device:upload`.
+
+## Lasers
+
+`LaserScanner` listens for RAPT Laser Level Sensor broadcasts with NimBLE, decoded by
+`lib/RaptLaser`, which also turns a distance into litres. It scans actively: a
+laser's advertisement holds only its service UUID, and the reading comes in the scan
+response, which it sends only when asked (see
+[the sensor](../docs/rapt-laser-sensor.md)). The radio is shared with Wi-Fi, so scanning
+listens for 50ms of every 100ms, and pauses while Wi-Fi connects and during
+over-the-air updates.
+
+Each tap shows one laser, chosen in the web app or on the setup page (`POST /laser`
+with `address` and `mode`, `smart` or `eco`; an empty `address` clears it) and kept
+in settings until a factory reset. Until one is
+chosen, the tap asks every laser for readings. After that it asks only the chosen
+one, using the Bluetooth controller's accept list, so each laser answers one tap.
+`GET /lasers` lists every laser in `config/lasers.json`, heard or not, plus any
+other RAPT laser heard, and asks every laser for the next minute, so the picker
+shows them all while it's open.
+
+The device log records a `laser reading` entry when a reading changes (at most one
+every 10 seconds per laser, unless the mode changes) and a `lasers heard` summary
+every 5 minutes. The summary gives each laser's broadcast count, signal range and
+longest gap, the broadcasts heard from any device (none at all means Bluetooth is
+getting no time on the radio; once a laser is chosen, only its broadcasts count)
+and the free memory. Once a laser is chosen, the
+others only appear when a search heard them. The Status dialog shows each laser's
+latest reading.
+
+## Beer library
+
+`LibraryManager` keeps up to 30 beers in `/library` on `store`, so uploads and
+firmware updates keep them: each beer's 400 x 400 picture (a JPEG of at most 70 KB)
+and thumbnail (at most 16 KB), named by the picture's CRC-32, and one index file with
+when each was last shown. The web app does all the image work; the tap only stores,
+lists and removes them. LittleFS is slow with many files in a folder, so the tap keeps
+the list in memory and reads only file names at boot. The web server restarts the
+tap if one request holds it for 5s, which is why a removal takes at most 10 beers
+(about 2s). One upload at a time; a cut-off upload is cleaned up, and boot removes
+any leftover files. The rules are in `lib/BeerLibrary`, with laptop tests.
+
+Other taps' pages can read and remove a tap's beers: CORS answers only `.local`
+names, localhost and private addresses.
+
+## Routes
+
+| Route | Does |
+| --- | --- |
+| `GET /` | The web app, or the setup page while the setup access point is open |
+| `GET /scan`, `POST /connect`, `GET /connect` | The setup page's Wi-Fi networks, saving one, and how joining it went |
+| `GET /status` | The device, Wi-Fi, screen image (with `image.source`), lasers, strip, library and memory |
+| `GET /image`, `POST /image` | The stored picture; uploading one, 80,000 bytes (the square) or 120,000 (the whole screen), optionally with `laser`, `mode` and `source` |
+| `POST /refresh`, `POST /reboot`, `POST /factory-reset` | The settings menu's actions |
+| `GET /log` | The device log as one CSV file |
+| `GET /lasers`, `POST /laser` | Every laser heard, and choosing this tap's laser (`address`, or `none`) and `mode` (`smart` or `eco`) |
+| `GET /strip`, `POST /strip/test`, `POST /strip/live` | The strip's values and laser, and the test values (see [the display](../docs/display.md#test-values)) |
+| `GET /setup-help?screen=join\|ready` | The setup help drawing, for the web app's preview |
+| `GET /library`, `GET /library/<id>.jpg`, `GET /library/<id>.thumb.jpg` | The beers, last shown first, and their files |
+| `POST /library`, `POST /library/remove` | Saving a beer (`image.jpg` and `thumbnail.jpg`, 409 when full), and removing up to 10 (`ids`) |
+
+## Unit tests
+
+Code without Arduino dependencies is tested on the laptop by the `native`
+environment: the laser decoder and the litres (`test_rapt_laser`, with the same
+captures and keg levels as the TypeScript decoder's tests in `app/rapt-laser`), the
+strip's drawing and redraw rules (`test_strip`, `test_strip_tracker`), where a picture
+goes on the screen and each tap's fit (`test_screen_layout`), the setup help
+(`test_setup_help`) and the beer library's rules (`test_beer_library`). From the
+repository root:
+
+```bash
+~/.platformio/penv/bin/platformio test -d esp32 -e native
+```
+
+## Device log
+
+`DeviceLog` records events to the serial port and to numbered CSV segments in
+`/log` on `store`: 16 segments of up to 64 KB, the oldest removed first. Entries
+are held in memory and written every 5 minutes, or sooner when 4 KB build up or
+before a restart. Rare entries are written straight away, with anything held
+before them, so a power cut soon after doesn't lose them (`logEventNow`): a boot,
+Wi-Fi saved, a laser chosen, a picture uploaded, a redraw, a beer saved or removed. Each entry has a UTC time, the uptime in seconds, the event and
+its details. Until the internet time arrives, marked by a `clock synced` entry, the
+time is empty after a power cut, or carried over and slightly off after a restart. The boot entry includes the reset reason and the firmware build
+ID (the start of the ELF SHA-256), which tells builds apart.
+
+`GET /log` streams the whole log as one CSV file.
+
+## Over-the-air updates
+
+Once the device has joined Wi-Fi, `ArduinoOTA` accepts firmware and filesystem
+uploads at `<hostname>-<deviceId>.local`, checked against the hash of
+`otaPassword`. Filesystem uploads always go to the `spiffs` partition. The device
+log records each update starting, finishing or failing, and the next boot entry
+shows the new firmware ID. Setting `DEVICE_OTA=1` makes `scripts/device_config.py`
+switch PlatformIO's upload to `espota`, which is what `--ota` does.

@@ -1,6 +1,8 @@
+import css from '@eslint/css';
 import eslint from '@eslint/js';
 import { defineConfig } from 'eslint/config';
-import prettier from 'eslint-config-prettier';
+import prettier from 'eslint-plugin-prettier/recommended';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -8,10 +10,14 @@ export default defineConfig([
   {
     ignores: ['dist'],
   },
-  eslint.configs.recommended,
-  ...tseslint.configs.recommended,
-  prettier,
   {
+    files: ['**/*.{js,ts,tsx}'],
+    extends: [
+      eslint.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+      prettier,
+    ],
     languageOptions: {
       globals: globals.browser,
       parserOptions: {
@@ -27,5 +33,12 @@ export default defineConfig([
         },
       ],
     },
+  },
+  // CSS is only checked against Prettier's format.
+  {
+    files: ['**/*.css'],
+    plugins: { css },
+    language: 'css/css',
+    extends: [prettier],
   },
 ]);

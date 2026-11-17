@@ -1,0 +1,1020 @@
+# Keg level display plan
+
+Done: merged into master on 2026-11-17, through pull request #1 (branch `keg-level`). This plan is archived and never edited again. Fixes go in the docs (`docs/`), and each idea marked Later gets its own new plan file when picked up.
+
+Status: steps 0 to 10 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 11 (RAPT cloud upload) and the open questions and later ideas below are left for later. Last updated 2026-11-17.
+
+## Goal
+
+Each tap's display shows its beer image plus how full the keg is, read over Bluetooth
+from a KegLand RAPT Laser Level Sensor in the keg lid. The displays are now always on
+(USB power), so the battery, power-switch and deep sleep design goes.
+
+## Hardware
+
+- 3 taps, each with a Seeed Studio XIAO ESP32-S3 and a 4-inch Spectra 6 (400 x 600)
+  e-paper panel, in a 3D-printed enclosure on top of the font, powered from one USB
+  splitter. One tap exists today; the other two are on order.
+- 3 RAPT Laser Level Sensors (Cornelius keg lid kits), all on 19 L corny kegs, labelled
+  with 1-3 dots. Kegs move between positions (back left, back right, centre front) and
+  taps, so the laser each tap shows is chosen in its web app and changes over time.
+  Addresses, as in `config/lasers.json`:
+
+  | Laser | Address |
+  | --- | --- |
+  | 1 | `C4:A3:DF:A2:C5:1B` |
+  | 2 | `E5:4C:66:F9:E1:33` |
+  | 3 | `D9:EB:DE:7E:BE:48` |
+
+  Numbers 1 and 2 were swapped part-way through, as the first laser 1's housing
+  didn't clasp its body down reliably. Earlier notes here may call
+  `E5:4C:66:F9:E1:33` (now laser 2) laser 1, as the captures and the first logs do.
+- Signal at the font with a sensor inside the kegerator: about -80 to -90 dBm,
+  measured with a phone.
+
+## Sensor broadcast
+
+Readings are in the sensor's Bluetooth broadcasts, so the ESP32 never connects. It
+does have to ask for them, though: the advertisement itself holds only the service
+UUID, and the reading is in the scan response, which the sensor sends only to a
+scanner that requests it (active scanning). Phones, nRF Connect and the laptop do this
+by default and show both merged, which hid it until step 3. Passive scanning on the
+ESP32 heard a Smart Mode laser a few times an hour at best (more in Session Mode);
+active scanning hears each one about 36 times a minute.
+
+- **Smart Mode (1, default):** advertises constantly (up to 12 times a minute heard).
+  It measures regularly but only updates the reading it broadcasts when the level
+  changes: a 1 cm lift was reported in about 2 minutes, while a steady level kept the
+  same reading, byte for byte, for an hour. The RAPT app can connect and force a
+  reading. KegLand quotes 18+ months on 3 AAA batteries (5-minute intervals), but
+  their Pill drains much faster than quoted, so watch the real battery drain.
+- **Session Mode (2):** entered by itself when the level changes, with a new reading
+  about every 35 seconds, then back to the previous mode a few minutes after the
+  level settles.
+- **Live Stream Mode (3):** a fresh reading about every second. Started or stopped by
+  holding the sensor's Bluetooth button for about 2s (or from the app, with a Pro
+  subscription), and ends by itself. Useful for development and filling kegs; drains
+  the battery.
+- **Ultra Low Power Mode (4):** wakes on a 30-minute-7-second grid. After a level
+  change it reports in most slots for a few hours (the first report 16-52 minutes
+  after the change), then goes silent while the level stays steady (10+ hours seen).
+  Each broadcast lasts 2-5 seconds, so a phone scan rarely sees it. The RAPT docs say
+  it must first be "bonded" to a RAPT device, but the broadcasts are normal and
+  readable without that. The only way out is double-tapping the sensor's Bluetooth
+  button. KegLand quotes several years of battery.
+
+Sensor buttons ([RAPT docs](https://docs.rapt.io/equipment/rapt-laser-level-sensor/operation)):
+a single press of Bluetooth takes a reading and broadcasts it; a double tap toggles
+Smart and Ultra Low Power; holding it for about 2s toggles Live Stream. A single press
+of Power shows the mode as 1-4 green blinks.
+
+The advertisement (a connectable `ADV_IND`) contains flags (`0x06`) and the 128-bit
+service UUID `52415054-0a06-9215-08bf-f2b018840000` ("RAPT"). The scan response
+contains manufacturer data with company ID `0x4152` ("RA") followed by a 19-byte
+payload. Multi-byte values are little-endian.
+
+| Offset | Size | Field | Notes |
+| --- | --- | --- | --- |
+| 0 | 2 | `50 54` ("PT") | Signature, confirmed |
+| 2 | 1 | `A1` | Format or device type |
+| 3 | 6 | Sensor address | Matches the address in the RAPT web app, confirmed |
+| 9 | 2 | Laser distance, mm | 0 when there is no reading |
+| 11 | 2 | Liquid height, mm | Vessel height set in the RAPT app minus distance; not used |
+| 13 | 1 | Unknown (10) | Not used |
+| 14 | 2 | Battery, 0.1 % | Confirmed: 849 with old batteries, app showed 84% (rounds down). Sags while the laser fires (78.5-85.9% within a minute in Live Stream). `FFFF` = no value |
+| 16 | 2 | Temperature, 0.01 °C, signed | Moves in 0.25 °C steps. `0x8000` = no value |
+| 18 | 1 | Mode | Confirmed: 1 Smart, 2 Session, 3 Live Stream, 4 Ultra Low Power (matches the mode LED blinks) |
+
+Distance plus liquid height is always 560 in the broadcasts. The broadcast distance and
+the RAPT app's distance come from separate measurements and have differed by 3-9 mm.
+That is ignored; the ESP32 uses the broadcast value, and readings jitter anyway.
+
+Some advertisements are empty (no reading, like the second capture below), for example
+while the RAPT app is connected or just after it forces a reading. The ESP32 ignores
+them. To capture one with data: close the RAPT app, press the sensor's button, wait
+10-15 s, then copy the data.
+
+### Captures
+
+Payloads after the company ID, for decoder tests:
+
+| Payload | Decoded |
+| --- | --- |
+| `5054A1E54C66F9E13313001D020AE803B70703` | Distance 19 mm, height 541 mm, battery 1000, 19.75 °C |
+| `5054A1E54C66F9E1330000000000FFFF008001` | No reading (all values empty) |
+| `5054A1E54C66F9E1338500AB010AE8031B0801` | Distance 133 mm, height 427 mm, battery 1000, 20.75 °C. Ruler and RAPT app: 136 mm, 14.9 L |
+| `5054A1E54C66F9E1337001C0000A5103850701` | Distance 368 mm, height 192 mm, battery 849, 19.25 °C. Old batteries. RAPT app: 359 mm, 6.9 L, battery 84% |
+| `5054A1E54C66F9E133C1006F010A5703210702` | Distance 193 mm, height 367 mm, battery 855, 18.25 °C, Session Mode. Laptop log, 2026-11-02 |
+| `5054A1E54C66F9E133E90047010AFF02530703` | Distance 233 mm, height 327 mm, battery 767 (sagging while the laser fires), 18.75 °C, Live Stream. Laptop log, 2026-11-02 |
+| `5054A1E54C66F9E133DB0055010A5B039E0704` | Distance 219 mm, height 341 mm, battery 859, 19.50 °C, Ultra Low Power. Laptop log |
+
+Advertisement and scan response for the 136 mm capture, merged as nRF Connect shows
+them (the advertisement ends after `...54504152`):
+`0x020106110700008418B0F2BF081592060A5450415216FF52415054A1E54C66F9E1338500AB010AE8031B0801`
+
+### Litres and percentage
+
+The laser only gives a distance, so the tap works out the litres itself, from points
+measured on a real keg (the jug calibration on 2026-11-16, under "Open questions and
+later ideas"). Between two points the litres are on the straight line between them;
+beyond the first point the keg is empty, and nearer than the last it is full.
+
+| Distance | Litres | Why |
+| --- | --- | --- |
+| 539 mm or more | 0 | Empty |
+| 532, 508, 494, 477, 457, 440 mm | 0.5, 1, 1.5, 2, 2.5, 3 | The domed bottom as measured on the second filling, with the float tied up, then 25 mm closer: the float's ball tends to sit under the laser down there, and the laser then reads the top of the ball, about 25 mm above the beer |
+| 399 mm | 5 | Where the bottom joins the straight sides |
+| 45 mm | 18 | The straight sides: one line, 27.2 mm a litre, fitted to the readings from 5 L to 18.5 L, where the float hangs clear |
+| 29 mm or less | 19 | Full: the laser reads short this close |
+
+The litres are rounded down to 0.1 L, and the percentage is of 19 L, rounded down. The
+points are `RaptLaser::Corny19L` in the firmware and `CORNY_KEG_19L` in
+app/rapt-laser, which must stay the same; both are tested against the jug readings.
+
+So the bottom 3 L never show more than is in the keg: right with the ball in the
+beam, and up to about 1 L less with it out of the way, a pint or two to spare at the
+end rather than one that isn't there. From 5 L up the screen is within 0.2 L.
+
+Before the calibration it was a straight line from 552 mm (empty) to 22 mm (19 L),
+which matched the RAPT app's own figures but read up to 0.8 L low in the last 3 L.
+
+## Display
+
+- **Top 400 x 400:** the uploaded image.
+- **Bottom 400 x 200 strip,** drawn by the ESP32:
+  - Top row, 40px bold: the percentage on the left (`87%`), read first because the
+    strip is about the keg's level, the temperature on the right (`2.6°`), and the
+    laser dots, battery icon and mode icon in the middle. The middle group is centred
+    on the screen, so the icons line up across the taps.
+  - Below: a 368 x 96 bar with a black outline. Fill is green from 100% to 50%,
+    orange from 49% to 25% and red at 24% and below. The screen has no orange, so
+    orange is a fixed pattern of 2 red pixels to 1 yellow, the mix the web app's
+    encoder makes of `#FF5500`, which looked most orange on the real screen. The litres
+    (`16.5L`, 64px bold) are centred in the bar. Each pixel of the text is white over
+    the green or red fill and black over orange and the empty part, so a character the
+    fill's edge crosses is split in two colours.
+  - Battery icon: black outline, always shown. At 10% or more it has a green fill in
+    10% steps and no number. Below 10% the outline turns red, with a red fill and the
+    percentage inside (`7%`), both in 1% steps.
+  - Laser dots: 1-3 filled dots matching the label on the laser's lid, so it is clear
+    which laser the tap is showing. Stacked vertically to the left of the battery, so
+    the group is the same width on every tap.
+  - Mode icon, always shown next to the battery icon: a simple outline brain for
+    Smart or leaf for Eco (Ultra Low Power), matching the mode chosen for this tap.
+    The brain is recognisable at 32px on the real screen.
+  - Text in Roboto, the web app's font. The firmware holds just the characters the
+    strip needs, at the sizes it uses, and the web preview uses the same font.
+  - Mode warning: a warning sign (yellow inside, with a black outline and "!") next
+    to the mode icon once the laser has been in the other mode for over an hour. Session Mode and Live Stream never count.
+    Double-tapping the laser's Bluetooth button switches between the two. A battery
+    change or restart puts the laser back in Smart Mode.
+- **Special states:**
+  - No laser chosen: the strip shows "No laser".
+  - A laser chosen with no level yet, after the minute's wait for its first reading
+    (heard but not measuring, or not heard yet): the top row says "Waiting for laser
+    1" in place of the values, and the bar shows a shrug, `¯\_(ツ)_/¯`, 48px, centred.
+    The mode warning, which may be why, goes in front of the message. A laser not in
+    `config/lasers.json` drops the number ("Waiting for laser"). Step 8c, below.
+  - Nothing heard from the laser: the bar keeps the last level. With Smart chosen,
+    the laser broadcasts constantly, so silence for over 10 minutes (set in step 3)
+    is a real problem: the top row says "Can't hear laser 1", with the no signal
+    icon (a blue Bluetooth symbol crossed out in red) in front, in place of the
+    percentage, battery and temperature, which are as old as the level. It replaces
+    the mode warning, as the laser's mode isn't known while it's silent. With no
+    level as well, the bar shows the shrug. One redraw when it appears, one when it
+    clears. With Eco chosen, a steady keg is silent for 10+ hours, so there is no
+    warning. Either way, flat batteries, the likely failure, show as the red battery
+    icon first. No "last updated" time on screen: it would be frozen at the last
+    redraw. The web app's Status dialog shows "last heard" live. (At first the no
+    signal icon sat small in the middle group, with the old values either side,
+    easy to miss across the room.)
+  - Temperature or battery missing from an advertisement: keep the last known value.
+  - No saved image: show setup help instead. Before Wi-Fi is set up, that is the
+    access point name and password; once connected, it is
+    `http://<hostname>-<deviceId>.local`. Setup help never replaces a saved image, for
+    example after a power cut. Done in step 7, below.
+
+## Redraw rules
+
+The panel can only redraw the whole screen, which flashes, so it redraws only when
+something shown changes.
+
+| Value | Rule |
+| --- | --- |
+| Level | 1% steps, rounded down. Only goes down, and a drop redraws as soon as the laser reports it, so a pour shows straight away. If the laser measured mid-pour, its next reading (about 35s later in Session Mode) redraws again with the final level; a redraw can't be cut short, as stopping the panel part-way can leave lasting ghosting. A rise of 10 points or more (5 until 2026-11-16, raised as the float's ball under the laser reads up to about 5 points high) is a refill, shown once the level has stayed within 1 point for 1 minute, as a keg change involves a lot of moving; it then shows the lowest reading in that minute. Within 1 point, as a reading on the line between two percentages flickers between them. Smaller rises never show. |
+| Battery | Use the highest reading from the last hour, to ignore sags while the laser fires. That value only goes down; a large rise (new batteries) shows immediately. |
+| Temperature | Updated whenever the screen redraws. On its own, it triggers a redraw only if it has moved 0.5° or more and the last redraw was at least an hour ago. |
+
+Every redraw shows the latest of everything, so a pour's redraw also brings the temperature up to date. A battery or temperature redraw waits while a rise might still become a refill (up to a minute), so they come together.
+
+Force refresh in the settings menu still redraws on demand.
+
+## Firmware changes
+
+- **Always on:** remove deep sleep.
+- **Wi-Fi:** with saved Wi-Fi, retry every 30s and never give up. After 5 minutes
+  without Wi-Fi, also open the setup access point while still retrying. Pause retries
+  while a phone is connected to the access point, and close it once Wi-Fi connects.
+  Sensor readings and display updates keep working without Wi-Fi.
+- **Storage:** keep Wi-Fi and sensor settings in the ESP32's settings storage (NVS),
+  and the screen image, log and beer library in one data partition (`store`, 3.9 MB),
+  so `device:upload` and `device:upload:fs` erase neither. One data partition rather
+  than one each, because LittleFS already handles flash wear and safe replacement;
+  the code caps the log and library sizes. Changing the partition table needs one
+  full erase, so step 2 sets every partition at once (see `esp32/partitions.csv`):
+  two firmware slots of 1.75 MB (down from 3.2 MB; a test build with Bluetooth
+  scanning and OTA was 1.06 MB), 512 KB for the web app files, and the data
+  partition. Done in step 2a.
+- **Device log:** a rolling log capped at 1 MB in the data partition, so uploads and
+  firmware updates keep it, for checking what happened later (and feeding it to
+  Claude). It records events, not every advertisement: each new reading (time,
+  distance, mode, battery, temperature, signal strength), a count of advertisements
+  heard every 5 minutes, redraws and why, Wi-Fi drops (with the reason), reboots
+  (with the reason) and mode warnings. About 25 KB a day, so roughly 6 weeks, oldest
+  dropped first. Entries are held in memory and written every few minutes to spare
+  the flash, so a power cut loses at most those minutes, except rare ones written
+  straight away: boots, Wi-Fi saved, a laser chosen, pictures and beers saved or
+  removed, and redraws. Times come from the
+  internet (NTP), or time since boot until Wi-Fi connects. Done in step 2b, with
+  boots, Wi-Fi, the setup access point, uploads and redraws; the sensor entries come
+  in step 3.
+- **Beer library:** up to 30 beers per tap in the data partition, so uploads and
+  firmware updates keep them. Each is the cropped 400 x 400 picture as a JPEG of at
+  most 70 KB, plus a thumbnail of at most 16 KB and when it was last shown on a tap.
+  The web app does all the image work; the firmware only stores, lists and deletes
+  them. A beer's ID is its JPEG's CRC-32, so a copy sent on from another tap keeps
+  its ID and the grid shows it once (the screen image's checksum, first planned,
+  would change when another tap re-dithers the picture). Sending a beer a tap has
+  only marks it shown now. Pages on the local network, such as other taps', can
+  read and delete them: CORS answers only `.local` names, localhost and private
+  addresses. Done in 6a (`esp32/src/LibraryManager.cpp`, rules in
+  `esp32/lib/BeerLibrary` with laptop tests), tested on tap 1:
+  - `GET /library` lists the beers, last shown first; `GET /library/<id>.jpg` and
+    `<id>.thumb.jpg` serve the files, cached by browsers for good; `POST /library`
+    takes `image.jpg` and `thumbnail.jpg`, answering 409 when full;
+    `POST /library/remove` takes up to 10 IDs.
+  - LittleFS is slow with many files in a folder (listing 28 beers by opening their
+    files took 3.9s), so the tap keeps the list in memory, with the times in one
+    index file, and reads only file names at boot. Listing takes 20ms and a file
+    about 0.09s; removing one takes about 0.2s.
+  - The web server's task restarts the tap if one request holds it for 5s, which
+    is why removals come at most 10 at a time (about 2s).
+  - One upload at a time; a second waits with "try again". A cut-off upload is
+    cleaned up, and boot removes any leftover files.
+  - `/status` gives the library's count. The Status dialog shows it, and factory
+    reset has "Also clear this tap's beer library".
+- **Factory reset** replaces Forget Wi-Fi. It clears Wi-Fi, sensor and image, then
+  reboots into setup. It keeps the log and the beer library unless asked to clear
+  them too. Done in step 2b, apart from the sensor (step 4) and library (6a).
+  The restart then shows the setup help (step 7).
+- **Lasers:** a shared list, `config/lasers.json` (laser number and address), is
+  built into every tap. Each tap stores which laser it shows and which mode it
+  expects (Smart by default). RAPT sensors not in the list can still be chosen by
+  address. Changing laser resets the shown values straight away. Nothing stops two
+  taps showing the same laser; the dots make it visible. Once a laser is chosen, the
+  tap asks only that one for readings (the Bluetooth accept list), so each laser
+  answers one tap. Each request for the laser list (`GET /lasers`) asks every laser
+  for the next minute, so the picker shows them all live while it's open.
+- **Over-the-air updates:** `ArduinoOTA` with a password. The new partition table keeps
+  two firmware slots, and `pnpm device:upload --ota` uploads over Wi-Fi to the
+  profile's address using PlatformIO's `espota` protocol. The first OTA-capable
+  firmware goes on over USB. Done in step 2c: firmware and web app in about 35 s,
+  with each update (and a wrong password) in the device log.
+- **Hostnames:** the build scripts and web app use the real
+  `<hostname>-<deviceId>.local` address, with one profile per tap in `config/`
+  (`tap-1.json` to `tap-3.json`, and `example.json`). Device commands require
+  `--config`. Done in step 2c.
+- **Passwords:** the repository is public, so the setup access point and OTA
+  passwords live in a git-ignored `config/secrets.json`, read only by the firmware
+  build. They no longer appear in the web app, and the firmware only keeps the OTA
+  password's hash. Done in step 2c.
+- **Status dialog:** add the sensor address, chosen and actual mode, last reading,
+  signal strength and time since the last reading.
+- **Screen image and strip (step 5a):** the stored image becomes 400 x 400 (80,000
+  bytes), drawn above the strip, which the firmware draws itself. Until step 5b,
+  uploads of a full 400 x 600 screen (120,000 bytes) were still accepted and only
+  the top 400 rows kept; part 1 of 5b removed this. Tap 1's old 400 x 600 test image
+  was deleted once at boot; taps 2 and 3 never had one.
+- **Test values:** a route sets the strip's percentage, temperature and battery for
+  "Show on device". The tap shows them for 5 minutes, or until "Back to live", then
+  goes back to its real readings, so a tap is never left showing made-up numbers.
+  `POST /strip/test` takes percent, temperature, battery and optionally litres
+  (otherwise worked out from percent for a 19 L keg), modeWarning and noSignal
+  ("true"), and laser and mode to test with a laser that isn't the tap's own (step
+  8d); `POST /strip/live` goes back early; `/status` gives
+  `strip.testSecondsLeft`. Test values have a 5px red border inside the strip's edge,
+  clear of the content. They're never saved, so a restart comes back live. Done in
+  step 5a; litres added in part 4 of 5b.
+
+## Web app changes
+
+- The image area is 400 x 400. Image mode takes an image of any size and zooms it
+  into the square. Fit (the whole image, with a background in the gaps) and Fill
+  (covering the square) are buttons, and a Zoom slider goes between them and on to 3
+  times Fill. The slider moves on a log scale, has marks at Fit and Fill, and snaps to
+  them within 3%. Where the image is bigger than the square, dragging it chooses which
+  part shows; zooming keeps the same point in the middle. A new image starts at Fit,
+  or at Fill if the last one was at Fill. Text mode renders at 400 x 400. Uploads are
+  80,000 bytes. Done in parts 2 and 3 of 5b, tested on tap 1. Step 9 took the slider
+  below Fit, down to the case's window, with Frame: W and Frame: H.
+  Ways to give it an image:
+  - Browse for a file, or drop one on the image, as before.
+  - One field, "Paste an image or its address", beside Browse. Pasting an image's
+    address loads it straight away (on a laptop: right-click the image, Copy Image
+    Address), and so does typing one and pressing Enter. Pasting a picture (Copy
+    Image, or a screenshot) loads it too. The field then shows the file's name, the
+    address, or "Pasted image".
+  - Ctrl+V anywhere on the page in image mode, outside a text field, does the same,
+    and an image dragged from another tab can be dropped on the image.
+  - A failed address keeps the current image and says why: the site doesn't let
+    other pages read its images, the address is a page rather than an image, or the
+    status the site answered with.
+  - A picture copied on a phone pastes too: checked with Chrome on Android, on
+    tap 1.
+
+  The Background tool, shown whenever the image leaves gaps (below Fill). Text mode
+  uses the same tool for its background, without Blurred image, and each mode keeps
+  its own settings:
+  - Solid colour, the default, starting on white in both modes, which suits
+    KegLand's product shots. A gradient's end colour starts on black.
+  - Linear gradient (top to bottom) or Radial gradient (out from the middle), from a
+    start colour to an end colour, with a button to swap them.
+  - Blurred image: the same image filling the square, heavily blurred, behind it.
+
+  Each colour has the screen's 6 colours as swatches, white first, as they come out
+  clean while other colours are dithered. Its eyedropper button opens desktop
+  Chrome's own eyedropper, which picks from anywhere on screen. In browsers without
+  it, the button turns on picking from the image: the next click on the image takes
+  that colour, and Escape or the button stops it. Text mode's text colour uses the
+  same colour picker, and text mode starts as black text on white.
+
+  KegLand's images (Shopify) let other pages read them, but their product pages
+  don't. Pasting a product page link, or an image from a site that blocks it, would
+  need the ESP32 to fetch it instead; left for later.
+- Beer library, for beers made again (image mode only; text mode is a last resort):
+  - Sending a beer also saves it to this tap's library unless it is already there.
+    Each tap keeps a copy of every beer it has shown, so a dead tap loses nothing.
+  - A Library button opens one grid of thumbnails from all three taps, each beer
+    once, sorted by when it was last on a tap, with that date under it (for example
+    "last on tap 2, Mar 2026"), and this tap's count (for example "27 of 30").
+    Picking a beer loads it into the preview, the same as choosing a file.
+  - Select several thumbnails, then "Remove 3" deletes them from every tap.
+  - When this tap is full, Send opens the same grid to choose what to remove, or
+    "Send without saving". Nothing is ever removed automatically, because the oldest
+    beers may be the ones made most often.
+  - Done in 6c, with one change: the picture goes to the screen first and the
+    library is asked after, as the tap already says whether a beer is new and
+    whether it's full (asking first would need the page to work out the beer's ID),
+    and the screen shouldn't wait on it. The upload's message then says it wasn't
+    saved, with "Make room…", which opens the grid on this tap's beers, ready to
+    choose; "Remove 2 and save" removes them and saves the new one, and closing
+    leaves it unsaved. Each beer has a round tick in its corner, as in Google
+    Photos (on hover with a mouse, always on a touch screen); once one is ticked,
+    clicking any beer ticks it rather than loading it, and "Remove 3", bottom
+    right, asks once more ("Their pictures can't be got back"), then asks each tap
+    to remove the ones it has, 10 at a time. (A Select button first started this,
+    but didn't say it was for removing.) A tap that couldn't be reached keeps its
+    copies, and the grid says so. While taps haven't answered, the grid says which
+    it's still asking. Tested against faked taps, and on the real taps on
+    2026-11-17: four test beers saved straight to the taps (one on taps 2 and 3,
+    one on each tap alone) were ticked in tap 1's Library and removed with
+    "Remove 4", each tap removing only its own, and each tap's own beer stayed.
+  - Done in 6b: Send in image mode saves the composed square (before the six
+    colours) as a JPEG, lowering the quality until it fits (a 400 x 400 square of
+    random noise, the worst case, came to 62 KB), with a 200 x 200 thumbnail. A
+    beer picked from the library and sent unchanged goes back as its own JPEG, so
+    it keeps its ID; zoomed, it's a new picture. The upload's message says whether
+    it was saved, was there already, or wasn't as the library is full. The Library
+    button beside Browse opens the grid: "12 of 30 on this tap", any tap that
+    couldn't be reached, and under each beer where and when it was last shown
+    ("Tap 2 · 11 Nov", or "Tap 2 · June 2025" for an earlier year). Thumbnails
+    come one at a time from each tap, this tap's own first. Tested in the browser
+    against faked taps, and across the real taps on 2026-11-14 (step 6).
+  - Two keg states always first in the grid, which can't be removed or ticked: "Keg
+    empty" and "Keg ready" (cleaned and ready to fill). Sending one adds the date, as
+    a reminder of when the keg was emptied or cleaned. The strip still shows the
+    laser's reading. Nothing switches to them automatically.
+  - Built in 6d, chosen from mockups (H, the handwritten chalkboard). Tested against
+    faked taps, and both sent to tap 1's screen, where they look right:
+    - A pub chalkboard: black, with a double white border. Across the middle, a worn
+      rubber stamp in Roboto Bold, tilted slightly: red KEG EMPTY or green KEG READY.
+    - Above it, a line in chalk: Permanent Marker, with tiny specks knocked out of
+      the letters, white when empty and yellow when ready. Each time a state is
+      picked, the page takes its line from a list, never the one it took last time
+      (remembered by each browser for each tap, as each tap's page is its own site),
+      so the board stays fresh. The lists are in `config/keg-lines.json`, to add
+      puns without changing code: "Gone too soon" and "Tapped out" when empty,
+      "Something's brewing" and "Coming soon" when ready. The build checks each
+      line: at most 24 characters, as longer lines shrink too small to read, and
+      only characters the font has.
+    - Below it, the date in the same chalk: "Kicked 9 Nov" or "Cleaned 9 Nov".
+    - The page draws the picture when a state is picked, so the date is that day.
+      Picking loads it into Compose like a beer; Send shows it, and doesn't save it
+      to the library. The grid shows the line each will get next. Not shown when
+      making room, as they take no room.
+    - Permanent Marker (Apache License 2.0) is built into the app page only:
+      `pnpm fonts:subset` now makes both fonts. It's trimmed to what the lines may
+      use, letters, digits, ASCII punctuation, curly quotes, dashes and the ellipsis,
+      as its hand-drawn letters are big: 18 KB, where accented letters would make it
+      26 KB. The gzipped app page grows from 125 KB to 146 KB.
+    - The firmware doesn't change: the tap just gets a picture.
+- The preview shows the whole screen, including a close copy of the strip with the
+  tap's live readings and the chosen mode's icon. Until something new is composed,
+  it shows the tap's stored image (`GET /image`, labelled "On the tap"), so the page
+  opens on what the screen shows; Reset goes back to it. Added in part 4 of 5b.
+- Developer mode, a switch in Settings (off by default, remembered by each browser;
+  each tap's page is its own site to the browser, so each tap remembers it
+  separately), adds Test values under the preview: percentage (slider and number
+  input) and litres, temperature, battery, the Mode warning and No signal icons, and
+  No reading, which leaves the numbers off for the strip waiting for the laser.
+  The percentage and litres are linked: a percentage gives the litres the tap works
+  out for it, and typed litres give the percentage a real reading would show with
+  them (11.8 L gives 62%, a pair no percentage alone makes). The
+  preview shows them, with the red border, and "Show on device" sends them to the
+  tap to check the strip on the real screen (see Test values above). While the tap
+  shows test values, a countdown and "Back to live" show under the preview, with or
+  without developer mode. The tap takes a request between redraws, so for a minute
+  after one the page trusts the request until the tap's answers show it. Done in
+  part 4 of 5b, tested on tap 1.
+- Roboto is built into both pages rather than loaded from Google Fonts, so the setup
+  page (whose phone has no internet) and text mode always have it: one variable font
+  file trimmed to weights 400-700 and to ASCII, Latin-1 and common punctuation,
+  about 25 KB a page (Google's file is 43 KB). The unused 800 weight is dropped.
+  Done in part 5 of 5b: `pnpm roboto:subset` (now `pnpm fonts:subset`) makes `web/src/fonts/roboto.woff2`
+  (26 KB, keeping the font's copyright and license entries), and each gzipped page
+  grows by about 28 KB. The build now puts every file inside its page and fails if
+  anything is left over. Text mode waits for its font before drawing, as the canvas
+  wouldn't redraw when it arrived. Checked with Google's font servers blocked: both
+  pages on the laptop, and the app page on tap 1, load nothing from outside and draw
+  in Roboto.
+  Each page also declares a blank icon, as browsers asked for /favicon.ico and the
+  tap answered with the whole page again, a second download on every load.
+- A laser picker next to Upload to display, and on the setup page below the Wi-Fi settings, as
+  it's optional there and can be changed later in the app. It lists every laser in
+  the shared list with its dots and, when heard recently, its reading, mode and when
+  it was last heard; a laser in Eco may not be heard yet, so check the dots on its
+  lid. On the main page, the choice goes in the preview, and Upload to display sends it
+  with everything else (step 8d). On the setup page, which has no preview, a Save
+  button sends the choice, and it can be skipped; the laser and Wi-Fi are one form:
+  its Save sends the laser first (kept whether or not Wi-Fi connects), then joins
+  Wi-Fi. Both pages show which tap it is in a large
+  badge (for example "Tap 1"), and so does the browser tab's title. The picker also
+  sets the mode this tap expects:
+  - Smart (default): screen a few minutes behind a pour, RAPT app works, batteries
+    changed more often.
+  - Eco (Ultra Low Power): batteries last longer, screen up to about an hour behind.
+
+  A laser in the other mode says how to fix it: "double-tap its Bluetooth button".
+- Tap switcher: a large tap badge in the header (for example "Tap 2") and a dropdown
+  linking to the other taps' pages, built from the profiles in `config/`. Done in part
+  6 of 5b: the build lists every profile next to the tap's own with the same brand and
+  hostname (never reading the secrets file), and links to each tap's `.local` address.
+  With one tap it's a plain badge, and the setup page keeps its plain badge.
+- Settings: Status, Force refresh, Download log (a CSV file), Reboot and Factory
+  reset.
+- Factory reset asks first, in a dialog like the old Forget Wi-Fi one. It says what
+  will be cleared (Wi-Fi, laser and screen image) and that the device restarts in
+  setup, with two checkboxes, unticked by default:
+  - Also clear the log. Done in step 2b, with Download log.
+  - Also clear this tap's beer library. Copies on other taps stay, so those beers
+    still show in the library. Done in 6a.
+
+## Steps
+
+Each step ends with something visible to check.
+
+0. **Capture advertisements.** Done, including the Ultra Low Power and Smart Mode
+   logs.
+1. **TypeScript decoder:** a new workspace package that parses advertisements and
+   converts distance to litres and percentage, tested with the captures above.
+   Optionally, a Node script that prints live readings from the laptop's Bluetooth.
+2. **Always-on housekeeping:** deep sleep, Wi-Fi retry, settings storage, the new
+   partition table (including the library's space), the device log and Download log,
+   factory reset, over-the-air updates and the hostname fix. Test by turning the
+   router off for 10 minutes, doing a filesystem upload, running a factory reset, and
+   uploading over Wi-Fi, then checking the downloaded log shows all of it. Done, in
+   three parts (2a, 2b, 2c), tested on tap 1.
+3. **ESP32 listens:** active Bluetooth scanning, with a C++ decoder tested on the
+   laptop against the same captures. Readings, signal strength and missed readings
+   show in the serial log, the device log and the Status dialog. Done, tested on
+   tap 1.
+4. **Lasers,** in two parts:
+   - 4a, firmware: the shared laser list (`config/lasers.json`), the chosen laser and
+     mode in settings, asking only that laser except while the picker searches,
+     `GET /lasers` and `POST /laser`, and factory reset clearing the choice.
+   - 4b, web app: the picker (with the mode choice) next to Send and on the setup
+     page, the tap badge and title on both pages, and Status marking the chosen
+     laser.
+
+   The dots and mode icon on screen moved to step 5, which draws the strip. Done,
+   both parts tested on tap 1, including the setup page after a factory reset.
+5. **New layout,** in two parts:
+   - 5a, firmware: the 400 x 400 image, the strip drawn in Roboto (with the laser dots
+     and mode icon), the redraw rules (with the mode warning and no signal icon), the
+     strip's values kept over a restart, and the test values route, tuned on tap 1's
+     real screen. Done, tested on tap 1 with real pours, a refill and a power cut.
+   - 5b, web app, in 6 parts: (1) the 400 x 400 image area and the full-screen
+     preview with the strip; (2) zoom between Fit and Fill, with the Background for
+     the gaps; (3) pasting an image address or an image; (4) developer mode with
+     "Show on device"; (5) Roboto built into both pages; (6) the tap switcher. All 6
+     done, tested on tap 1.
+6. **Beer library:** storage on each tap, the shared grid, removing several at once,
+   the prompt when full and the keg states. Test by sending a beer on one tap and
+   picking it on another. In four parts: (6a) the firmware's storage and routes, with
+   the factory reset option; (6b) saving on Send and the Library grid from all taps;
+   (6c) removing several and the prompt when full; (6d) the keg states. 6a done,
+   tested on tap 1; 6b and 6c built, tested against faked taps and on tap 1; 6d built,
+   tested against faked taps and on tap 1's screen. Tested across taps on
+   2026-11-14: a beer sent on tap 2 was listed in tap 3's Library as "Tap 2 · 14
+   Nov", and Upload to display put it on tap 3's screen. Removing several across
+   the real taps tested on 2026-11-17.
+7. **Setup help screen.** The redraw rules and the strip's special states, first
+   planned here, were done in step 5a. Done, and checked on tap 1's screen; chosen
+   from mockups:
+   - With no picture saved (a newly flashed tap, or after a factory reset), the
+     tap draws setup help in the picture's square, above the strip, in black and
+     white. Screen 1, "Set up Tap 2", while the tap's own network is open and it
+     isn't on Wi-Fi: a QR code that offers to join that network (the `WIFI:` form
+     phone cameras understand), the network's name and password, and "Then the
+     setup page opens". Screen 2, "Tap 2 is ready", once on Wi-Fi: a QR code that
+     opens the tap's page by IP address, which works on any phone on the same
+     Wi-Fi, and the `.local` name and the IP written out. While the tap is still
+     joining its saved Wi-Fi it draws nothing, so a tap about to join doesn't
+     redraw twice. It redraws when the screen or the IP address changes, and the
+     first picture replaces it for good.
+   - The titles in Permanent Marker at 38px, the keg states' chalk, and the rest in
+     Roboto Bold at 22px, from the strip's glyph script (`pnpm strip:glyphs`, which
+     now takes either typeface), firmware only. The QR codes come from the QR
+     generator in the ESP32's own libraries, at medium error correction. The
+     firmware grew by 31 KB, to 59% of its slot.
+   - The drawing (`esp32/lib/Strip/SetupHelp`) has no Arduino code, so laptop tests
+     check its layout, its QR contents and its margins. The strip and the help share
+     one drawing core (`Draw`); the strip's pixel tests show it's unchanged.
+   - Developer mode's test values have a Setup help choice: Off, 1 or 2. The preview
+     shows the tap's own drawing from `GET /setup-help?screen=join|ready`, with the
+     password left out of its text and its QR code, and Show on device puts it on the
+     screen, with the real password, alongside the test values for 5 minutes or
+     until Back to live. Tested on tap 1: both previews, their QR codes decoded,
+     and Show on device and Back to live, each a redraw in the device log.
+8. **No laser on purpose.** A tap may have no laser, by choice. In two parts: (8a)
+   the firmware, (8b) the web app. Chosen from a mockup; the bands were first going
+   to be filled from the square's edges, but the web app knows the background, so it
+   needn't guess, and a 400 x 600 picture to compose would put beers of two shapes
+   in the library.
+   - The laser picker gets a "No laser" choice. The tap saves it as its laser
+     ("none"), apart from not having chosen one yet: a new or factory reset tap
+     still shows "No laser" in the strip, as a prompt to choose one.
+   - A tap with no laser on purpose has no strip: the whole 400 x 600 screen is the
+     picture. The square is still the picture in Compose, where Fit, Fill, zoom, pan
+     and text work as now; the chosen background fills the 100px bands above and
+     below, over the full height (a gradient runs top to bottom, Blur covers the
+     screen), and the Background control always shows. Send uploads the whole
+     screen, 120,000 bytes, and the library saves the middle square, so every beer
+     stays a square that works on any tap. A beer picked from the library sits in
+     the square, with the background in the bands. The keg states are drawn full
+     height, with the board's border round the whole screen.
+   - The tap takes a whole-screen picture or a square one. With a laser, it draws a
+     whole-screen picture's middle square, with the strip. With no laser on
+     purpose there's never a strip: a square picture, or the setup help, sits in
+     the middle on white bands until a whole-screen picture is sent, and test
+     values are turned down, as there's no strip to test.
+   - Choosing a laser, or no laser, ends any test showing, as it was set up for the
+     old choice, and the strip's redraw rules show the new choice: no laser
+     straight away, and a new laser once its first reading arrives (within a
+     minute), so the strip isn't drawn empty. (At first every choice redrew
+     straight away, which drew a new laser's strip before its first reading.)
+     Going between no laser on purpose and none chosen yet, which the rules can't
+     tell apart, redraws straight away.
+   - Done in 8a, tested on tap 1: `POST /laser` takes `address=none`, and the
+     laser's answers say `"noLaser"`; the choice is kept over a restart and cleared
+     by a factory reset. `POST /image` takes 80,000 or 120,000 bytes. Where the
+     picture goes is worked out in `esp32/lib/Strip/ScreenLayout`, which laptop
+     tests cover for each size of picture on each layout. On tap 1: no laser
+     redrew the square on white bands; a whole-screen picture drew in full; laser
+     1 again showed its middle square with the strip; and sending back the original
+     square was skipped as the same screen, which shows the middle square is cut
+     exactly. The redraw log says "whole screen, no laser" in place of the strip's
+     values.
+   - Done in 8b, tested against a faked tap on the dev server and on tap 1: the
+     laser picker's No laser choice, first in the list as the dots count up from
+     none (also on the setup page),
+     with the mode hidden; on a no-laser tap the preview shows the whole screen,
+     text and images have the square in the middle with the background over the
+     full height, the Background control always shows, a keg state is drawn full
+     height, Send uploads 120,000 bytes and the library gets the 400 x 400 middle
+     square. The preview places either size of picture as the tap does
+     (`screenBytes` in `web/src/screen.ts`, tested against the same cases as the
+     firmware). The Status dialog and the Laser button say "No laser", and saving a
+     laser asks the tap for its strip straight away. In developer mode on a no-laser
+     tap, the test values' strip fields are hidden with a note, as there's no strip
+     to test, and Show on device shows the chosen setup help alone (`POST
+     /strip/test` with just `setupHelp`), keeping the whole-screen layout. (At
+     first test values could keep the strip on a tap switched to no laser
+     mid-test; now a laser change ends the test, and a no-laser tap never shows a
+     strip.) The setup
+     help shown for a test makes the whole screen a test, so it's never taken for a
+     tap that needs setting up: one red border round the whole screen, with or
+     without a laser, in place of the strip's own, so there's no double line
+     through the middle. Test values alone keep the border round the strip. The
+     preview shows the same. On tap 1: No laser redrew its
+     picture on white bands; a text picture sent from the page was stored as 400 x
+     600 and drawn on the whole screen; the reloaded page previewed it in full; laser
+     1 again drew its middle square with the strip.
+   - (8c) Found while testing 8b: laser 1, heard but not measuring, drew a strip
+     with just its dot and the brain over an empty bar, which looked broken. Chosen
+     from a mockup: the top row says what the tap's waiting for, "Waiting for laser
+     1" or "Can't hear laser 1", with the shrug in an empty bar, and the no signal
+     state says so in words over the last level (see Special states, above). The
+     shrug is drawn whole by `app/scripts/strip-glyphs.ts` as one icon: Roboto has
+     every character but ツ, which the script draws at Roboto Bold's stroke weight.
+     The row's 40px font gains the message's letters. Developer mode's test values
+     get No reading (`noReading=true` to `POST /strip/test`, with no numbers): on
+     its own it shows the waiting strip, with No signal the never-heard one. Laptop
+     tests cover each state, and the web preview matches them.
+   - (8d) Found while testing 8c: the page showed Laser 1 while the tap had no
+     laser, and drew a screen the tap never shows (the square with "No laser" in
+     the strip): the page asked for the tap's laser only when it opened and after
+     its own saves, but for the strip every 15 seconds, so a choice made from
+     another page or a lost answer left the two apart. And choosing a laser
+     changed the screen straight away, while a picture waited for Upload to
+     display. Now nothing reaches the screen until Upload to display:
+     - The laser dialog's Use puts the choice in the preview. The Laser box shows
+       it, marked "not sent yet", and the preview draws its strip from the reading
+       the dialog heard (or waiting for one), or the whole screen for no laser.
+       Picking what the tap has is nothing to send.
+     - Upload to display is enabled for a new picture, a picked laser, or both. A
+       picture goes with its laser in one request (`POST /image?laser=…&mode=…`,
+       as `POST /laser` takes them), checked before the picture is saved, so
+       neither is if the laser is turned down. The tap then leaves the redraw to
+       the laser's own rules, so the screen changes once, when the new laser's
+       first reading arrives (within a minute), or straight away for no laser.
+       Without a picture, the laser goes on its own (`POST /laser`). The upload
+       dialog says when the screen will change.
+     - `GET /strip` includes the laser chosen, and the page follows it, so a
+       choice made from another page shows within 15 seconds.
+     - Developer mode's Show on device tests what the preview shows: a picked
+       laser that hasn't been sent goes with the test (`laser` and `mode` to `POST
+       /strip/test`, as `POST /laser` takes them), and the tap draws its dots,
+       mode icon and layout in place of its own, or for no laser the setup help
+       alone on the whole screen. Nothing is saved, and back to live is the tap's
+       own laser. (At first Show on device waited until the picked laser was
+       sent, which got in the way of building the preview.) Tested on tap 1's
+       screen on 2026-11-14: No laser picked and not sent, with the Ready setup
+       help, drew it alone on the whole screen while tap 1 kept laser 1, and Back
+       to live drew its own board and strip.
+   - (8e) Found while testing 8d: after a reload Compose is empty and the preview
+     shows the tap's picture, so picking No laser showed white bands with nothing
+     to choose their background from. Now picking No laser with nothing composed
+     loads the picture on the tap into Compose, at Fit, so the Background control
+     shows; an "Edit the picture on the tap" button in Compose's empty box does
+     the same at any time. It's the beer's original from this tap's library, as
+     it was before the six colours, when that's what's on the screen: sending a
+     picture saves it to the library, or marks it shown, straight after the
+     upload, so a beer last shown at or after the picture's upload time (`GET
+     /status`) is that picture. Otherwise, as for text, a keg state, a beer the
+     full library turned away or a tap whose clock wasn't set, it's the tap's
+     six-colour copy, which comes back pixel for pixel at Fit. A whole-screen
+     picture gives its middle square, the beer, as the library keeps it. Tested
+     on tap 1: both ways loaded the original from the library, and a blurred
+     background filled the bands in the preview.
+   - (8f) Found while testing 8e: Keg empty on the whole screen of a tap with no
+     laser, then a laser picked after a reload, previewed the board's middle
+     square, its border cut off at the top and bottom, as the tap would draw it.
+     The page draws a keg state or text for the layout, but the tap keeps only
+     pixels, and after a reload the page can't draw it again: the Library never
+     gives the last line twice, and dates it today. Now Upload to display sends
+     how the page drew it (`source` with `POST /image`: the keg state's state,
+     line and date, or text's words, font, size, colour and background, as JSON,
+     up to 1KB), kept beside the picture, unread, until another picture replaces
+     it, and given back in `GET /status` (`image.source`). With nothing in
+     Compose, picking a laser on a tap with no laser draws it again for the
+     square, and picking No laser, or "Edit the picture on the tap", draws it
+     again for the whole screen. A beer stays as it is, as its middle square is
+     the beer. A keg state moved or zoomed in the square goes as pixels alone.
+   - (8g) A keg kicked or cleaned last night, with the screen not updated till
+     the morning, needs an earlier date. While a keg state is in Compose, its
+     date and line show there in place of Fit, Fill and Zoom: a date field
+     (never after today) with Today and Yesterday, and Another line, which never
+     gives the line showing, and which the Library's next pick then avoids too.
+     Each draws the board again, and its source carries them. With 8f, a screen
+     a day out is fixed by Edit the picture on the tap, Yesterday, then Upload
+     to display.
+   - (8h) The line can be typed too, for a one-off message: a Line field above
+     the date, with a count of its characters (12/24) inside its right end. It
+     has the list's rules, now in `web/src/keg-line-rules.ts`, shared by the
+     build's check of `config/keg-lines.json` and the page: at most 24
+     characters, only those the chalk font has (an error names any other, and the
+     board keeps the last line that works), and an apostrophe between letters
+     drawn curly. A typed line isn't added to the list; it goes to the tap in the
+     picture's source, so a laser change or Edit the picture on the tap brings it
+     back. A line worth keeping goes in `config/keg-lines.json`.
+9. **Fit the enclosure.** Done 2026-11-15, on all three taps. The case's frame
+   covers a few pixels of each screen, more on some sides than others, and tap 1's
+   window has a bottom edge that isn't level. Calibration screens, with numbered
+   bars along each edge, were read by eye and from photos, and gave each tap a fit
+   in its profile (`"fit"` in `config/tap-N.json`):
+   - `shiftX` and `shiftY` move the whole screen by whole pixels, so it's centred
+     in the window.
+   - `bottomSlant` moves each column of the bottom 200 rows up or down, so the
+     strip follows a window edge that's higher at one side. It's 0 on every tap:
+     tap 1 had 6, but the bar's straight lines showed the steps, so its bar is
+     straight, and about 3 pixels nearer the frame at one end, which hardly shows
+     against the white.
+
+   The fit is built into the firmware, with no route or saved setting: the screen
+   won't move once it's screwed in, so it's set once and kept in the repo, and a
+   factory reset or a new ESP32 keeps it. Changing it means changing the profile
+   and uploading the firmware. The firmware applies it to the finished screen just
+   before drawing (`ScreenLayout::applyFit`), so the web app and its preview are
+   the same on every tap.
+
+   Once centred, the frame hides 14 pixels at the sides and 9 at the top and
+   bottom on every tap (`Strip::HiddenX` and `HiddenY`, the most any tap hides
+   plus a pixel). The strip, the test borders and the keg boards keep inside that,
+   and the strip's messages have a smaller font (36 px) so they still fit. After
+   the fit, the gauges on all three taps were within a bar of each other.
+
+   In the web app, the preview shows what the frame hides with red and yellow
+   stripes, half see-through, with the picture under them blurred, and a line
+   along the window's edge that shows on any picture. A button beside the preview's heading
+   turns it off, remembered by that browser. Zoom goes below Fit, and the Frame
+   dropdown fits a picture to the window's width or height (Frame: W or Frame: H),
+   which the slider snaps to as well.
+
+   The same picture on all three taps, with and without the strip, looked the same
+   in each window (2026-11-15).
+10. **Wrap up,** the last commits on `keg-level` before merging into master. First,
+   a night with all three taps on, their logs then read for crashes, Wi-Fi drops and
+   redraws: done 2026-11-17, 00:39 to 09:00, with the lasers on their delivery boxes
+   (taps 2 and 3 both on laser 2) and each tap's status recorded every minute. All
+   three stayed up all night, answering every minute, with no Wi-Fi drops (signal
+   -42 to -60 dBm). Each heard its laser about every 2s, the longest gap 29s. Free
+   memory held at 71-74 KB, and its lowest since startup never moved (41 KB on tap 1,
+   55 KB on taps 2 and 3). The only redraws were tap 1's level, when its laser went
+   onto its box, and temperature ones as the room cooled, at most one an hour (three
+   on tap 1, one each on taps 2 and 3). Then
+   move the lasting facts into docs: done 2026-11-17, in `docs/rapt-laser-sensor.md`
+   (the sensor and the litres), `docs/display.md` (the screen, the strip, the redraw
+   rules, setup help, no laser and the fit) and `docs/web-app.md` (Compose, the
+   Library, the keg states and developer mode), linked from the READMEs, which now
+   cover the `fit` profile key and the routes, and calling the main page's button
+   "Upload to display". Code comments point to the docs, not this plan. The first
+   review of the whole branch (2026-11-17) found three things. Two were real and are
+   fixed: every laser reading now reaches the strip, not just changed ones, so a
+   steady keg keeps the battery's hour full; and a tap restarts by itself 3s after
+   saving a network from the setup page, rather than when the phone asks, which it
+   couldn't once the access point had closed (tap 1's log showed it four times on
+   9-10 Nov). The third, the preview keeping the old picture after an upload,
+   couldn't happen, as the upload dialog's Close reloaded the page. Close now just
+   closes it, as Escape and clicking outside it do: the page keeps the uploaded
+   picture as the tap's, and labels a composed picture "On the tap" once it's
+   uploaded. Found while checking the Wi-Fi fix on tap 3 (2026-11-17), with laser 3
+   not heard: the "Waiting for laser 3" strip had no mode icon, so changing the mode
+   while waiting showed nowhere, yet the tap still redrew for it. The mode icon now
+   goes in front of the words, or the mode warning in its place. And the upload's
+   message now says a new mode for the same laser redraws straight away, and that
+   an Eco laser's first reading can take up to an hour. Also, straight after Upload
+   to display the preview went back to the old mode for up to 15s: the page asked
+   the tap at once, before the tap had worked out its new strip (every 500ms). The
+   page now keeps showing the laser sent until the tap's answers have it, and asks
+   again a second later.
+
+   The last steps, all done:
+   - Check the Wi-Fi fix on a real tap: done 2026-11-17 on tap 3. The router's
+     2.4 GHz band couldn't be turned off alone, as the extenders broadcast
+     ChromeQ_2.4 too, so tap 3 was factory reset and set up on the phone's
+     hotspot (which had to be switched to 2.4 GHz). With the hotspot then off, it
+     opened its access point after 5 minutes. ChromeQ_2.4 was saved from the
+     phone at 09:03:46Z, and tap 3 restarted by itself 7s later, with no "wifi
+     connected" or "setup access point closed" in between.
+   - Upload the web app to the three taps (the upload dialog's Close): done
+     2026-11-17.
+   - A second review of the whole branch: done 2026-11-17, recommending the merge
+     once the Wi-Fi check above passes, with no other findings.
+   - Move this plan to `docs/plans/2026-11-keg-level.md` with a line at the top
+     saying it is done and when it was merged, then merge: done 2026-11-17, through
+     pull request #1. After that the archived plan is never edited; fixes go in the
+     docs. Ideas still marked Later stay listed there, and each gets its own new
+     plan file when picked up.
+11. **Later:** RAPT cloud upload.
+
+## Open questions and later ideas
+
+- **Show on device's two gaps (2026-11-14), left for later:** a test uses the
+  picture already on the tap, not a new one waiting in Compose, as sending it with
+  the test would need the tap to hold a second picture for the 5 minutes. And the
+  countdown under the preview says what's showing (the setup help, test values or
+  both) from the laser picked now, so picking another laser during a test can make
+  it wrong; `GET /strip` could say whether the tap's test has a strip.
+
+- **The phone can't open the tap's page (2026-11-10), fixed:** on ChromeQ
+  (192.168.0.72), the phone got "This site can't be reached" for the tap and even the
+  router (192.168.0.1), while the laptop reached them all. On the phone's hotspot it
+  failed the same way by address, with ERR_TOO_MANY_RETRIES. The cause was Android
+  17's local network permission, which Settings calls Nearby devices: Chrome had it,
+  but it wasn't in effect (Settings warned it was set for an older Android version).
+  Turning it off and on again fixed it. The phone that hosts the hotspot can't look up
+  the taps' `.local` names, so it uses the tap's address there. Checked at home on
+  2026-11-17: the phone on ChromeQ reaches `davbar-tap1.local` on ChromeQ_2.4 (the
+  same router's 2.4 GHz band), but not with NordVPN on, which hides the local
+  network.
+
+- **Smart or Eco, a per-tap choice (2026-11-02):** default Smart, because the screen
+  stays a few minutes behind a pour and a silent sensor can be flagged. Eco (Ultra
+  Low Power) is there if Smart's battery drain turns out too high, at the cost of the
+  screen being up to about an hour behind. Whether Eco reports a single 500 ml pour
+  (about 14 mm) is untested; step 3's logs will show it. Laser 1 was logged with a
+  laptop; each Ultra Low Power broadcast lasts 2-5 seconds (3-14 advertisements
+  caught):
+  - Switched to Ultra Low Power at 20:16:31; 20:46 and 21:16 skipped.
+  - 21:46:36 to 02:17:38: every slot, 10 readings. The first reported a 9 cm lift
+    made at about 21:30 (like pouring 3 L at once), 16 minutes late.
+  - 02:17:38 to 10:43: nothing heard for 8.5 hours, until a button press. Unproven:
+    the laptop was later found not scanning (see below), so it may have missed these.
+  - Lifted about 25 mm at 10:51 and 12 mm at about 11:26 (two "pints"). First report
+    at 11:43:36, 52 minutes after the first lift. Then 12:43, 13:13, 13:43, 14:14,
+    15:14 and 15:44. Skipped 11:13 (after the level had changed), 12:13 and 14:44,
+    while the laptop was clearly listening.
+  - Nothing heard 16:14-17:44 because the laptop's Bluetooth was restarted (to fix a
+    mouse), which stopped scanning. The logger now records scanning changes and
+    restarts it.
+  - For comparison, Smart Mode (2026-11-01 evening): lowering the sensor 3 cm started
+    Session Mode, with a new reading about every 35 seconds for 5 minutes. It then
+    switched to Smart Mode by itself at 18:20:37 and advertised constantly (up to 12
+    times a minute), but with the same reading, byte for byte, until it was switched
+    back at 19:27, an hour later. (The next evening showed why: it only updates the
+    reading when the level changes.)
+  - Switched back to Ultra Low Power at 19:27:05 with no level change, then nothing
+    at all until at least 05:56 the next morning (10.5 hours), with the laptop
+    scanning the whole time. So the sensor mostly reports after the level changes
+    (a few hours of half-hourly readings, then quiet) and stays silent while the
+    level is steady. No check-in seen within 10.5 hours.
+  - Smart Mode, 2026-11-02 evening (3 hours logged): removing a block as it was
+    switched to Smart started Session Mode at 18:28:21, a new reading about every 35
+    seconds for 4 minutes, then back to Smart at 18:36. Idle, the reading stayed the
+    same for an hour. A lift at about 19:39 was reported at 19:41:07, in Session
+    Mode, which went back to Smart at 19:55 (with Live Stream from 19:45 to 19:48, not
+    started on purpose). Putting the block back (232 to 209 mm) was reported at
+    20:45:38, back to Smart at 20:52.
+    Session readings jitter by 1-3 mm. The longest gap between advertisements heard
+    was 88 seconds, so the 15-minute no signal limit has plenty of margin. In
+    Session and Live Stream the battery read as low as 76.7%, against 85.2-85.6% in
+    Smart, so the highest-in-an-hour battery rule is needed. Smart readings went from
+    85.6% to 85.2% over the 3 hours, too short to judge the drain.
+  The RAPT docs say a bonded receiver "detects a volume change", but the same page
+  calls the sensor the "Screen Board" elsewhere, so the sensor most likely starts
+  Session Mode by itself. Bonding would bring nothing the broadcasts don't already
+  give. Step 3 must check the ESP32's catch rate, because it shares one radio between
+  Wi-Fi and Bluetooth.
+- **Step 3 catch rate (2026-11-07):** with passive scanning, tap 1 heard no lasers
+  for nearly 2 hours while the laptop heard all three; a raw dump showed every Smart
+  Mode advertisement held only the service UUID. Switched to active scanning, the tap
+  heard each laser 176-189 times in 5 minutes, with a longest gap of 14 s, while its
+  setup access point was open. Over 3 hours on home Wi-Fi the longest gap was 15s,
+  apart from 9 minutes while the RAPT app was connected to laser 1, which stops its
+  broadcasts. So the no signal limit is 10 minutes: a dead laser shows soon, and a
+  few minutes in the RAPT app doesn't trigger it. Open: whether answering scan
+  requests from three taps shortens battery life. Step 4 can have each tap ask only
+  its own laser (the Bluetooth accept list), so each laser answers one tap.
+- **Step 3 lift test (2026-11-07, laser 1):** the tap saw a 16 mm lift and the
+  return within seconds, each as Session Mode, and Smart came back about 9 minutes
+  after the level settled. While the RAPT app was connected, laser 1 broadcast
+  nothing at all. Soon after the app was closed, it went from Session into Live
+  Stream for 3.5 minutes with no button pressed, perhaps left over from the app's
+  connection.
+- **Calibration (2026-11-16), done, and the taps use it:** an empty
+  Corny keg with its floating dip tube in, filled with tap water from a 0.5 L jug,
+  laser 1 in Smart, watched through tap 1. After each pour the lid went back on and
+  the laser's Bluetooth button was held for about 2s to start Live Stream; a point
+  counts once 4 readings in a row agree within 2 mm. The bottom 3 L and the top
+  went in 0.5 L at a time, the middle 2 L at a time.
+
+  | In keg | Laser (mm) | Readings, range | Old 552/22 formula | Shown now |
+  | --- | --- | --- | --- | --- |
+  | 0 L | 566 | 9, 566-568 | 0.0 L (0) | 0.0 L |
+  | 0.5 L | 557 | 4, 556-558 | 0.0 L (-0.5) | 0.5 L |
+  | 1 L | 546 | 5, 545-548 | 0.2 L (-0.8) | 1.0 L |
+  | 1.5 L | 528 | 5, 527-530 | 0.8 L (-0.7) | 1.5 L |
+  | 2 L | 512 | 5, 511-514 | 1.4 L (-0.6) | 2.0 L |
+  | 2.5 L | 487 | 4, 486-488 | 2.3 L (-0.2) | 2.5 L |
+  | 3 L | 467 | 5, 465-468 | 3.0 L (0) | 3.0 L |
+  | 5 L | 402 | 4, 401-403 | 5.3 L (+0.3) | 4.9 L |
+  | 7 L | 343 | 6, 342-347 | 7.4 L (+0.4) | 7.0 L |
+  | 9 L | 288 | 6, 286-290 | 9.4 L (+0.4) | 9.0 L |
+  | 11 L | 236 | 4, 235-236 | 11.3 L (+0.3) | 10.9 L |
+  | 13 L | 180 | 4, 179-180 | 13.3 L (+0.3) | 13.0 L |
+  | 15 L | 126 | 6, 124-127 | 15.2 L (+0.2) | 15.0 L |
+  | 15.5 L | 110 | 4, 110 | 15.8 L (+0.3) | 15.6 L |
+  | 16 L | 97 | 4, 96-98 | 16.3 L (+0.3) | 16.0 L |
+  | 16.5 L | 85 | 5, 84-87 | 16.7 L (+0.2) | 16.5 L |
+  | 17 L | 72 | 4, 71-72 | 17.2 L (+0.2) | 17.0 L |
+  | 17.5 L | 58 | 10, 55-60 | 17.7 L (+0.2) | 17.5 L |
+  | 18 L | 49 | 4, 47-49 | 18.0 L (0) | 17.8 L |
+  | 18.5 L | 32 | 4, 32-34 | 18.6 L (+0.1) | 18.8 L |
+  | 19 L | 29 | 5, 27-31 | 18.7 L (-0.3) | 19.0 L |
+
+  What it shows:
+  - The middle is a straight line all the way to the top, and the old formula
+    was within 0.4 L from 3 L to 18.5 L. The domed top doesn't show: the RAPT app's
+    15.8 L at 83 mm (2026-11-07) was the app's own figure, not the keg's shape.
+  - With the old formula the domed bottom read low: up to 0.8 L in the last 3 L,
+    so at 1 L left the tap said 0.2 L, just when it matters whether there's
+    another pint.
+  - The old formula read a steady +0.3 L high in the middle. It wasn't the jug:
+    weighing (below) found 19.1 kg of water for the jug's 19 L, so the jug was
+    right, and the tap now follows it.
+  - Weighing, on bathroom scales, weighed holding the keg less weighed without
+    it, with the lid, laser and dip tube on (1 kg of water is about 1 L):
+    - Full, 19 L by the jug (2026-11-16): 123.2 kg less 99.8 kg, so 23.4 kg.
+    - Empty (2026-11-16): 4.3 kg, the same on the scales alone and as 104.3 kg
+      less 100.0 kg, twice.
+    - So the water weighed 19.1 kg: 0.1 L over the jug's count, within what the
+      scales can tell (about 0.2 kg).
+  - Emptied again (2026-11-16), the keg read 548-556 mm (up to 0.9 L) with the
+    float's ball lying under the beam, and 559-564 mm (0.1-0.3 L) once it was
+    moved, against 566-568 mm dry the night before. Left as it is: under a pint
+    still shows as under a pint, and moving the 0 L point to 560 mm would squeeze
+    the first 0.5 L into 3 mm. With beer in, the ball floats on the surface.
+  - The float's ball can sit under the beam. Refilling to 1.5 L (2026-11-16) with
+    the float in, the reading crept from 533 mm to 508 mm once the ball drifted
+    under the laser, and stayed there for an hour; moved away, it drifted back
+    within 3 minutes. That reads about 0.5 L high near the bottom. Turning the
+    lid made no difference with the keg empty; not tried with the ball floating.
+    To fix in the keg, not the code: keep the ball out of the beam, for example
+    with a shorter tube, or the lid turned so the laser is on the far side.
+  - The ball is 42 mm across. Floating, about 25 mm of it sits above the beer,
+    which the table allows for (`BallAboveBeerMm`). Resting on the bottom of an
+    empty keg, its top could be up to 42 mm above the bottom. On the empty keg
+    it only read 8-16 mm closer (548-556 mm against 564 mm), probably the beam
+    catching its side, as the curved bottom rolls it to the middle and the laser
+    is off-centre. Those readings show 0.0 L. The worst case, the top of a
+    resting ball right under the beam, would read about 522 mm on an empty keg
+    and show 0.7 L. The table can't allow for it: 0.7 L with the ball floating
+    also reads about 522 mm, and treating that as empty would read about 2
+    pints low whenever the ball is out of the way.
+  - To check at the end of a real keg: what the screen shows when it runs dry.
+    More than about 0.3 L would mean the ball's full height reaches the beam,
+    and the empty point should go deeper, by up to 42 mm.
+  - Second run of the bottom 3 L (2026-11-16), the float tied up out of the way,
+    the bottom dried first (a few mm of water left in it read 4-6 mm closer):
+
+    | In keg | First run (mm) | Second run (mm) | The tap showed then (first table) |
+    | --- | --- | --- | --- |
+    | 0 L | 566 | 564 (563-566) | 0.1 L |
+    | 0.5 L | 557 | 557 (556-558) | 0.5 L |
+    | 1 L | 546 | 533 (531-534), the same with the lid reseated | 1.3 L |
+    | 1.5 L | 528 | 519 (519-524) | 1.7 L |
+    | 2 L | 512 | 502 (499-504) | 2.2 L |
+    | 2.5 L | 487 | 482 (481-484), creeping to 475-478 over 15 minutes | 2.6 L |
+    | 3 L | 467 | 465 (463-465) | 3.0 L |
+    | 5 L | 402 | 399, settling to 402 | 4.9 L |
+    | 7 L | 343 | 344 (343-345) | 7.0 L |
+    | 9 L | 288 | 291 (290-291) | 8.9 L |
+
+    The two runs agree at 0, 0.5 and 3 L. Between them the second run read up to
+    13 mm closer, all of it from the pour from 0.5 L to 1 L; after that both rose
+    about the same with each pour. So the bottom repeats to about 0.3 L between
+    fillings, likely from how soon the water reaches the beam's spot, which is
+    off-centre in the curved bottom. From 5 L up the two runs agree within 3 mm,
+    so the ball wasn't in the first run's straight part, and the big step from
+    3 L to 5 L (65 mm against 54 mm for 2 L of straight sides) is the keg itself.
+
+    The table's bottom 3 L now come from the second run, moved 25 mm closer for
+    the float's ball (see "Litres and percentage"). Both float-down fillings
+    read the bottom further than the tied-up one, which only shows less. With
+    the ball in the beam it shows what's there; out of the way, less:
+
+    | In keg | Ball in the beam | Second run, tied up | First run, float down |
+    | --- | --- | --- | --- |
+    | 0 L | 0.0 L (548-556 mm) | 0.0 L | 0.0 L |
+    | 0.5 L | | 0.0 L | 0.0 L |
+    | 1 L | | 0.4 L | 0.0 L |
+    | 1.5 L | 1.0 L (508 mm) | 0.7 L | 0.5 L |
+    | 2 L | | 1.2 L | 0.9 L |
+    | 2.5 L | | 1.8 L | 1.7 L |
+    | 3 L | | 2.3 L | 2.2 L |
+    | 5 L | | 4.8-5.0 L | 4.8 L |
+  - Above 18.5 L the laser is as close as it can measure: 19 L read only 3 mm
+    nearer than 18.5 L, and the laser read 21-23 mm whenever the lid was lifted
+    off. So anything at 29 mm or less is full.
+  - In the first run the floating ball didn't show: readings settled within 2-3
+    mm at every level, apart from 17.5 L (55-60 mm before settling). With more
+    beer in, the float's silicone tube seems to curl round the keg's side, out of
+    the beam; near the bottom it hangs straight down, and the curved bottom
+    steers the ball towards the middle, under the laser.
+
+  What changed (2026-11-16): the tap works out the litres from these points (see
+  "Litres and percentage"), with the bottom 3 L later replaced by the second
+  run's (below). The domed bottom is every point up to 3 L; above it
+  the keg is one straight line, fitted to the readings from 5 L to 18.5 L, which
+  are all within 0.2 L; and 29 mm or less is full. Only 18.5 L is further out
+  (18.8 L), where the laser is near its closest. One table for every keg, as the
+  lasers sit alike in their lids (each read 84-89 mm on its 85 mm delivery box).
+  The distance is from about the underside of the lid, as the laser's housing
+  hangs about 15 mm below it.
+- **Signal margin:** watch signal strength in step 3 and move the antenna if readings
+  are missed.
+- **RAPT cloud:** the public API has no level device type. External Devices (paid
+  subscription, one reading per 15 minutes) only accepts temperature, gravity,
+  pressure, signal strength and battery, so the level would have to go in a spare
+  field. Decide later.

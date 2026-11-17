@@ -1,13 +1,19 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// A tap the web app's tap switcher links to.
+export type TapLink = {
+  deviceName: string;
+  deviceId: string;
+  url: string;
+};
 
 export type DeviceConfig = {
   brandName: string;
   deviceName: string;
   deviceId: string;
   hostname: string;
-  accessPointPassword: string;
   accessPointName: string;
   uploadHost: string;
   uploadUrl: string;
@@ -15,59 +21,46 @@ export type DeviceConfig = {
   outputFileName: string;
   appTitle: string;
   connectTitle: string;
+  // Every tap with a profile next to this one, this tap included.
+  taps: TapLink[];
 };
 
-type DeviceConfigInput = Pick<
-  DeviceConfig,
-  "brandName" | "deviceName" | "deviceId" | "hostname" | "accessPointPassword"
->;
+type DeviceConfigInput = Pick<DeviceConfig, 'brandName' | 'deviceName' | 'deviceId' | 'hostname'>;
 
-const appDirectory = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "..",
-);
-export const repositoryDirectory = path.resolve(appDirectory, "..");
-export const defaultConfigPath = path.join(
-  repositoryDirectory,
-  "config/default.json",
-);
+const appDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const repositoryDirectory = path.resolve(appDirectory, '..');
+// The device commands require a profile; the web dev server falls back to the
+// example.
+export const defaultConfigPath = path.join(repositoryDirectory, 'config/example.json');
 
 const requiredKeys: Array<keyof DeviceConfigInput> = [
-  "brandName",
-  "deviceName",
-  "deviceId",
-  "hostname",
-  "accessPointPassword",
+  'brandName',
+  'deviceName',
+  'deviceId',
+  'hostname',
 ];
 
 const readInput = (configPath: string): DeviceConfigInput => {
   let value: unknown;
 
   try {
-    value = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    value = JSON.parse(fs.readFileSync(configPath, 'utf8'));
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`Unable to read device config ${configPath}: ${reason}`);
+    throw new Error(`Unable to read device config ${configPath}: ${reason}`, { cause: error });
   }
 
-  if (typeof value !== "object" || value === null) {
+  if (typeof value !== 'object' || value === null) {
     throw new Error(`Device config ${configPath} must contain a JSON object.`);
   }
 
   for (const key of requiredKeys) {
-    if (
-      !(key in value) ||
-      typeof value[key as keyof typeof value] !== "string"
-    ) {
-      throw new Error(
-        `Device config ${configPath} must define a string "${key}".`,
-      );
+    if (!(key in value) || typeof value[key as keyof typeof value] !== 'string') {
+      throw new Error(`Device config ${configPath} must define a string "${key}".`);
     }
 
     if ((value[key as keyof typeof value] as string).trim().length === 0) {
-      throw new Error(
-        `Device config ${configPath} must define a non-empty "${key}".`,
-      );
+      throw new Error(`Device config ${configPath} must define a non-empty "${key}".`);
     }
   }
 
@@ -75,57 +68,81 @@ const readInput = (configPath: string): DeviceConfigInput => {
 
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(input.hostname)) {
     throw new Error(
-      `Device config ${configPath} hostname must contain only lowercase letters, numbers, and internal hyphens.`,
-    );
-  }
-
-  if (
-    input.accessPointPassword.length < 8 ||
-    input.accessPointPassword.length > 63
-  ) {
-    throw new Error(
-      `Device config ${configPath} accessPointPassword must be 8-63 characters.`,
+      `Device config ${configPath} hostname must contain only lowercase letters, numbers, and internal hyphens.`
     );
   }
 
   return input;
 };
 
-export const resolveDeviceConfigPath = (
-  selectedPath = process.env.DEVICE_CONFIG,
-): string =>
-  selectedPath
-    ? path.resolve(repositoryDirectory, selectedPath)
-    : defaultConfigPath;
+const tapHost = (input: DeviceConfigInput) => `${input.hostname}-${input.deviceId}.local`;
+
+// The taps with a profile next to this one, such as config/tap-2.json, that share
+// its brand and hostname. That leaves out the example, the laser list and anything
+// else that isn't a tap's profile; the secrets file is never read.
+const readTapList = (configPath: string, input: DeviceConfigInput): TapLink[] => {
+  const directory = path.dirname(configPath);
+  const taps: TapLink[] = [];
+
+  for (const fileName of fs.readdirSync(directory)) {
+    if (!fileName.endsWith('.json') || fileName.startsWith('secrets')) {
+      continue;
+    }
+
+    let other: DeviceConfigInput;
+
+    try {
+      other = readInput(path.join(directory, fileName));
+    } catch {
+      continue;
+    }
+
+    if (other.brandName === input.brandName && other.hostname === input.hostname) {
+      taps.push({
+        deviceName: other.deviceName,
+        deviceId: other.deviceId,
+        url: `http://${tapHost(other)}/`,
+      });
+    }
+  }
+
+  // "Tap 2" before "Tap 10"
+  return taps.sort((a, b) =>
+    a.deviceName.localeCompare(b.deviceName, undefined, { numeric: true })
+  );
+};
+
+export const resolveDeviceConfigPath = (selectedPath = process.env.DEVICE_CONFIG): string =>
+  selectedPath ? path.resolve(repositoryDirectory, selectedPath) : defaultConfigPath;
 
 export const loadDeviceConfig = (selectedPath = process.env.DEVICE_CONFIG) => {
   const configPath = resolveDeviceConfigPath(selectedPath);
   const input = readInput(configPath);
   const outputFileStem = input.brandName
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  const uploadHost = `${input.hostname}.local`;
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const uploadHost = tapHost(input);
   const config: DeviceConfig = {
     ...input,
     accessPointName: `${input.brandName} ${input.deviceName}`,
     uploadHost,
     uploadUrl: `http://${uploadHost}`,
     defaultText: input.brandName,
-    outputFileName: `${outputFileStem || "display"}-text.bin`,
-    appTitle: `${input.brandName} Display`,
-    connectTitle: `${input.brandName} | Configure WiFi`,
+    outputFileName: `${outputFileStem || 'display'}-text.bin`,
+    appTitle: `${input.brandName} Display | ${input.deviceName}`,
+    connectTitle: `${input.brandName} | Set up ${input.deviceName}`,
+    taps: readTapList(configPath, input),
   };
 
   return { config, configPath };
 };
 
 export const printDeviceConfig = (config: DeviceConfig, configPath: string) => {
-  console.log(
-    `Device config: ${path.relative(repositoryDirectory, configPath)}`,
-  );
+  console.log(`Device config: ${path.relative(repositoryDirectory, configPath)}`);
   console.log(`Brand: ${config.brandName}`);
   console.log(`Device: ${config.deviceName} (${config.deviceId})`);
   console.log(`Access point: ${config.accessPointName}`);
   console.log(`Hostname: ${config.uploadHost}`);
+  console.log(`Taps: ${config.taps.map((tap) => tap.deviceName).join(', ')}`);
 };

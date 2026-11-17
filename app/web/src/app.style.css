@@ -1,3 +1,14 @@
+/* Permanent Marker, for the keg states' chalk writing (keg-states.ts), trimmed by
+   app/scripts/fonts-subset.ts and built into this page only. Licensed under the
+   Apache License 2.0. */
+@font-face {
+  font-family: 'Permanent Marker';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('./fonts/permanent-marker.woff2') format('woff2');
+}
+
 .app-shell {
   width: min(1400px, calc(100% - 48px));
   margin: 0 auto;
@@ -17,6 +28,81 @@
 .app-header h1,
 .app-header .eyebrow {
   margin: 0;
+}
+
+/* The heading and the tap switcher after it, at the heading's size, wrapping
+   like one line of text */
+.app-title {
+  font-size: clamp(1.65rem, 3vw, 2.45rem);
+}
+
+.app-title h1 {
+  display: inline;
+  margin-right: 0.3em;
+  font-size: inherit;
+}
+
+.tap-switcher {
+  position: relative;
+  display: inline-block;
+}
+
+.tap-switcher .tap-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  padding-right: 8px;
+  border: 0;
+  cursor: pointer;
+}
+
+.tap-switcher .tap-badge:hover,
+.tap-switcher .tap-badge[aria-expanded='true'] {
+  background: var(--accent);
+}
+
+.tap-switcher-chevron {
+  width: 0.6em;
+  height: 0.6em;
+}
+
+.tap-menu {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  box-shadow: 0 12px 30px rgba(26, 26, 23, 0.18);
+  font-size: 0.95rem;
+}
+
+.tap-menu a,
+.tap-menu span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 12px;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tap-menu a:hover,
+.tap-menu a:focus-visible {
+  color: var(--accent);
+  background: rgba(239, 45, 86, 0.06);
+}
+
+.tap-menu [aria-current='page'] {
+  color: var(--muted);
 }
 
 .settings-menu {
@@ -144,6 +230,64 @@ h2 {
   background: var(--accent-hover);
 }
 
+/* The window's width or height, as a dropdown that looks like the buttons
+   beside it, with a chevron to show it opens. Its label is drawn here, and the
+   dropdown lies over it, unseen, so a click or tap opens its menu. */
+.window-pick {
+  position: relative;
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 68px;
+  padding: 7px 9px 7px 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.window-label {
+  display: grid;
+  justify-items: center;
+}
+
+.window-label > span {
+  grid-area: 1 / 1;
+}
+
+.window-label > span + span {
+  visibility: hidden;
+}
+
+.window-pick select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  opacity: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.window-pick:has(select:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.window-pick.active {
+  color: #fff;
+  background: var(--accent);
+}
+
+.window-pick.active:hover {
+  background: var(--accent-hover);
+}
+
+.window-pick option {
+  color: var(--ink);
+  background: #fff;
+}
+
 .canvas-stage {
   position: relative;
   display: grid;
@@ -160,7 +304,11 @@ h2 {
     linear-gradient(-45deg, #e3e0d8 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #e3e0d8 75%),
     linear-gradient(-45deg, transparent 75%, #e3e0d8 75%);
-  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-position:
+    0 0,
+    0 6px,
+    6px -6px,
+    -6px 0;
   background-size: 12px 12px;
   box-shadow: 0 14px 34px rgba(43, 40, 31, 0.1);
 }
@@ -180,6 +328,215 @@ h2 {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* The image is square; the preview shows the whole 400 x 600 screen. */
+.image-stage {
+  aspect-ratio: 1;
+}
+
+/* An image bigger than the square can be dragged to choose what shows. */
+.image-stage.can-pan {
+  cursor: grab;
+  touch-action: none;
+}
+
+.image-stage.can-pan:active {
+  cursor: grabbing;
+}
+
+.fit-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+/* On a phone, Zoom goes below the four buttons rather than squeezing beside them */
+.fit-row .zoom-field {
+  min-width: 180px;
+}
+
+.fit-row .mode-switch {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+/* A keg state's date and line, in place of Fit, Fill and Zoom */
+.keg-row {
+  flex-wrap: wrap;
+}
+
+/* Never narrower than its date, so on a phone Today and Yesterday wrap below */
+.text-field.keg-date-field {
+  flex: 1 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.text-field.keg-date-field input {
+  flex: 1;
+  width: 140px;
+}
+
+/* As tall as the date field beside it */
+.keg-row .mode-switch {
+  min-height: 42px;
+}
+
+.text-field.keg-line-field {
+  flex: 1 1 240px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The labels the same width, so the line and date fields line up */
+.keg-row .text-field > span:first-child {
+  min-width: 52px;
+}
+
+.keg-line-input {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.keg-line-input input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 52px;
+}
+
+/* How many characters of the most, inside the field's right end */
+.keg-line-count {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.keg-line-count.is-full {
+  color: var(--accent);
+}
+
+.fit-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.text-field.zoom-field,
+.text-field.background-style-field {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.background-picker {
+  margin-top: 14px;
+}
+
+.text-controls > .wide-field > .colour-picker,
+.text-controls .background-picker {
+  margin-top: 4px;
+}
+
+.text-field.background-style-field select {
+  flex: 1;
+}
+
+.text-field.zoom-field input {
+  flex: 1;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--accent);
+}
+
+/* After the eyedropper button, clicking the image takes a colour from it. */
+.image-stage.can-pick {
+  cursor: crosshair;
+}
+
+.colour-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+  color: #66645c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.colour-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.colour-picker-row input {
+  width: 56px;
+  height: 36px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+.colour-swatch,
+.eyedropper-button,
+.reverse-gradient-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--line);
+}
+
+.colour-swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.eyedropper-button,
+.reverse-gradient-button {
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.eyedropper-button {
+  margin-left: 4px;
+}
+
+.eyedropper-button:hover,
+.reverse-gradient-button:hover {
+  color: #fff;
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.eyedropper-button[aria-pressed='true'] {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.eyedropper-button[aria-pressed='true']:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
 }
 
 .canvas-placeholder {
@@ -223,7 +580,7 @@ h2 {
 }
 
 .source-controls {
-  margin: auto auto 0;
+  margin: 0 auto;
 }
 
 .upload-row {
@@ -233,42 +590,306 @@ h2 {
 .file-picker {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   min-height: 52px;
-  padding: 8px 8px 8px 16px;
+  padding: 8px 8px 8px 6px;
   border: 1px solid var(--line);
   background: var(--paper);
   font-size: 0.82rem;
 }
 
-.file-picker span {
-  min-width: 0;
-  overflow: hidden;
-  color: #66645c;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.file-picker:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.file-picker strong {
+.file-picker input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 0;
+  color: var(--ink);
+  background: none;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+.file-picker input::placeholder {
+  color: #66645c;
+}
+
+.file-picker input:focus-visible {
+  outline: none;
+}
+
+/* Browse and Library fill the picker's height, so they always match */
+.browse-button {
+  display: flex;
   flex: none;
+  align-self: stretch;
+  align-items: center;
   padding: 10px 15px;
   color: #fff;
   background: var(--accent);
   font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
-.file-picker:hover strong {
+.browse-button:hover {
   background: var(--accent-hover);
+}
+
+/* Opens the beer library, beside Browse */
+.library-button {
+  display: inline-flex;
+  flex: none;
+  align-self: stretch;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 13px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.library-button:hover {
+  color: #fff;
+  background: var(--accent);
+}
+
+.library-button:disabled,
+.library-button:disabled:hover {
+  cursor: not-allowed;
+  color: var(--accent);
+  background: transparent;
+  opacity: 0.45;
+}
+
+/* In the empty Compose box: puts the picture on the tap in Compose, to edit */
+.library-button.tap-picture-button {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  align-self: auto;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: var(--paper);
+}
+
+.library-button.tap-picture-button:hover {
+  background: var(--accent);
+}
+
+.app-modal.library-modal {
+  width: min(100%, 760px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.library-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.library-heading .modal-icon {
+  flex: none;
+  margin: 0;
+}
+
+.app-modal .library-summary {
+  margin: 2px 0 0;
+}
+
+/* The spinner before "Asking Tap 2 and Tap 3…" while taps haven't answered, in
+   line with the text so a narrow screen wraps it like the rest of the line */
+.library-asking svg {
+  margin-right: 5px;
+  vertical-align: -2px;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 14px;
+  margin: 0 0 24px;
+  padding: 0;
+  list-style: none;
+}
+
+.library-beer {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: none;
+  text-align: left;
+}
+
+.library-thumbnail {
+  position: relative;
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.library-thumbnail img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.library-thumbnail .upload-spinner {
+  position: relative;
+  color: var(--accent);
+}
+
+.library-beer:hover:not(:disabled) .library-thumbnail,
+.library-beer:focus-visible .library-thumbnail {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.library-beer:disabled {
+  cursor: progress;
+}
+
+.library-beer-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.library-grid li {
+  position: relative;
+}
+
+/* The round tick in each beer's corner, to choose beers to remove: shown on
+   hover with a mouse, always on a touch screen, and on every beer once one is
+   ticked. The button is bigger than the circle, to be easy to tap. */
+.library-check {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.library-grid li:hover .library-check,
+.library-grid.is-selecting .library-check,
+.library-check:focus-visible {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .library-check {
+    opacity: 1;
+  }
+}
+
+.library-check-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(26, 26, 23, 0.35);
+  box-shadow: 0 1px 4px rgba(26, 26, 23, 0.35);
+}
+
+/* Only with a mouse: a phone keeps the last tapped button "hovered" */
+@media (hover: hover) {
+  .library-grid li:not(.is-selected) .library-check:hover:not(:disabled) .library-check-mark {
+    background: rgba(26, 26, 23, 0.6);
+  }
+}
+
+.library-grid li.is-selected .library-check-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.library-grid li.is-selected .library-thumbnail {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The keg states can't be removed, so they fade while choosing beers to remove */
+.library-grid.is-selecting .library-keg {
+  opacity: 0.4;
+}
+
+.library-grid.is-selecting .library-keg .library-beer:disabled {
+  cursor: default;
+}
+
+.library-keg .library-thumbnail {
+  background: #000;
+}
+
+.library-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.app-modal .library-confirm {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+/* "Tick beers to remove them", left of Close */
+.app-modal .library-hint {
+  flex: 1 1 200px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.app-modal .library-notice {
+  margin: 0 0 16px;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.library-modal .laser-modal-error {
+  margin: 0 0 16px;
+}
+
+.app-modal .library-empty {
+  margin: 0 0 24px;
 }
 
 .text-controls {
   display: grid;
-  grid-template-columns: minmax(105px, 1.4fr) 74px 66px 66px 42px;
+  grid-template-columns: minmax(0, 1fr) 74px;
   gap: 10px;
 }
 
-.text-field,
-.colour-field {
+.text-field {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -281,14 +902,6 @@ h2 {
 
 .wide-field {
   grid-column: 1 / -1;
-}
-
-.font-family-field {
-  grid-column: span 2;
-}
-
-.gradient-mode-field {
-  grid-column: span 2;
 }
 
 .text-field input,
@@ -306,33 +919,6 @@ h2 {
 
 .text-field textarea {
   resize: vertical;
-}
-
-.colour-field input {
-  width: 100%;
-  height: 42px;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--paper);
-}
-
-.reverse-gradient-button {
-  align-self: end;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  background: var(--paper);
-  font-size: 1.2rem;
-  line-height: 1;
-}
-
-.reverse-gradient-button:hover {
-  color: #fff;
-  border-color: var(--ink);
-  background: var(--ink);
 }
 
 .preview-state {
@@ -363,6 +949,64 @@ h2 {
 .preview-stage {
   border-style: solid;
   background: #fff;
+}
+
+/* The case's frame round the preview. What it covers has red and yellow stripes,
+   like hazard tape, all at the same angle, and see-through, so what it hides can
+   still be made out. The window's edge is a line in the opposite colour to
+   whatever is under it, so it shows on any picture, even a black keg board.
+   --hidden-x and --hidden-y are how far the frame reaches in, set by the app. */
+.preview-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The stripes cover the whole preview, with the window cut out, so they meet
+   at the corners. The picture under them is blurred, so its dithered dots
+   don't show through and make the stripes look dotted too. */
+.preview-hatch {
+  position: absolute;
+  inset: 0;
+  backdrop-filter: blur(2px);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(214, 40, 40, 0.5) 0 5px,
+    rgba(255, 204, 0, 0.5) 5px 10px
+  );
+  clip-path: polygon(
+    evenodd,
+    0 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 0,
+    var(--hidden-x) var(--hidden-y),
+    calc(100% - var(--hidden-x)) var(--hidden-y),
+    calc(100% - var(--hidden-x)) calc(100% - var(--hidden-y)),
+    var(--hidden-x) calc(100% - var(--hidden-y)),
+    var(--hidden-x) var(--hidden-y)
+  );
+}
+
+/* Apart from the hatching, as its line is blended with the picture */
+.preview-window {
+  position: absolute;
+  inset: var(--hidden-y) var(--hidden-x);
+}
+
+.preview-window::after {
+  position: absolute;
+  inset: -1px;
+  border: 1px solid #fff;
+  content: '';
+  mix-blend-mode: difference;
+}
+
+.panel-heading .frame-button.active {
+  color: #fff;
+  border-color: var(--ink);
+  background: var(--ink);
 }
 
 .pixel-mark {
@@ -443,6 +1087,206 @@ h2 {
   color: #949189;
   border-color: #cbc8bf;
   background: #dcd9d1;
+}
+
+.laser-button {
+  display: flex;
+  min-width: 0;
+  min-height: 50px;
+  margin-left: auto;
+  padding: 0 14px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+
+.laser-button:hover {
+  border-color: var(--accent);
+}
+
+.laser-button strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* A laser picked for the preview, which Upload to display hasn't sent yet */
+.laser-button.is-picked {
+  border-color: var(--accent);
+}
+
+.laser-button.is-picked .upload-label {
+  color: var(--accent);
+}
+
+/* Developer mode's test values, under the preview */
+.test-values {
+  display: grid;
+  width: min(100%, 500px);
+  margin: 24px auto 0;
+  padding: 18px;
+  gap: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.test-values-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.test-values h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.test-values-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.test-values .message {
+  margin: 0;
+}
+
+.test-values-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 88px;
+  gap: 10px;
+}
+
+/* The percentage and its litres on the first row, then temperature and battery */
+.test-percent-field {
+  grid-column: span 2;
+}
+
+.test-percent-field > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.test-percent-field input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  accent-color: var(--accent);
+}
+
+.test-percent-field input[type='number'] {
+  width: 68px;
+}
+
+/* Not used with No reading */
+.test-values-fields input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Developer mode's Setup help choice: Off, 1 or 2 */
+.test-setup-help {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  color: #66645c;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.test-setup-help .mode-switch {
+  display: inline-flex;
+  text-transform: none;
+}
+
+.test-values-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.test-values .checkbox-option {
+  margin: 0;
+}
+
+.test-values-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.test-countdown {
+  margin: 0 auto 0 0;
+  font-size: 0.78rem;
+}
+
+.test-countdown strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The developer mode switch in Settings */
+.settings-list .settings-switch {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-left: auto;
+  border-radius: 10px;
+  background: var(--line);
+  transition: background 0.15s;
+}
+
+.settings-list .settings-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.settings-list [aria-checked='true'] .settings-switch {
+  background: var(--accent);
+}
+
+.settings-list [aria-checked='true'] .settings-switch::after {
+  transform: translateX(14px);
+}
+
+.laser-modal {
+  width: min(100%, 480px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.laser-modal-actions {
+  margin-top: 24px;
+}
+
+.app-modal .laser-modal-error {
+  margin: 16px 0 0;
+  color: #a72e1c;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .message {
@@ -542,6 +1386,10 @@ h2 {
   background: rgba(239, 45, 86, 0.06);
 }
 
+.settings-list svg {
+  flex: none;
+}
+
 .settings-list span {
   display: grid;
   gap: 3px;
@@ -587,6 +1435,35 @@ h2 {
   text-align: right;
 }
 
+.checkbox-option {
+  display: flex;
+  margin: -6px 0 24px;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Several options, such as the factory reset's */
+.checkbox-options {
+  display: grid;
+  margin: -6px 0 24px;
+  gap: 12px;
+}
+
+.checkbox-options .checkbox-option {
+  margin: 0;
+}
+
+.checkbox-option input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -594,8 +1471,12 @@ h2 {
 }
 
 .modal-button {
+  display: inline-flex;
   min-height: 42px;
   padding: 0 16px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: 1px solid var(--line);
   color: var(--ink);
   background: transparent;
@@ -605,6 +1486,11 @@ h2 {
 
 .modal-button:hover {
   border-color: var(--ink);
+}
+
+.modal-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .destructive-button {
@@ -630,7 +1516,7 @@ h2 {
   background: rgba(239, 45, 86, 0.08);
 }
 
-.forget-modal-icon {
+.factory-reset-modal-icon {
   color: var(--accent);
   border-color: rgba(239, 45, 86, 0.25);
   background: rgba(239, 45, 86, 0.08);
@@ -678,7 +1564,6 @@ h2 {
   }
 
   .panel {
-    min-height: 780px;
     padding-right: 16px;
     padding-left: 16px;
   }
@@ -698,33 +1583,6 @@ h2 {
     min-width: 58px;
   }
 
-  .text-controls {
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-  }
-
-  .wide-field {
-    grid-column: 1 / -1;
-  }
-
-  .font-family-field {
-    grid-column: span 5;
-  }
-
-  .gradient-mode-field {
-    grid-column: span 4;
-  }
-
-  .size-field,
-  .text-colour-field,
-  .background-colour-field,
-  .gradient-colour-field {
-    grid-column: span 1;
-  }
-
-  .reverse-gradient-button {
-    width: 100%;
-  }
-
   .upload-row {
     align-items: stretch;
     flex-direction: column;
@@ -732,6 +1590,18 @@ h2 {
 
   .upload-button {
     width: 100%;
+  }
+
+  .laser-button {
+    margin-left: 0;
+  }
+
+  .test-values-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .test-percent-field {
+    grid-column: 1 / -1;
   }
 }
 

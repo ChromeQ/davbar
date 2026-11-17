@@ -1,8 +1,13 @@
 #include <Arduino.h>
-#include <LittleFS.h>
 
 #include "DEV_Config.h"
+#include "DeviceLog.h"
 #include "ImageManager.h"
+#include "LaserScanner.h"
+#include "LibraryManager.h"
+#include "SetupHelpManager.h"
+#include "Storage.h"
+#include "StripManager.h"
 #include "WifiManager.h"
 
 void setup()
@@ -11,27 +16,27 @@ void setup()
 
     DEV_Module_Init();
 
-    Serial.println("Mounting filesystem...");
-    if (!LittleFS.begin())
+    // Keep going if a filesystem fails to mount: WiFi and the web server
+    // still start, so the problem can be seen and fixed.
+    bool storageMounted = mountStorage();
+
+    startDeviceLog();
+    if (!storageMounted)
     {
-        Serial.println("LittleFS mount failed");
-        return;
+        logEvent("storage error", "a filesystem failed to mount, see the serial output");
     }
 
-    // Remove WiFi credentials to force AP mode for testing
-    // LittleFS.remove("/wifi.json");
-    // Serial.println("Removed WiFi credentials");
-    
-    Serial.println("Connecting WiFi...");
-    if (!connectWifi())
-    {
-        return;
-    }
-    
+    startLibrary();
+
+    Serial.println("Starting WiFi...");
+    startWifi();
+
     Serial.println("Starting web server...");
     startWebServer();
 
-    requestImageUpdate();
+    startLaserScanner();
+
+    startStripManager();
 
     Serial.println("Ready");
 }
@@ -41,4 +46,12 @@ void loop()
     processWifiManager();
 
     processImageManager();
+
+    processLaserScanner();
+
+    processStripManager();
+
+    processSetupHelp();
+
+    processDeviceLog();
 }

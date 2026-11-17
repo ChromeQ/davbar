@@ -1,38 +1,227 @@
-import { StrictMode, useEffect, useRef, useState, type DragEvent } from 'react';
+import {
+  StrictMode,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Activity,
   CheckCircle2,
+  ChevronDown,
   CircleAlert,
+  Download,
+  Frame,
+  FlaskConical,
+  Gauge,
+  ImageUp,
+  Library,
   LoaderCircle,
   Power,
   RefreshCw,
+  RotateCcw,
   Settings,
+  Shuffle,
   Trash2,
-  WifiOff,
 } from 'lucide-react';
 
-import { decodeSpectra6, encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import { encodeSpectra6 } from '@chromeq/davbar-spectra6';
+import { BackgroundPicker } from './background-picker';
+import { ColourPicker } from './colour-picker';
 import { deviceConfig } from './device-config';
+import {
+  fetchImage,
+  imageAddress,
+  imageFile,
+  isImageAddress,
+  NOT_AN_IMAGE_ADDRESS,
+} from './image-source';
+import { LaserDots, LaserPicker, useLaserPicker } from './laser-picker';
+import {
+  beerOnScreen,
+  beerPictures,
+  fetchBeerFile,
+  fetchTapLibrary,
+  saveBeer,
+  thumbnailOf,
+  type SaveResult,
+} from './library';
+import { lineLength, MAX_LINE_LENGTH, tidyLine, typedLineProblem } from './keg-line-rules';
+import {
+  dateFieldValue,
+  drawKegState,
+  kegDate,
+  kegDateWord,
+  kegLines,
+  kegStateName,
+  kegStatePicture,
+  pickLine,
+  rememberLine,
+  yesterday,
+  type KegState,
+} from './keg-states';
+import { LibraryDialog, thisTap, thisTapLibrary } from './library-dialog';
+import {
+  byLaserNumber,
+  chooseLaser,
+  fetchChosenLaser,
+  laserName,
+  modeLabel,
+  NO_LASER,
+  readTapLaser,
+  type ChosenLaser,
+  type TapLaser,
+  type LaserItem,
+} from './lasers';
+import {
+  pendingSentPick,
+  pickedStripValues,
+  pickedTapLaser,
+  pickQuery,
+  sentLaserMessage,
+  tapHasPick,
+  type LaserPick,
+} from './laser-pick';
+import {
+  backgroundColours,
+  CENTRED,
+  drawImageInSquare,
+  fillZoom,
+  FIT_ZOOM,
+  BAND_HEIGHT,
+  hasGaps,
+  IMAGE_SIZE,
+  overflows,
+  paintBackground,
+  panBy,
+  SCREEN_HEIGHT,
+  SCREEN_WIDTH,
+  screenPixels,
+  zoomFromSlider,
+  visibleSquare,
+  windowZoom,
+  zoomSlider,
+  type Background,
+  type BackgroundColour,
+  type Pan,
+} from './screen';
+import { drawStrip, HIDDEN_X, HIDDEN_Y, STRIP_SIZE } from './strip';
+import { showLiveValues, showSetupHelpTest, showTestValues, useStripState } from './strip-values';
+import { sourceText, TEXT_FONTS, type PictureSource } from './picture-source';
+import {
+  fetchTapImage,
+  fetchTapImageInfo,
+  isOnTheTap,
+  tapPictureBlob,
+  type TapImageInfo,
+} from './tap-image';
+import { TapSwitcher } from './tap-switcher';
+import {
+  DEFAULT_TEST_INPUTS,
+  readTestInputs,
+  showsSetupHelp,
+  testEndsAt,
+  type SetupHelpScreen,
+  type TestInputs,
+  type TestRequest,
+} from './test-values';
+import { fetchSetupHelp } from './setup-help';
+import { loadDeveloperMode, saveDeveloperMode, TestValuesPanel } from './test-values-panel';
+
+// Whether the preview shows what the case's frame covers, remembered by this
+// browser for each tap's page. On unless turned off, and if the browser keeps
+// nothing.
+const SHOW_FRAME_KEY = 'davbar-show-frame';
+
+const loadShowFrame = () => {
+  try {
+    return window.localStorage.getItem(SHOW_FRAME_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+};
+
+const saveShowFrame = (on: boolean) => {
+  try {
+    if (on) {
+      window.localStorage.removeItem(SHOW_FRAME_KEY);
+    } else {
+      window.localStorage.setItem(SHOW_FRAME_KEY, 'off');
+    }
+  } catch {
+    // Not remembered: it still changes for this page.
+  }
+};
 import './common.style.css';
 import './app.style.css';
 
-const DISPLAY_WIDTH = 400;
-const DISPLAY_HEIGHT = 600;
 const IMAGE_UPLOAD_URL = '/image';
 const DEFAULT_TEXT = deviceConfig.defaultText;
 const DEFAULT_FONT_FAMILY = 'Roboto';
 const DEFAULT_FONT_SIZE = 64;
-const DEFAULT_TEXT_COLOUR = '#171713';
-const DEFAULT_BACKGROUND_COLOUR = '#f7f5ee';
-const DEFAULT_GRADIENT_COLOUR = '#ef2d56';
+const DEFAULT_TEXT_COLOUR = '#000000';
+// Both modes start on white, with black as a gradient's end: both are clean on the
+// screen, and white suits KegLand's product shots.
+const DEFAULT_BACKGROUND: Background = {
+  style: 'solid',
+  colour: '#ffffff',
+  endColour: '#000000',
+};
+
+const sameBackground = (one: Background, other: Background) =>
+  one.style === other.style && one.colour === other.colour && one.endColour === other.endColour;
 
 type SourceFrame = {
+  // The 400 x 400 square: the picture saved to the library.
   pixels: Uint8ClampedArray;
+  // On a tap with no laser on purpose, the whole 400 x 600 screen, which is sent
+  // instead: the square in the middle with its background above and below
+  // (docs/display.md, No laser on purpose). Otherwise null.
+  whole: Uint8ClampedArray | null;
+};
+
+// A canvas for the whole screen, drawn off the page.
+const wholeScreenCanvas = () => {
+  const canvas = document.createElement('canvas');
+  canvas.width = IMAGE_SIZE;
+  canvas.height = SCREEN_HEIGHT;
+  return canvas;
 };
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
-type BackgroundMode = 'solid' | 'linear' | 'radial';
+
+// Added to the upload's success message.
+const librarySaveNote = (save: SaveResult | null) => {
+  switch (save?.outcome) {
+    case 'saved':
+      return " It's saved in this tap's library too.";
+    case 'already-saved':
+      return " It's in this tap's library already.";
+    case 'full':
+      return " It wasn't saved in this tap's library, as the library is full.";
+    case 'failed':
+      return ` It wasn't saved in this tap's library: ${save.message.charAt(0).toLowerCase()}${save.message.slice(1).replace(/\.$/, '')}.`;
+    default:
+      return '';
+  }
+};
+// What Upload to display says it sent.
+const sentMessage = (
+  sent: { picture: boolean; laser: TapLaser | null; before: TapLaser | null } | null,
+  save: SaveResult | null
+) => {
+  const laser = sent?.laser ? ` ${sentLaserMessage(sent.laser, sent.before)}` : '';
+
+  return sent?.picture === false
+    ? `The laser was sent.${laser}`
+    : `The display image was uploaded successfully.${librarySaveNote(save)}${laser}`;
+};
 type SourceMode = 'image' | 'text';
 type ApiResult = {
   success: boolean;
@@ -50,6 +239,18 @@ type DeviceStatus = {
     size: number;
   };
   uptime: number;
+  firmware?: string;
+  memory?: {
+    free: number;
+    lowest: number;
+  };
+  laser?: ChosenLaser | null;
+  noLaser?: boolean;
+  lasers?: LaserItem[];
+  library?: {
+    count: number;
+    capacity: number;
+  };
 };
 
 const isApiResult = (value: unknown): value is ApiResult =>
@@ -98,6 +299,99 @@ const formatUptime = (totalSeconds: number) => {
     .join(' ');
 };
 
+// The Status dialog's line for a laser, with everything the tap knows about it.
+const formatLaser = (laser: LaserItem) => {
+  if (laser.lastHeardSeconds === null) {
+    return `${laser.address} · not heard yet`;
+  }
+
+  const reading = laser.reading;
+
+  return [
+    laser.address,
+    reading ? `${reading.distanceMm} mm` : 'no reading yet',
+    reading ? `${reading.litres.toFixed(1)} L` : null,
+    reading ? `${reading.percent}%` : null,
+    reading?.mode,
+    reading && reading.batteryPercent !== null
+      ? `battery ${reading.batteryPercent.toFixed(1)}%`
+      : null,
+    reading && reading.temperatureC !== null ? `${reading.temperatureC.toFixed(1)}°` : null,
+    laser.rssi === null ? null : `${laser.rssi} dBm`,
+    `heard ${formatUptime(laser.lastHeardSeconds)} ago`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+};
+
+const formatChosenLaser = (laser: ChosenLaser | null, noLaser = false) =>
+  laser ? `${laserName(laser)} · ${modeLabel(laser.mode)}` : noLaser ? 'No laser' : 'None chosen';
+
+type LaserDialogProps = {
+  // The page's pick, if it hasn't been sent
+  start: LaserPick | null;
+  onClose: () => void;
+  onPick: (pick: LaserPick) => void;
+};
+
+// Its own component so the tap only searches every laser while it's open. The
+// choice goes in the preview, and "Upload to display" sends it (docs/display.md,
+// A picture and its laser together).
+const LaserDialog = ({ start, onClose, onPick }: LaserDialogProps) => {
+  const picker = useLaserPicker(start);
+
+  const use = () => {
+    const pick = picker.pick();
+
+    if (pick) {
+      onPick(pick);
+      onClose();
+    }
+  };
+
+  return (
+    <div
+      className="modal-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div
+        className="app-modal laser-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="laser-modal-title"
+        aria-describedby="laser-modal-description"
+      >
+        <div className="modal-icon settings-modal-icon" aria-hidden="true">
+          <Gauge size={22} strokeWidth={1.8} />
+        </div>
+        <h2 id="laser-modal-title">{deviceConfig.deviceName}'s laser</h2>
+        <p id="laser-modal-description">
+          Choose the laser in this tap's keg and its mode. The preview shows it, and Upload to
+          display sends it to the tap.
+        </p>
+        <LaserPicker picker={picker} />
+        <div className="modal-actions laser-modal-actions">
+          <button className="modal-button" type="button" autoFocus onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="modal-button primary-modal-button"
+            type="button"
+            disabled={picker.address === null}
+            onClick={use}
+          >
+            Use
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const formatImageUpdated = (updated: string | null) => {
   if (!updated) {
     return 'Not available';
@@ -127,13 +421,26 @@ const App = () => {
   const [fontFamily, setFontFamily] = useState(DEFAULT_FONT_FAMILY);
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [textColour, setTextColour] = useState(DEFAULT_TEXT_COLOUR);
-  const [backgroundColour, setBackgroundColour] = useState(DEFAULT_BACKGROUND_COLOUR);
-  const [backgroundMode, setBackgroundMode] = useState<BackgroundMode>('solid');
-  const [gradientColour, setGradientColour] = useState(DEFAULT_GRADIENT_COLOUR);
-  const [imageFrame, setImageFrame] = useState<SourceFrame | null>(null);
+  const [textBackground, setTextBackground] = useState(DEFAULT_BACKGROUND);
+  // The chosen image at its own size, so zooming and dragging can redraw it.
+  const [image, setImage] = useState<ImageBitmap | null>(null);
+  const [zoom, setZoom] = useState(FIT_ZOOM);
+  const [pan, setPan] = useState<Pan>(CENTRED);
+  // Each mode keeps its own background: the image's fills its gaps.
+  const [imageBackground, setImageBackground] = useState(DEFAULT_BACKGROUND);
+  // After an eyedropper button, in browsers without Chrome's eyedropper: the next
+  // click on the image takes the colour for this one of the background's colours.
+  const [pickingColour, setPickingColour] = useState<BackgroundColour | null>(null);
+  // While dragging a filled image: where the pointer last was.
+  const dragFrom = useRef<{ x: number; y: number } | null>(null);
+  // The image drawn in the square, and which image it was drawn from.
+  const [imageFrame, setImageFrame] = useState<(SourceFrame & { image: ImageBitmap }) | null>(null);
   const [textFrame, setTextFrame] = useState<SourceFrame | null>(null);
-  const [binary, setBinary] = useState<Uint8Array | null>(null);
-  const [fileName, setFileName] = useState('');
+  // The image field: the chosen file's name, or an address being typed or loaded.
+  const [imageSource, setImageSource] = useState('');
+  const [loadingImage, setLoadingImage] = useState(false);
+  // Counts loads, so of several at once the last one asked for wins.
+  const loadCount = useRef(0);
   const [error, setError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [uploadState, setUploadState] = useState<UploadState>('idle');
@@ -150,10 +457,187 @@ const App = () => {
   const [rebootDialogOpen, setRebootDialogOpen] = useState(false);
   const [rebooting, setRebooting] = useState(false);
   const [rebootResult, setRebootResult] = useState<ApiResult | null>(null);
-  const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
-  const [forgetting, setForgetting] = useState(false);
-  const [forgetResult, setForgetResult] = useState<ApiResult | null>(null);
-  const sourceFrame = mode === 'image' ? imageFrame : textFrame;
+  const [factoryResetDialogOpen, setFactoryResetDialogOpen] = useState(false);
+  const [clearLog, setClearLog] = useState(false);
+  const [clearBeers, setClearBeers] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [factoryResetResult, setFactoryResetResult] = useState<ApiResult | null>(null);
+  const [laserDialogOpen, setLaserDialogOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  // The beer picked from the library, while its picture is in Compose: sent
+  // unchanged, its own JPEG goes back to the library, so it keeps its ID.
+  const [libraryPick, setLibraryPick] = useState<{
+    id: string;
+    picture: Blob;
+    image: ImageBitmap;
+  } | null>(null);
+  // A keg state picked from the library, while its picture is in Compose: it
+  // isn't saved to the library, as it's drawn afresh each time. Its line and date
+  // draw it again on the whole screen of a tap with no laser.
+  const [kegPick, setKegPick] = useState<{
+    image: ImageBitmap;
+    state: KegState;
+    line: string;
+    date: Date;
+  } | null>(null);
+  // The keg state's line as it's being typed in Compose. The board takes it
+  // tidied (tidyLine), and keeps the last line that works while it can't. null
+  // shows the board's own line.
+  const [typedLine, setTypedLine] = useState<string | null>(null);
+  // What happened to the library copy of the last beer sent.
+  const [librarySave, setLibrarySave] = useState<SaveResult | null>(null);
+  // What the last Upload to display sent: a picture, the laser, or both, and the
+  // tap's laser before it.
+  const [sent, setSent] = useState<{
+    picture: boolean;
+    laser: TapLaser | null;
+    before: TapLaser | null;
+  } | null>(null);
+  // A beer sent that this tap's full library turned away, kept while there's a
+  // chance to make room for it.
+  const [unsavedBeer, setUnsavedBeer] = useState<{ picture: Blob; thumbnail: Blob } | null>(null);
+  const [makingRoom, setMakingRoom] = useState(false);
+  const { strip, refresh: refreshStrip } = useStripState();
+  // The tap's laser, from loading the page or sending, and from the strip's
+  // answers after that, so a choice made from another page shows. undefined
+  // until loaded.
+  const [knownTapLaser, setKnownTapLaser] = useState<{ laser: TapLaser; at: number } | null>(null);
+  const [tapLaserFailed, setTapLaserFailed] = useState(false);
+  const tapLaser =
+    strip?.tapLaser && (!knownTapLaser || strip.receivedAt > knownTapLaser.at)
+      ? strip.tapLaser
+      : knownTapLaser?.laser;
+  // A laser picked for the preview, which Upload to display sends (docs/display.md,
+  // A picture and its laser together). null once sent, or when the tap already has it.
+  const [pickedLaser, setPickedLaser] = useState<LaserPick | null>(null);
+  const pick = pickedLaser && !(tapLaser && tapHasPick(pickedLaser, tapLaser)) ? pickedLaser : null;
+  // A laser just sent, which the preview keeps showing until the tap's strip has it
+  const [sentPick, setSentPick] = useState<{ pick: LaserPick; at: number } | null>(null);
+  const pendingPick = pendingSentPick(sentPick, strip);
+  // The preview shows the pick, or what the tap has.
+  const shownLaser = pick ? pickedTapLaser(pick) : tapLaser;
+  const chosenLaser = shownLaser?.laser;
+  // No laser on purpose: the picture is the whole screen (docs/display.md, No
+  // laser on purpose).
+  const noLaser = shownLaser?.noLaser ?? false;
+  // The strip the tap will draw for the pick, or for a laser just sent
+  const previewPick = pick ?? pendingPick;
+  const pickedStrip = previewPick ? pickedStripValues(previewPick) : null;
+  const [developerMode, setDeveloperMode] = useState(loadDeveloperMode);
+  const [showFrame, setShowFrame] = useState(loadShowFrame);
+  const [testInputs, setTestInputs] = useState<TestInputs>(DEFAULT_TEST_INPUTS);
+  const [testRequest, setTestRequest] = useState<TestRequest | null>(null);
+  const [sendingTest, setSendingTest] = useState<TestRequest['kind'] | null>(null);
+  const [testError, setTestError] = useState('');
+  const tapLaserNumber = pickedStrip?.laserNumber ?? strip?.values.laserNumber ?? 0;
+  const tapMode = pickedStrip?.mode ?? strip?.values.mode ?? 'smart';
+  // The test values keep the laser dots and mode icon, as the tap does.
+  const test = useMemo(
+    () => readTestInputs(testInputs, { laserNumber: tapLaserNumber, mode: tapMode }),
+    [testInputs, tapLaserNumber, tapMode]
+  );
+  const testEnd = testEndsAt(strip, testRequest);
+  // In developer mode the preview shows the test values; otherwise what the tap
+  // will show: the picked laser's strip, or the tap's.
+  const stripValues = developerMode
+    ? test.strip
+    : previewPick
+      ? pickedStrip
+      : (strip?.values ?? null);
+  // The image the tap has stored, or null if it has none or couldn't send it.
+  const [tapImage, setTapImage] = useState<Uint8Array | null>(null);
+  // Developer mode's setup help, as the tap draws it, for the screen chosen.
+  const setupHelpScreen = developerMode ? testInputs.setupHelp : null;
+  const [setupHelp, setSetupHelp] = useState<{
+    screen: SetupHelpScreen;
+    bytes: Uint8Array | null;
+    error: string;
+  } | null>(null);
+  const setupHelpShown =
+    setupHelpScreen && setupHelp?.screen === setupHelpScreen ? setupHelp : null;
+  // Image mode's frame counts only while its image is still the one composed.
+  const sourceFrame =
+    mode === 'image' ? (image && imageFrame?.image === image ? imageFrame : null) : textFrame;
+  // The composed square, or the whole screen with no laser, in the panel's six
+  // colours: these are the bytes uploaded.
+  const encoded = useMemo(() => {
+    if (!sourceFrame) {
+      return { binary: null, error: '' };
+    }
+
+    try {
+      return {
+        binary: sourceFrame.whole
+          ? encodeSpectra6(new Uint8Array(sourceFrame.whole), IMAGE_SIZE, SCREEN_HEIGHT).bytes
+          : encodeSpectra6(new Uint8Array(sourceFrame.pixels), IMAGE_SIZE, IMAGE_SIZE).bytes,
+        error: '',
+      };
+    } catch (encodingError) {
+      return {
+        binary: null,
+        error: encodingError instanceof Error ? encodingError.message : 'Preview failed.',
+      };
+    }
+  }, [sourceFrame]);
+  const binary = encoded.binary;
+  // Until something new is composed, the preview shows what the screen shows. The
+  // setup help, chosen in developer mode, shows in place of either.
+  const previewImage = setupHelpShown?.bytes ?? binary ?? tapImage;
+  // A composed picture that's already on the tap, such as one just uploaded
+  const composedOnTap = useMemo(
+    () => binary !== null && isOnTheTap(binary, tapImage),
+    [binary, tapImage]
+  );
+  const showingHelpPreview = Boolean(setupHelpShown?.bytes);
+  const canPan = mode === 'image' && image !== null && overflows(image, zoom);
+  // The part of the square the case's window shows, for zooming an image down
+  // to fit it
+  const visible = visibleSquare(noLaser);
+  const slider = image ? zoomSlider(image, visible) : null;
+  // Which of the window's sides the image is fitted to, if either
+  const windowSide = !image
+    ? null
+    : zoom === windowZoom(image, visible, 'width')
+      ? 'width'
+      : zoom === windowZoom(image, visible, 'height')
+        ? 'height'
+        : null;
+  const showingKeg = kegPick !== null && kegPick.image === image;
+  // How the page drew what's in Compose, if it did, kept on the tap with it so
+  // it can be drawn again for the other layout (docs/display.md, How the page
+  // drew it). A keg state moved or zoomed in the square isn't as it would be
+  // drawn again, so it's sent as a picture.
+  const composedSource: PictureSource | null =
+    mode === 'text'
+      ? {
+          kind: 'text',
+          text,
+          font: fontFamily,
+          size: fontSize,
+          colour: textColour,
+          background: textBackground,
+        }
+      : showingKeg && (noLaser || (zoom === FIT_ZOOM && pan.x === CENTRED.x && pan.y === CENTRED.y))
+        ? {
+            kind: 'keg',
+            state: kegPick.state,
+            line: kegPick.line,
+            date: kegPick.date.toISOString(),
+          }
+        : null;
+  // A background fills any gaps around the image, and on a tap with no laser,
+  // the bands above and below it. The keg states draw their own.
+  const showBackground =
+    mode === 'image' && image !== null && !showingKeg && (hasGaps(image, zoom) || noLaser);
+
+  // Picking stops when its colour picker goes away, so it doesn't come back on with it.
+  if (
+    pickingColour &&
+    !(showBackground && backgroundColours(imageBackground.style).includes(pickingColour))
+  ) {
+    setPickingColour(null);
+  }
+
   const isUploading = uploadState === 'uploading';
   const uploadSucceeded = uploadState === 'success';
   const appModalOpen =
@@ -164,7 +648,68 @@ const App = () => {
     statusDialogOpen ||
     refreshDialogOpen ||
     rebootDialogOpen ||
-    forgetDialogOpen;
+    factoryResetDialogOpen ||
+    laserDialogOpen ||
+    libraryOpen ||
+    makingRoom;
+
+  useEffect(() => {
+    fetchChosenLaser()
+      .then((chosen) => setKnownTapLaser({ laser: chosen, at: Date.now() }))
+      .catch(() => setTapLaserFailed(true));
+    // Without it, the preview waits for something to be composed.
+    fetchTapImage()
+      .then((image) => setTapImage(image))
+      .catch(() => setTapImage(null));
+  }, []);
+
+  useEffect(() => {
+    if (!setupHelpScreen) {
+      return;
+    }
+
+    let stopped = false;
+
+    fetchSetupHelp(setupHelpScreen).then(
+      (bytes) => {
+        if (!stopped) {
+          setSetupHelp({ screen: setupHelpScreen, bytes, error: '' });
+        }
+      },
+      (fetchError) => {
+        if (!stopped) {
+          setSetupHelp({
+            screen: setupHelpScreen,
+            bytes: null,
+            error: `The setup help can't be previewed: ${
+              fetchError instanceof Error ? fetchError.message : 'the device did not answer.'
+            }`,
+          });
+        }
+      }
+    );
+
+    return () => {
+      stopped = true;
+    };
+  }, [setupHelpScreen]);
+
+  // Escape stops picking a colour from the image.
+  useEffect(() => {
+    if (!pickingColour) {
+      return;
+    }
+
+    const stopPicking = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPickingColour(null);
+      }
+    };
+
+    document.addEventListener('keydown', stopPicking);
+
+    return () => document.removeEventListener('keydown', stopPicking);
+  }, [pickingColour]);
 
   useEffect(() => {
     if (!modalOpen) {
@@ -179,15 +724,19 @@ const App = () => {
         !statusLoading &&
         !refreshing &&
         !rebooting &&
-        !forgetting
+        !resetting
       ) {
         setPendingReset(null);
         setUploadError(null);
+        setUploadState((state) => (state === 'success' ? 'idle' : state));
         setSettingsOpen(false);
         setStatusDialogOpen(false);
         setRefreshDialogOpen(false);
         setRebootDialogOpen(false);
-        setForgetDialogOpen(false);
+        setFactoryResetDialogOpen(false);
+        setLaserDialogOpen(false);
+        setLibraryOpen(false);
+        setMakingRoom(false);
       }
     };
 
@@ -198,7 +747,7 @@ const App = () => {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [forgetting, isUploading, modalOpen, rebooting, refreshing, statusLoading]);
+  }, [isUploading, modalOpen, rebooting, refreshing, resetting, statusLoading]);
 
   useEffect(() => {
     if (mode !== 'text') {
@@ -211,56 +760,71 @@ const App = () => {
     }
 
     const context = getCanvasContext(canvas);
-    const lines = text.split('\n');
-    const lineHeight = fontSize * 1.2;
-    const firstBaseline = DISPLAY_HEIGHT / 2 - ((lines.length - 1) * lineHeight) / 2;
+    const font = `${fontSize}px ${fontFamily}`;
+    let stopped = false;
 
-    if (backgroundMode === 'linear') {
-      const gradient = context.createLinearGradient(0, 0, 0, DISPLAY_HEIGHT);
-      gradient.addColorStop(0, backgroundColour);
-      gradient.addColorStop(1, gradientColour);
-      context.fillStyle = gradient;
-    } else if (backgroundMode === 'radial') {
-      const gradient = context.createRadialGradient(
-        DISPLAY_WIDTH / 2,
-        DISPLAY_HEIGHT / 2,
-        0,
-        DISPLAY_WIDTH / 2,
-        DISPLAY_HEIGHT / 2,
-        Math.hypot(DISPLAY_WIDTH / 2, DISPLAY_HEIGHT / 2)
-      );
-      gradient.addColorStop(0, backgroundColour);
-      gradient.addColorStop(1, gradientColour);
-      context.fillStyle = gradient;
-    } else {
-      context.fillStyle = backgroundColour;
-    }
+    const draw = () => {
+      if (stopped) {
+        return;
+      }
 
-    context.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-    context.fillStyle = textColour;
-    context.font = `${fontSize}px ${fontFamily}`;
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
+      const lines = text.split('\n');
+      const lineHeight = fontSize * 1.2;
 
-    lines.forEach((line, index) => {
-      context.fillText(line, DISPLAY_WIDTH / 2, firstBaseline + index * lineHeight, 360);
-    });
+      // The words in the middle of the square, over the background, on a canvas
+      // this tall: the square, or the whole screen with the square in its middle.
+      const write = (target: CanvasRenderingContext2D, height: number) => {
+        const firstBaseline = height / 2 - ((lines.length - 1) * lineHeight) / 2;
 
-    const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+        paintBackground(target, textBackground, height);
+        target.fillStyle = textColour;
+        target.font = font;
+        target.textAlign = 'center';
+        target.textBaseline = 'middle';
 
-    setTextFrame({ pixels: imageData.data });
-    setError('');
-    setUploadState('idle');
-  }, [
-    backgroundColour,
-    backgroundMode,
-    fontFamily,
-    fontSize,
-    gradientColour,
-    mode,
-    text,
-    textColour,
-  ]);
+        lines.forEach((line, index) => {
+          target.fillText(line, IMAGE_SIZE / 2, firstBaseline + index * lineHeight, 360);
+        });
+      };
+
+      let whole: Uint8ClampedArray | null = null;
+
+      if (noLaser) {
+        // The whole screen, and the square is its middle, so the library saves
+        // just what the screen shows.
+        const wholeContext = getCanvasContext(wholeScreenCanvas());
+        write(wholeContext, SCREEN_HEIGHT);
+        whole = wholeContext.getImageData(0, 0, IMAGE_SIZE, SCREEN_HEIGHT).data;
+        context.drawImage(
+          wholeContext.canvas,
+          0,
+          BAND_HEIGHT,
+          IMAGE_SIZE,
+          IMAGE_SIZE,
+          0,
+          0,
+          IMAGE_SIZE,
+          IMAGE_SIZE
+        );
+      } else {
+        write(context, IMAGE_SIZE);
+      }
+
+      const imageData = context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE);
+
+      setTextFrame({ pixels: imageData.data, whole });
+      setError('');
+      setUploadState('idle');
+    };
+
+    // Drawn once the font has loaded: the canvas wouldn't redraw itself when it
+    // arrived, and would keep a fallback font.
+    document.fonts.load(font).then(draw, draw);
+
+    return () => {
+      stopped = true;
+    };
+  }, [fontFamily, fontSize, mode, noLaser, text, textBackground, textColour]);
 
   useEffect(() => {
     if (mode !== 'image') {
@@ -274,58 +838,80 @@ const App = () => {
 
     const context = getCanvasContext(canvas);
 
-    if (imageFrame) {
-      context.putImageData(
-        new ImageData(new Uint8ClampedArray(imageFrame.pixels), DISPLAY_WIDTH, DISPLAY_HEIGHT),
-        0,
-        0
-      );
-    } else {
-      context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-    }
-  }, [imageFrame, mode]);
-
-  useEffect(() => {
-    const previewCanvas = previewCanvasRef.current;
-
-    if (!sourceFrame || !previewCanvas) {
-      if (previewCanvas) {
-        getCanvasContext(previewCanvas).clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      }
-
-      setBinary(null);
+    if (!image) {
+      context.clearRect(0, 0, IMAGE_SIZE, IMAGE_SIZE);
 
       return;
     }
 
-    try {
-      const encoded = encodeSpectra6(
-        new Uint8Array(sourceFrame.pixels),
-        DISPLAY_WIDTH,
-        DISPLAY_HEIGHT
-      );
-      const decoded = decodeSpectra6(encoded.bytes, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      const rgba = new Uint8ClampedArray(DISPLAY_WIDTH * DISPLAY_HEIGHT * 4);
+    let whole: Uint8ClampedArray | null = null;
 
-      for (let sourceOffset = 0, targetOffset = 0; sourceOffset < decoded.pixels.length; ) {
-        rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
-        rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
-        rgba[targetOffset++] = decoded.pixels[sourceOffset++] ?? 0;
-        rgba[targetOffset++] = 255;
+    if (noLaser) {
+      const wholeContext = getCanvasContext(wholeScreenCanvas());
+
+      if (kegPick && kegPick.image === image) {
+        // A keg state uses the whole screen, its board's border round all of it.
+        drawKegState(wholeContext, kegPick.state, kegPick.line, kegPick.date, SCREEN_HEIGHT);
+        drawImageInSquare(context, image, zoom, pan, imageBackground);
+      } else {
+        // The whole screen, and the square is its middle, so the library saves
+        // just what the screen shows.
+        drawImageInSquare(wholeContext, image, zoom, pan, imageBackground, SCREEN_HEIGHT);
+        context.drawImage(
+          wholeContext.canvas,
+          0,
+          BAND_HEIGHT,
+          IMAGE_SIZE,
+          IMAGE_SIZE,
+          0,
+          0,
+          IMAGE_SIZE,
+          IMAGE_SIZE
+        );
       }
 
-      getCanvasContext(previewCanvas).putImageData(
-        new ImageData(rgba, DISPLAY_WIDTH, DISPLAY_HEIGHT),
-        0,
-        0
-      );
-      setBinary(encoded.bytes);
-      setError('');
-    } catch (encodingError) {
-      setBinary(null);
-      setError(encodingError instanceof Error ? encodingError.message : 'Preview failed.');
+      whole = wholeContext.getImageData(0, 0, IMAGE_SIZE, SCREEN_HEIGHT).data;
+    } else {
+      drawImageInSquare(context, image, zoom, pan, imageBackground);
     }
-  }, [sourceFrame]);
+
+    setImageFrame({
+      pixels: context.getImageData(0, 0, IMAGE_SIZE, IMAGE_SIZE).data,
+      whole,
+      image,
+    });
+    setUploadState('idle');
+  }, [image, imageBackground, kegPick, mode, noLaser, pan, zoom]);
+
+  // The whole screen: the encoded image, or the tap's own until something is
+  // composed, above the strip as the tap would draw it now, so new strip values
+  // redraw the preview without encoding again.
+  useEffect(() => {
+    const previewCanvas = previewCanvasRef.current;
+
+    if (!previewCanvas) {
+      return;
+    }
+
+    const context = getCanvasContext(previewCanvas);
+
+    if (!previewImage) {
+      context.clearRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+      return;
+    }
+
+    // With no laser on purpose there's no strip, as on the tap. Until the tap
+    // answers, the strip is left white (two white pixels a byte). The setup help,
+    // shown for a test, makes the whole screen a test: one red border round all
+    // of it, in place of the strip's own, as on the tap.
+    const stripBytes = noLaser
+      ? null
+      : stripValues
+        ? drawStrip({ ...stripValues, test: stripValues.test && !showingHelpPreview })
+        : new Uint8Array(STRIP_SIZE).fill(0x11);
+    context.putImageData(screenPixels(previewImage, stripBytes, showingHelpPreview), 0, 0);
+  }, [noLaser, previewImage, showingHelpPreview, stripValues]);
 
   const selectMode = (nextMode: SourceMode) => {
     if (nextMode === mode) {
@@ -333,58 +919,274 @@ const App = () => {
     }
 
     setMode(nextMode);
-    setBinary(null);
     setUploadState('idle');
     setError('');
   };
 
-  const handleFile = async (file: File | undefined) => {
-    if (!file) {
+  // Shows a new image from a file, a paste or an address. name goes in the image
+  // field; notAnImage is the error when it can't be read as an image. from says
+  // when it comes from the library: a beer, by its ID, or a keg state. load can
+  // instead find a library beer, with its ID and name.
+  const loadImage = async (
+    load: () => Promise<Blob | { blob: Blob; libraryId: string; name: string }>,
+    name: string,
+    notAnImage: string,
+    from?: { libraryId: string } | { kegState: KegState; line: string; date: Date }
+  ) => {
+    const thisLoad = ++loadCount.current;
+
+    setError('');
+    setLoadingImage(true);
+
+    try {
+      const loaded = await load();
+      const blob = loaded instanceof Blob ? loaded : loaded.blob;
+      const libraryId =
+        loaded instanceof Blob
+          ? from && 'libraryId' in from
+            ? from.libraryId
+            : null
+          : loaded.libraryId;
+      let bitmap: ImageBitmap;
+
+      try {
+        bitmap = await createImageBitmap(blob);
+      } catch {
+        throw new Error(notAnImage);
+      }
+
+      if (thisLoad !== loadCount.current) {
+        bitmap.close();
+        return;
+      }
+
+      // A new image starts at Fit, or at Fill if the last one was at Fill.
+      const wasFilled = image !== null && zoom !== FIT_ZOOM && zoom === fillZoom(image);
+      setZoom(wasFilled ? fillZoom(bitmap) : FIT_ZOOM);
+      setImage((previous) => {
+        previous?.close();
+        return bitmap;
+      });
+      setPan(CENTRED);
+      setImageSource(loaded instanceof Blob ? name : loaded.name);
+      setLibraryPick(libraryId ? { id: libraryId, picture: blob, image: bitmap } : null);
+      setKegPick(
+        from && 'kegState' in from
+          ? { image: bitmap, state: from.kegState, line: from.line, date: from.date }
+          : null
+      );
+    } catch (loadError) {
+      if (thisLoad === loadCount.current) {
+        setError(loadError instanceof Error ? loadError.message : notAnImage);
+      }
+    } finally {
+      if (thisLoad === loadCount.current) {
+        setLoadingImage(false);
+      }
+    }
+  };
+
+  // Compose gets the picture on the tap, to edit, such as choosing the
+  // background for a tap with no laser. A keg state or text the page drew is
+  // drawn again from how it was drawn, for the layout now (docs/display.md, How
+  // the page drew it). Otherwise it's the beer's original from this tap's
+  // library when it's there (see beerOnScreen), or the tap's six-colour copy
+  // (docs/web-app.md, Compose). onlyDrawn leaves Compose empty for a picture the
+  // page didn't draw.
+  const editTapPicture = async (onlyDrawn = false) => {
+    const bytes = tapImage;
+
+    if (!bytes) {
       return;
     }
 
-    setError('');
-    setBinary(null);
-    setUploadState('idle');
+    const loadBefore = loadCount.current;
+    let info: TapImageInfo = { uploadedAt: null, source: null };
+
+    setLoadingImage(true);
 
     try {
-      const image = await createImageBitmap(file);
-
-      if (image.width !== DISPLAY_WIDTH || image.height !== DISPLAY_HEIGHT) {
-        image.close();
-        setImageFrame(null);
-        setFileName('');
-        setError(`Image must be exactly ${DISPLAY_WIDTH} × ${DISPLAY_HEIGHT}px.`);
-
-        return;
-      }
-
-      const canvas = sourceCanvasRef.current;
-      if (!canvas) {
-        image.close();
-
-        return;
-      }
-
-      const context = getCanvasContext(canvas);
-      context.clearRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-      context.drawImage(image, 0, 0);
-      image.close();
-
-      const imageData = context.getImageData(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
-
-      setImageFrame({ pixels: imageData.data });
-      setFileName(file.name);
+      info = await fetchTapImageInfo();
     } catch {
-      setImageFrame(null);
-      setFileName('');
-      setError('That file could not be read as an image.');
-    } finally {
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      // The tap's own copy will do.
+    }
+
+    // Something else was loaded meanwhile.
+    if (loadCount.current !== loadBefore) {
+      return;
+    }
+
+    const { source } = info;
+
+    if (source?.kind === 'keg') {
+      const date = new Date(source.date);
+
+      setTypedLine(null);
+      selectMode('image');
+      void loadImage(
+        () => kegStatePicture(source.state, source.line, date),
+        kegStateName[source.state],
+        "The keg picture couldn't be drawn.",
+        { kegState: source.state, line: source.line, date }
+      );
+      return;
+    }
+
+    setLoadingImage(false);
+
+    if (source?.kind === 'text') {
+      selectMode('text');
+      setText(source.text);
+      setFontFamily(source.font);
+      setFontSize(source.size);
+      setTextColour(source.colour);
+      setTextBackground(source.background);
+      return;
+    }
+
+    if (onlyDrawn) {
+      return;
+    }
+
+    selectMode('image');
+    void loadImage(
+      async () => {
+        try {
+          const library = await fetchTapLibrary(thisTap, deviceConfig.deviceId);
+          const id = beerOnScreen(library.beers, info.uploadedAt);
+
+          if (id) {
+            const blob = await fetchBeerFile(thisTap, deviceConfig.deviceId, id, 'picture');
+            return { blob, libraryId: id, name: 'On the tap, from the library' };
+          }
+        } catch {
+          // The tap's own copy will do.
+        }
+
+        return tapPictureBlob(bytes);
+      },
+      'On the tap',
+      "The picture on the tap couldn't be read."
+    );
+  };
+
+  // The keg state in Compose drawn again with another date, for a keg kicked or
+  // cleaned before today, or another line (docs/web-app.md, Keg states).
+  const redrawKeg = (changes: { date?: Date; line?: string }) => {
+    if (!kegPick) {
+      return;
+    }
+
+    const { state } = kegPick;
+    const line = changes.line ?? kegPick.line;
+    const date = changes.date ?? kegPick.date;
+
+    void loadImage(
+      () => kegStatePicture(state, line, date),
+      kegStateName[state],
+      "The keg picture couldn't be drawn.",
+      { kegState: state, line, date }
+    );
+  };
+
+  // A line other than the one showing. The Library's next keg state of this kind
+  // won't take it either.
+  const anotherKegLine = () => {
+    if (!kegPick) {
+      return;
+    }
+
+    const line = pickLine(kegLines[kegPick.state], kegPick.line);
+
+    setTypedLine(null);
+    rememberLine(kegPick.state, line);
+    redrawKeg({ line });
+  };
+
+  // A line of your own, drawn as it's typed (docs/web-app.md, Keg states). It
+  // isn't added to the list, but goes to the tap in the picture's source, so it
+  // comes back.
+  const typeKegLine = (text: string) => {
+    const line = tidyLine(text);
+
+    setTypedLine(text);
+
+    if (kegPick && !typedLineProblem(text) && line !== kegPick.line) {
+      redrawKeg({ line });
     }
   };
+
+  const handleFile = (file: File | undefined) => {
+    // Cleared, so choosing the same file again loads it again.
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+
+    if (file) {
+      void loadImage(
+        () => Promise.resolve(file),
+        file.name,
+        'That file could not be read as an image.'
+      );
+    }
+  };
+
+  const loadAddress = (address: string) => {
+    setImageSource(address);
+
+    if (!isImageAddress(address)) {
+      setError('Paste an image, or an image address starting with https://.');
+      return;
+    }
+
+    void loadImage(() => fetchImage(address), address, NOT_AN_IMAGE_ADDRESS);
+  };
+
+  // A pasted or dropped picture or image address. Returns whether there was one.
+  const takeImage = (transfer: DataTransfer) => {
+    const file = imageFile(transfer);
+
+    if (file) {
+      void loadImage(
+        () => Promise.resolve(file),
+        file.name === 'image.png' ? 'Pasted image' : file.name,
+        'That picture could not be read as an image.'
+      );
+      return true;
+    }
+
+    const address = imageAddress(transfer);
+
+    if (address) {
+      loadAddress(address);
+      return true;
+    }
+
+    return false;
+  };
+
+  // Ctrl+V anywhere on the page, outside a text field, in image mode.
+  const pasteOnPage = useEffectEvent((event: ClipboardEvent) => {
+    const target = event.target;
+    const inField =
+      target instanceof HTMLElement &&
+      (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+
+    if (!inField && !modalOpen && event.clipboardData && takeImage(event.clipboardData)) {
+      event.preventDefault();
+    }
+  });
+
+  useEffect(() => {
+    if (mode !== 'image') {
+      return;
+    }
+
+    const listener = (event: ClipboardEvent) => pasteOnPage(event);
+    document.addEventListener('paste', listener);
+
+    return () => document.removeEventListener('paste', listener);
+  }, [mode]);
 
   const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (mode !== 'image') {
@@ -409,18 +1211,60 @@ const App = () => {
 
     event.preventDefault();
     setIsDragging(false);
-    void handleFile(event.dataTransfer.files[0]);
-  };
 
-  const handleBackgroundMode = (value: string) => {
-    if (value === 'solid' || value === 'linear' || value === 'radial') {
-      setBackgroundMode(value);
+    // A file, or an image dragged from another tab, which comes as its address.
+    if (!takeImage(event.dataTransfer)) {
+      setError('That was not an image. Drop an image file, or an image from another tab.');
     }
   };
 
-  const reverseGradient = () => {
-    setBackgroundColour(gradientColour);
-    setGradientColour(backgroundColour);
+  // Dragging an image bigger than the square chooses which part of it shows.
+  const startPan = (event: PointerEvent<HTMLDivElement>) => {
+    if (!canPan || pickingColour) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragFrom.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const movePan = (event: PointerEvent<HTMLDivElement>) => {
+    const from = dragFrom.current;
+
+    if (!from || !image) {
+      return;
+    }
+
+    // The canvas is shown smaller than its 400 pixels, so scale the movement up.
+    const scale = IMAGE_SIZE / event.currentTarget.clientWidth;
+    const dx = (event.clientX - from.x) * scale;
+    const dy = (event.clientY - from.y) * scale;
+
+    dragFrom.current = { x: event.clientX, y: event.clientY };
+    setPan((previous) => panBy(image, zoom, previous, dx, dy));
+  };
+
+  const endPan = () => {
+    dragFrom.current = null;
+  };
+
+  const pickColourFromImage = (event: MouseEvent<HTMLDivElement>) => {
+    const canvas = sourceCanvasRef.current;
+
+    if (!pickingColour || !canvas) {
+      return;
+    }
+
+    const box = canvas.getBoundingClientRect();
+    const x = Math.floor(((event.clientX - box.left) * IMAGE_SIZE) / box.width);
+    const y = Math.floor(((event.clientY - box.top) * IMAGE_SIZE) / box.height);
+    const [red = 0, green = 0, blue = 0] = getCanvasContext(canvas).getImageData(x, y, 1, 1).data;
+
+    const picked = `#${[red, green, blue].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
+    const colour = pickingColour;
+
+    setImageBackground((previous) => ({ ...previous, [colour]: picked }));
+    setPickingColour(null);
   };
 
   const resetMode = (targetMode: SourceMode) => {
@@ -429,8 +1273,12 @@ const App = () => {
     setPendingReset(null);
 
     if (targetMode === 'image') {
-      setImageFrame(null);
-      setFileName('');
+      setImage((previous) => {
+        previous?.close();
+        return null;
+      });
+      setPan(CENTRED);
+      setImageSource('');
 
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -443,9 +1291,7 @@ const App = () => {
     setFontFamily(DEFAULT_FONT_FAMILY);
     setFontSize(DEFAULT_FONT_SIZE);
     setTextColour(DEFAULT_TEXT_COLOUR);
-    setBackgroundColour(DEFAULT_BACKGROUND_COLOUR);
-    setBackgroundMode('solid');
-    setGradientColour(DEFAULT_GRADIENT_COLOUR);
+    setTextBackground(DEFAULT_BACKGROUND);
   };
 
   const requestReset = () => {
@@ -454,11 +1300,9 @@ const App = () => {
       fontFamily !== DEFAULT_FONT_FAMILY ||
       fontSize !== DEFAULT_FONT_SIZE ||
       textColour !== DEFAULT_TEXT_COLOUR ||
-      backgroundColour !== DEFAULT_BACKGROUND_COLOUR ||
-      backgroundMode !== 'solid' ||
-      gradientColour !== DEFAULT_GRADIENT_COLOUR;
+      !sameBackground(textBackground, DEFAULT_BACKGROUND);
 
-    if (mode === 'image' && imageFrame) {
+    if (mode === 'image' && image) {
       setPendingReset('image');
 
       return;
@@ -473,46 +1317,135 @@ const App = () => {
     resetMode(mode);
   };
 
-  const uploadBinary = async () => {
-    if (!binary || !sourceFrame) {
+  // The picture as it was before the six colours. A beer picked from the library
+  // and sent unchanged goes back as its own JPEG, keeping its ID.
+  const saveToLibrary = async (frame: SourceFrame): Promise<SaveResult> => {
+    try {
+      const unchanged = libraryPick && libraryPick.image === image && zoom === FIT_ZOOM;
+      const { picture, thumbnail } = unchanged
+        ? { picture: libraryPick.picture, thumbnail: await thumbnailOf(libraryPick.image) }
+        : await beerPictures(frame.pixels, IMAGE_SIZE);
+
+      const result = await saveBeer(thisTapLibrary, picture, thumbnail);
+      setUnsavedBeer(result.outcome === 'full' ? { picture, thumbnail } : null);
+
+      return result;
+    } catch (saveError) {
+      return {
+        outcome: 'failed',
+        message: saveError instanceof Error ? saveError.message : 'unable to make the picture.',
+      };
+    }
+  };
+
+  // Once beers are removed to make room, saves the one turned away.
+  const saveUnsavedBeer = async () => {
+    if (unsavedBeer) {
+      const result = await saveBeer(thisTapLibrary, unsavedBeer.picture, unsavedBeer.thumbnail);
+      setLibrarySave(result);
+      setUnsavedBeer(result.outcome === 'full' ? unsavedBeer : null);
+    }
+
+    setMakingRoom(false);
+  };
+
+  // "Upload to display": the new picture, if there is one, and the laser picked,
+  // if there is one, together, so the screen redraws once for both (docs/display.md,
+  // A picture and its laser together).
+  const send = async () => {
+    const picture = binary && sourceFrame ? { binary, frame: sourceFrame } : null;
+
+    if (!picture && !pick) {
       return;
     }
 
     setUploadState('uploading');
     setError('');
     setUploadError(null);
+    setSent(null);
 
     try {
-      const uploadBytes = new Uint8Array(binary);
-      const response = await fetch(IMAGE_UPLOAD_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/octet-stream',
-        },
-        body: new Blob([uploadBytes.buffer], { type: 'application/octet-stream' }),
-      });
-      const responseBody = await response.text();
-      let result: unknown;
+      let sentLaser: TapLaser | null = null;
 
-      try {
-        result = JSON.parse(responseBody);
-      } catch {
-        throw new Error('The display returned an invalid response.');
+      if (picture) {
+        // The dev server's lasers are made up, so its pick isn't sent to a tap.
+        const withLaser = pick !== null && !import.meta.env.DEV;
+        const query = new URLSearchParams(withLaser ? pickQuery(pick) : undefined);
+        const source = composedSource && sourceText(composedSource);
+
+        if (source) {
+          query.set('source', source);
+        }
+
+        const uploadBytes = new Uint8Array(picture.binary);
+        const response = await fetch(
+          query.toString() ? `${IMAGE_UPLOAD_URL}?${query}` : IMAGE_UPLOAD_URL,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/octet-stream',
+            },
+            body: new Blob([uploadBytes.buffer], { type: 'application/octet-stream' }),
+          }
+        );
+        const responseBody = await response.text();
+        let result: unknown;
+
+        try {
+          result = JSON.parse(responseBody);
+        } catch {
+          throw new Error('The display returned an invalid response.');
+        }
+
+        if (!isApiResult(result)) {
+          throw new Error('The display returned an invalid response.');
+        }
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.message || `Upload failed with status ${response.status}.`);
+        }
+
+        // The tap keeps the bytes as sent, so they're now the picture on the tap.
+        setTapImage(uploadBytes);
+        sentLaser = withLaser ? readTapLaser(result as unknown as Record<string, unknown>) : null;
       }
 
-      if (!isApiResult(result)) {
-        throw new Error('The display returned an invalid response.');
+      // The laser alone, or after the picture where it wasn't taken with it: on
+      // the dev server, or from older firmware
+      if (pick && !sentLaser) {
+        sentLaser = await chooseLaser(pick.address, pick.mode);
       }
 
-      if (!response.ok || !result.success) {
-        throw new Error(result.message || `Upload failed with status ${response.status}.`);
+      if (sentLaser) {
+        setKnownTapLaser({ laser: sentLaser, at: Date.now() });
+        setPickedLaser(null);
+
+        if (pick) {
+          setSentPick({ pick, at: Date.now() });
+        }
+
+        // The tap ends any test when its laser changes, so the countdown goes too.
+        if (testEnd !== null) {
+          setTestRequest({ kind: 'live', at: Date.now() });
+        }
       }
 
+      // The strip changes with the laser, so the preview asks straight away, and
+      // again a second later, by when the tap has worked out its new values.
+      refreshStrip();
+      window.setTimeout(refreshStrip, 1000);
+      setSent({ picture: picture !== null, laser: sentLaser, before: tapLaser ?? null });
+
+      // Image mode's pictures also go in this tap's library, to send again later,
+      // apart from the keg states.
+      setLibrarySave(
+        picture && mode === 'image' && !showingKeg ? await saveToLibrary(picture.frame) : null
+      );
       setUploadState('success');
     } catch (uploadFailure) {
       setUploadState('error');
       const message =
-        uploadFailure instanceof Error ? uploadFailure.message : 'Unable to upload the image.';
+        uploadFailure instanceof Error ? uploadFailure.message : 'Unable to send to the display.';
 
       setUploadError(
         message === 'Failed to fetch'
@@ -522,10 +1455,61 @@ const App = () => {
     }
   };
 
-  const openForgetDialog = () => {
+  const openFactoryResetDialog = () => {
     setSettingsOpen(false);
-    setForgetResult(null);
-    setForgetDialogOpen(true);
+    setClearLog(false);
+    setClearBeers(false);
+    setFactoryResetResult(null);
+    setFactoryResetDialogOpen(true);
+  };
+
+  const toggleDeveloperMode = () => {
+    setDeveloperMode(!developerMode);
+    saveDeveloperMode(!developerMode);
+    setTestError('');
+  };
+
+  // "Show on device" and "Back to live". The tap's answers may take a redraw to
+  // show the request, so the request counts until they do (see testEndsAt).
+  const sendTest = async (kind: TestRequest['kind']) => {
+    setSendingTest(kind);
+    setTestError('');
+
+    try {
+      // The tap tests what the preview shows, with a laser picked and not sent yet
+      // in place of its own. No laser has no strip to test, so the setup help
+      // shows alone.
+      await (kind === 'live'
+        ? showLiveValues()
+        : noLaser && setupHelpScreen
+          ? showSetupHelpTest(setupHelpScreen, pick)
+          : showTestValues(test.strip, setupHelpScreen, testInputs.noReading, pick));
+      setTestRequest({
+        kind,
+        at: Date.now(),
+        setupHelp: kind === 'show' ? setupHelpScreen : null,
+      });
+      refreshStrip();
+    } catch (sendError) {
+      const action = kind === 'show' ? 'shown' : 'stopped';
+      setTestError(
+        `The test values weren't ${action}: ${
+          sendError instanceof Error ? sendError.message : 'the device did not answer.'
+        }`
+      );
+    } finally {
+      setSendingTest(null);
+    }
+  };
+
+  const downloadLog = () => {
+    setSettingsOpen(false);
+
+    // The device names the file in its response.
+    const link = document.createElement('a');
+    link.href = '/log';
+    link.download = '';
+    link.click();
   };
 
   const loadDeviceStatus = async () => {
@@ -585,7 +1569,7 @@ const App = () => {
     setStatusDialogOpen(false);
     setRefreshDialogOpen(false);
     setRebootDialogOpen(false);
-    setForgetDialogOpen(false);
+    setFactoryResetDialogOpen(false);
     setSettingsOpen(true);
   };
 
@@ -661,12 +1645,18 @@ const App = () => {
     }
   };
 
-  const forgetWifi = async () => {
-    setForgetting(true);
-    setForgetResult(null);
+  const factoryReset = async () => {
+    setResetting(true);
+    setFactoryResetResult(null);
 
     try {
-      const response = await fetch('/wifi', { method: 'DELETE' });
+      const response = await fetch('/factory-reset', {
+        method: 'POST',
+        body: new URLSearchParams({
+          clearLog: clearLog ? '1' : '0',
+          clearLibrary: clearBeers ? '1' : '0',
+        }),
+      });
       const responseBody = await response.text();
 
       if (!responseBody) {
@@ -685,15 +1675,15 @@ const App = () => {
         throw new Error('The device returned an invalid response.');
       }
 
-      setForgetResult(result);
-    } catch (forgetError) {
-      setForgetResult({
+      setFactoryResetResult(result);
+    } catch (resetError) {
+      setFactoryResetResult({
         success: false,
         message:
-          forgetError instanceof Error ? forgetError.message : 'Unable to forget the saved WiFi.',
+          resetError instanceof Error ? resetError.message : 'Unable to factory reset the device.',
       });
     } finally {
-      setForgetting(false);
+      setResetting(false);
     }
   };
 
@@ -714,7 +1704,14 @@ const App = () => {
             <Settings size={20} aria-hidden="true" />
           </button>
         </div>
-        <h1>Keg Display Studio</h1>
+        <div className="app-title">
+          <h1>Keg Display Studio</h1>
+          <TapSwitcher
+            deviceName={deviceConfig.deviceName}
+            deviceId={deviceConfig.deviceId}
+            taps={deviceConfig.taps}
+          />
+        </div>
         <div className="display-spec">
           <span className="status-dot" />
           400 × 600 Spectra 6
@@ -755,17 +1752,35 @@ const App = () => {
           </div>
 
           <div
-            className={`canvas-stage ${sourceFrame ? 'has-image' : ''} ${isDragging ? 'is-dragging' : ''}`}
+            className={`canvas-stage image-stage ${sourceFrame ? 'has-image' : ''} ${isDragging ? 'is-dragging' : ''} ${canPan && !pickingColour ? 'can-pan' : ''} ${pickingColour ? 'can-pick' : ''}`}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
+            onPointerDown={startPan}
+            onPointerMove={movePan}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+            onClick={pickColourFromImage}
           >
-            <canvas ref={sourceCanvasRef} width={DISPLAY_WIDTH} height={DISPLAY_HEIGHT} />
-            {!imageFrame && mode === 'image' && (
+            <canvas ref={sourceCanvasRef} width={IMAGE_SIZE} height={IMAGE_SIZE} />
+            {!image && mode === 'image' && (
               <label className="canvas-placeholder upload-placeholder" htmlFor="image-file">
                 <span>+</span>
-                <p>Click or drag a 400 × 600px image here</p>
+                <p>Click, drag or paste an image here</p>
               </label>
+            )}
+            {!image && mode === 'image' && tapImage && !loadingImage && (
+              <button
+                className="library-button tap-picture-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void editTapPicture();
+                }}
+              >
+                <ImageUp size={16} aria-hidden="true" />
+                Edit the picture on the tap
+              </button>
             )}
           </div>
 
@@ -778,12 +1793,222 @@ const App = () => {
                   className="visually-hidden"
                   type="file"
                   accept="image/*"
-                  onChange={(event) => void handleFile(event.target.files?.[0])}
+                  onChange={(event) => handleFile(event.target.files?.[0])}
                 />
-                <label className="file-picker" htmlFor="image-file">
-                  <span>{fileName || 'Choose image'}</span>
-                  <strong>Browse</strong>
-                </label>
+                <div className="file-picker" aria-busy={loadingImage}>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    aria-label="Image address"
+                    placeholder="Paste an image or its address"
+                    value={imageSource}
+                    onChange={(event) => setImageSource(event.target.value)}
+                    onFocus={(event) => event.target.select()}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        loadAddress(imageSource.trim());
+                      }
+                    }}
+                    onPaste={(event) => {
+                      if (takeImage(event.clipboardData)) {
+                        event.preventDefault();
+                      }
+                    }}
+                  />
+                  <label className="browse-button" htmlFor="image-file">
+                    Browse
+                  </label>
+                  <button
+                    className="library-button"
+                    type="button"
+                    aria-haspopup="dialog"
+                    title="Pick a beer sent before, from any tap"
+                    onClick={() => setLibraryOpen(true)}
+                  >
+                    <Library size={16} aria-hidden="true" />
+                    Library
+                  </button>
+                </div>
+                {loadingImage && !showingKeg && <p className="fit-hint">Loading the image…</p>}
+                {showingKeg && (
+                  <div className="keg-controls">
+                    {/* In the order the board shows them: the line, then the date */}
+                    <div className="fit-row keg-row">
+                      <label className="text-field keg-line-field">
+                        <span>Line</span>
+                        <span className="keg-line-input">
+                          <input
+                            type="text"
+                            value={typedLine ?? kegPick.line}
+                            maxLength={MAX_LINE_LENGTH}
+                            spellCheck
+                            onChange={(event) => typeKegLine(event.target.value)}
+                          />
+                          <span
+                            className={`keg-line-count ${
+                              lineLength(typedLine ?? kegPick.line) >= MAX_LINE_LENGTH
+                                ? 'is-full'
+                                : ''
+                            }`}
+                            aria-hidden="true"
+                          >
+                            {lineLength(typedLine ?? kegPick.line)}/{MAX_LINE_LENGTH}
+                          </span>
+                        </span>
+                      </label>
+                      <button
+                        className="library-button"
+                        type="button"
+                        disabled={kegLines[kegPick.state].length < 2}
+                        onClick={anotherKegLine}
+                      >
+                        <Shuffle size={16} aria-hidden="true" />
+                        Another line
+                      </button>
+                    </div>
+                    {typedLine !== null && typedLineProblem(typedLine) && (
+                      <p className="message error-message" role="alert">
+                        {typedLineProblem(typedLine)}
+                      </p>
+                    )}
+                    <div className="fit-row keg-row">
+                      <label className="text-field keg-date-field">
+                        <span>{kegDateWord(kegPick.state)}</span>
+                        <input
+                          type="date"
+                          value={dateFieldValue(kegPick.date)}
+                          max={dateFieldValue(new Date())}
+                          onChange={(event) => {
+                            const date = kegDate(event.target.value);
+
+                            if (date) {
+                              redrawKeg({ date });
+                            }
+                          }}
+                        />
+                      </label>
+                      <div className="mode-switch" aria-label="Quick dates">
+                        <button
+                          className={
+                            dateFieldValue(kegPick.date) === dateFieldValue(yesterday())
+                              ? 'active'
+                              : ''
+                          }
+                          type="button"
+                          onClick={() => redrawKeg({ date: yesterday() })}
+                        >
+                          Yesterday
+                        </button>
+                        <button
+                          className={
+                            dateFieldValue(kegPick.date) === dateFieldValue(new Date())
+                              ? 'active'
+                              : ''
+                          }
+                          type="button"
+                          onClick={() => redrawKeg({ date: new Date() })}
+                        >
+                          Today
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {image && !showingKeg && (
+                  <div className="fit-row">
+                    <div className="mode-switch" aria-label="How the image fills the square">
+                      {/* The window's width or height, picked from a dropdown to keep
+                          the row short. It reads "Frame" until one is picked, then
+                          "Frame: W" or "Frame: H", while the menu says Width and
+                          Height: the label is drawn here, with the dropdown over it,
+                          unseen, so a click or tap still opens its menu. */}
+                      <span
+                        className={`window-pick ${windowSide ? 'active' : ''}`}
+                        title={
+                          windowSide === 'height'
+                            ? "As tall as the case's window"
+                            : windowSide === 'width'
+                              ? "As wide as the case's window"
+                              : "As wide or as tall as the case's window"
+                        }
+                      >
+                        {/* The widest label is there unseen too, so picking one
+                            doesn't move the buttons beside it. */}
+                        <span className="window-label" aria-hidden="true">
+                          <span>
+                            {windowSide === 'width'
+                              ? 'Frame: W'
+                              : windowSide === 'height'
+                                ? 'Frame: H'
+                                : 'Frame'}
+                          </span>
+                          <span>Frame: W</span>
+                        </span>
+                        <ChevronDown aria-hidden="true" size={14} strokeWidth={2.2} />
+                        <select
+                          aria-label="Fit the case's window"
+                          value={windowSide ?? ''}
+                          onChange={(event) => {
+                            const side = event.target.value;
+                            if (side === 'width' || side === 'height') {
+                              setZoom(windowZoom(image, visible, side));
+                            }
+                          }}
+                        >
+                          <option value="" disabled hidden>
+                            Frame
+                          </option>
+                          <option value="height">Height</option>
+                          <option value="width">Width</option>
+                        </select>
+                      </span>
+                      <button
+                        className={zoom === FIT_ZOOM ? 'active' : ''}
+                        type="button"
+                        onClick={() => setZoom(FIT_ZOOM)}
+                      >
+                        Fit
+                      </button>
+                      <button
+                        className={zoom === fillZoom(image) ? 'active' : ''}
+                        type="button"
+                        onClick={() => setZoom(fillZoom(image))}
+                      >
+                        Fill
+                      </button>
+                    </div>
+                    <label className="text-field zoom-field">
+                      <span>Zoom</span>
+                      <input
+                        type="range"
+                        min={slider?.min}
+                        max={slider?.max}
+                        step={slider?.step}
+                        value={Math.log(zoom)}
+                        list="zoom-marks"
+                        onChange={(event) =>
+                          setZoom(zoomFromSlider(image, Number(event.target.value), visible))
+                        }
+                      />
+                      <datalist id="zoom-marks">
+                        <option value={0} />
+                        <option value={slider?.fill} />
+                      </datalist>
+                    </label>
+                  </div>
+                )}
+                {showBackground && (
+                  <BackgroundPicker
+                    value={imageBackground}
+                    onChange={setImageBackground}
+                    forImage
+                    picking={pickingColour}
+                    onPick={setPickingColour}
+                  />
+                )}
+                {canPan && !pickingColour && (
+                  <p className="fit-hint">Drag the image to choose what shows.</p>
+                )}
               </>
             ) : (
               <div className="text-controls">
@@ -802,11 +2027,11 @@ const App = () => {
                     value={fontFamily}
                     onChange={(event) => setFontFamily(event.target.value)}
                   >
-                    <option value="Roboto">Roboto</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Arial">Arial</option>
-                    <option value="Verdana">Verdana</option>
-                    <option value="Courier New">Courier New</option>
+                    {TEXT_FONTS.map((font) => (
+                      <option key={font} value={font}>
+                        {font}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="text-field size-field">
@@ -819,57 +2044,17 @@ const App = () => {
                     onChange={(event) => setFontSize(Number(event.target.value))}
                   />
                 </label>
-                <label className="colour-field text-colour-field">
-                  <span>Text</span>
-                  <input
-                    type="color"
-                    value={textColour}
-                    onChange={(event) => setTextColour(event.target.value)}
-                  />
-                </label>
-                <label className="text-field gradient-mode-field">
-                  <span>Background style</span>
-                  <select
-                    value={backgroundMode}
-                    onChange={(event) => handleBackgroundMode(event.target.value)}
-                  >
-                    <option value="solid">Solid</option>
-                    <option value="linear">Linear</option>
-                    <option value="radial">Radial</option>
-                  </select>
-                </label>
-                <label className="colour-field background-colour-field">
-                  <span>{backgroundMode === 'solid' ? 'Colour' : 'Start'}</span>
-                  <input
-                    type="color"
-                    value={backgroundColour}
-                    onChange={(event) => setBackgroundColour(event.target.value)}
-                  />
-                </label>
-                {backgroundMode !== 'solid' && (
-                  <>
-                    <label className="colour-field gradient-colour-field">
-                      <span>End</span>
-                      <input
-                        type="color"
-                        value={gradientColour}
-                        onChange={(event) => setGradientColour(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="reverse-gradient-button"
-                      type="button"
-                      aria-label="Reverse gradient colours"
-                      title="Reverse gradient colours"
-                      onClick={reverseGradient}
-                    >
-                      ⇄
-                    </button>
-                  </>
-                )}
+                <div className="wide-field">
+                  <ColourPicker label="Text colour" value={textColour} onChange={setTextColour} />
+                </div>
+                <div className="wide-field">
+                  <BackgroundPicker value={textBackground} onChange={setTextBackground} />
+                </div>
               </div>
             )}
-            {error && <p className="message error-message">{error}</p>}
+            {(error || encoded.error) && (
+              <p className="message error-message">{error || encoded.error}</p>
+            )}
           </div>
         </article>
 
@@ -877,15 +2062,53 @@ const App = () => {
           <div className="panel-heading">
             <div>
               <h2>Preview</h2>
+              <button
+                className={`reset-button frame-button ${showFrame ? 'active' : ''}`}
+                type="button"
+                aria-pressed={showFrame}
+                aria-label="Show what the case's frame covers"
+                title={showFrame ? "Hide the case's frame" : "Show what the case's frame covers"}
+                onClick={() => {
+                  setShowFrame(!showFrame);
+                  saveShowFrame(!showFrame);
+                }}
+              >
+                <Frame aria-hidden="true" size={15} strokeWidth={1.8} />
+              </button>
             </div>
-            <span className={`preview-state ${binary ? 'ready' : ''}`}>
-              {binary ? 'Ready' : 'Waiting'}
+            <span className={`preview-state ${binary && !composedOnTap ? 'ready' : ''}`}>
+              {setupHelpShown?.bytes
+                ? 'Setup help'
+                : binary
+                  ? composedOnTap
+                    ? 'On the tap'
+                    : 'Ready'
+                  : tapImage
+                    ? 'On the tap'
+                    : 'Waiting'}
             </span>
           </div>
 
-          <div className={`canvas-stage preview-stage ${binary ? 'has-image' : ''}`}>
-            <canvas ref={previewCanvasRef} width={DISPLAY_WIDTH} height={DISPLAY_HEIGHT} />
-            {!binary && (
+          <div className={`canvas-stage preview-stage ${previewImage ? 'has-image' : ''}`}>
+            <canvas ref={previewCanvasRef} width={SCREEN_WIDTH} height={SCREEN_HEIGHT} />
+            {previewImage && showFrame && (
+              // What the case's frame covers, once each tap's fit has centred its
+              // screen in the window, so a picture can be framed to suit
+              <div
+                className="preview-frame"
+                aria-hidden="true"
+                style={
+                  {
+                    '--hidden-x': `${(HIDDEN_X / SCREEN_WIDTH) * 100}%`,
+                    '--hidden-y': `${(HIDDEN_Y / SCREEN_HEIGHT) * 100}%`,
+                  } as CSSProperties
+                }
+              >
+                <div className="preview-hatch" />
+                <div className="preview-window" />
+              </div>
+            )}
+            {!previewImage && (
               <div className="canvas-placeholder preview-placeholder">
                 <span className="pixel-mark" aria-hidden="true">
                   <span />
@@ -908,14 +2131,57 @@ const App = () => {
               </strong>
             </div>
             <button
+              className={`laser-button ${pick ? 'is-picked' : ''}`}
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setLaserDialogOpen(true)}
+            >
+              <span className="upload-label">{pick ? 'Laser · not sent yet' : 'Laser'}</span>
+              <strong>
+                {chosenLaser ? (
+                  <>
+                    <LaserDots number={chosenLaser.number} />
+                    {formatChosenLaser(chosenLaser)}
+                  </>
+                ) : noLaser ? (
+                  'No laser'
+                ) : chosenLaser === null ? (
+                  'Choose a laser'
+                ) : tapLaserFailed ? (
+                  'Not available'
+                ) : (
+                  'Checking…'
+                )}
+              </strong>
+            </button>
+            <button
               className="upload-button"
               type="button"
-              disabled={!binary || uploadState === 'uploading'}
-              onClick={() => void uploadBinary()}
+              disabled={(!binary && !pick) || uploadState === 'uploading'}
+              onClick={() => void send()}
             >
               {uploadState === 'uploading' ? 'Uploading…' : 'Upload to display'}
             </button>
           </div>
+
+          {(developerMode || testEnd !== null) && (
+            <TestValuesPanel
+              developerMode={developerMode}
+              inputs={testInputs}
+              onInputsChange={setTestInputs}
+              errors={test.errors}
+              endsAt={testEnd}
+              showingSetupHelp={showsSetupHelp(strip, testRequest)}
+              noLaser={noLaser}
+              laserPicked={pick !== null}
+              setupHelpError={setupHelpShown?.error ?? ''}
+              sending={sendingTest}
+              sendError={testError}
+              onShow={() => void sendTest('show')}
+              onLive={() => void sendTest('live')}
+              onEnd={refreshStrip}
+            />
+          )}
         </article>
       </section>
 
@@ -926,6 +2192,7 @@ const App = () => {
             if (event.target === event.currentTarget && !isUploading) {
               setPendingReset(null);
               setUploadError(null);
+              setUploadState((state) => (state === 'success' ? 'idle' : state));
             }
           }}
         >
@@ -962,9 +2229,9 @@ const App = () => {
             </h2>
             <p id="modal-description">
               {isUploading
-                ? `Sending the display image to ${deviceConfig.uploadHost}. This may take a moment.`
+                ? `Sending ${binary ? 'the display image' : 'the laser'} to ${deviceConfig.uploadHost}. This may take a moment.`
                 : uploadSucceeded
-                  ? 'The display image was uploaded successfully.'
+                  ? sentMessage(sent, librarySave)
                   : (uploadError ??
                     (pendingReset === 'image'
                       ? 'This removes the uploaded image and its preview. Your text composition will be kept.'
@@ -973,14 +2240,25 @@ const App = () => {
             {!isUploading && (
               <div className="modal-actions">
                 {uploadSucceeded ? (
-                  <button
-                    className="modal-button primary-modal-button"
-                    type="button"
-                    autoFocus
-                    onClick={() => window.location.reload()}
-                  >
-                    Close
-                  </button>
+                  <>
+                    {librarySave?.outcome === 'full' && unsavedBeer && (
+                      <button
+                        className="modal-button"
+                        type="button"
+                        onClick={() => setMakingRoom(true)}
+                      >
+                        Make room…
+                      </button>
+                    )}
+                    <button
+                      className="modal-button primary-modal-button"
+                      type="button"
+                      autoFocus
+                      onClick={() => setUploadState('idle')}
+                    >
+                      Close
+                    </button>
+                  </>
                 ) : uploadError ? (
                   <>
                     <button
@@ -994,7 +2272,7 @@ const App = () => {
                       className="modal-button primary-modal-button"
                       type="button"
                       autoFocus
-                      onClick={() => void uploadBinary()}
+                      onClick={() => void send()}
                     >
                       Retry
                     </button>
@@ -1024,6 +2302,66 @@ const App = () => {
         </div>
       )}
 
+      {makingRoom && (
+        <LibraryDialog
+          onClose={() => setMakingRoom(false)}
+          onPick={() => {}}
+          onMadeRoom={saveUnsavedBeer}
+        />
+      )}
+
+      {libraryOpen && (
+        <LibraryDialog
+          onClose={() => setLibraryOpen(false)}
+          onPick={({ id, picture }) => {
+            setLibraryOpen(false);
+            selectMode('image');
+            void loadImage(
+              () => Promise.resolve(picture),
+              'From the library',
+              "That beer's picture couldn't be read.",
+              { libraryId: id }
+            );
+          }}
+          onPickKegState={({ state, line, date, picture }) => {
+            setLibraryOpen(false);
+            setTypedLine(null);
+            selectMode('image');
+            void loadImage(
+              () => Promise.resolve(picture),
+              kegStateName[state],
+              "The keg picture couldn't be drawn.",
+              { kegState: state, line, date }
+            );
+          }}
+        />
+      )}
+
+      {laserDialogOpen && (
+        <LaserDialog
+          start={pick}
+          onClose={() => setLaserDialogOpen(false)}
+          onPick={(next) => {
+            // Nothing to send when it's what the tap has.
+            const changed = !(tapLaser && tapHasPick(next, tapLaser));
+            setPickedLaser(changed ? next : null);
+
+            // With nothing composed, the preview shows the tap's picture as it
+            // is. For no laser, Compose takes it, so the bands' background can be
+            // chosen. For a laser after none, a keg state or text the page drew
+            // is drawn again for the square (docs/display.md, How the page drew
+            // it); a beer's middle square is the beer, so it stays as it is.
+            if (changed && !binary) {
+              if (next.address === NO_LASER) {
+                void editTapPicture();
+              } else if (noLaser) {
+                void editTapPicture(true);
+              }
+            }
+          }}
+        />
+      )}
+
       {settingsOpen && (
         <div
           className="modal-backdrop"
@@ -1049,7 +2387,7 @@ const App = () => {
                 <Activity size={19} aria-hidden="true" />
                 <span>
                   <strong>Device status</strong>
-                  <small>View network, image, and uptime information</small>
+                  <small>View network, laser, image, and uptime information</small>
                 </span>
               </button>
               <button type="button" onClick={openRefreshDialog}>
@@ -1059,6 +2397,13 @@ const App = () => {
                   <small>Refresh the display using the currently saved image</small>
                 </span>
               </button>
+              <button type="button" onClick={downloadLog}>
+                <Download size={19} aria-hidden="true" />
+                <span>
+                  <strong>Download log</strong>
+                  <small>Save the device's event log as a CSV file</small>
+                </span>
+              </button>
               <button type="button" onClick={openRebootDialog}>
                 <Power size={19} aria-hidden="true" />
                 <span>
@@ -1066,12 +2411,25 @@ const App = () => {
                   <small>Restart the device without changing its settings</small>
                 </span>
               </button>
-              <button type="button" onClick={openForgetDialog}>
-                <WifiOff size={19} aria-hidden="true" />
+              <button type="button" onClick={openFactoryResetDialog}>
+                <RotateCcw size={19} aria-hidden="true" />
                 <span>
-                  <strong>Forget saved WiFi</strong>
-                  <small>Remove the saved network and return to setup mode</small>
+                  <strong>Factory reset</strong>
+                  <small>Clear the WiFi, laser, and screen image, then return to setup mode</small>
                 </span>
+              </button>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={developerMode}
+                onClick={toggleDeveloperMode}
+              >
+                <FlaskConical size={19} aria-hidden="true" />
+                <span>
+                  <strong>Developer mode</strong>
+                  <small>Try made-up values in the strip, and show them on the device</small>
+                </span>
+                <span className="settings-switch" aria-hidden="true" />
               </button>
             </div>
             <div className="modal-actions">
@@ -1139,10 +2497,54 @@ const App = () => {
                   <dt>Image size</dt>
                   <dd>{status.image.size.toLocaleString()} bytes</dd>
                 </div>
+                {status.library && (
+                  <div>
+                    <dt>Beer library</dt>
+                    <dd>
+                      {status.library.count} of {status.library.capacity} beers
+                    </dd>
+                  </div>
+                )}
                 <div>
                   <dt>Uptime</dt>
                   <dd>{formatUptime(status.uptime)}</dd>
                 </div>
+                {status.firmware && (
+                  <div>
+                    <dt>Firmware</dt>
+                    <dd>{status.firmware}</dd>
+                  </div>
+                )}
+                {status.memory && (
+                  <div>
+                    <dt>Free memory</dt>
+                    <dd>
+                      {Math.floor(status.memory.free / 1024)} KB (lowest{' '}
+                      {Math.floor(status.memory.lowest / 1024)} KB)
+                    </dd>
+                  </div>
+                )}
+                {status.laser !== undefined && (
+                  <div>
+                    <dt>This tap's laser</dt>
+                    <dd>{formatChosenLaser(status.laser, status.noLaser)}</dd>
+                  </div>
+                )}
+                {status.lasers?.length === 0 && (
+                  <div>
+                    <dt>Lasers heard</dt>
+                    <dd>None yet</dd>
+                  </div>
+                )}
+                {[...(status.lasers ?? [])].sort(byLaserNumber).map((laser) => (
+                  <div key={laser.address}>
+                    <dt>
+                      {laserName(laser)}
+                      {laser.address === status.laser?.address && ' (this tap)'}
+                    </dt>
+                    <dd>{formatLaser(laser)}</dd>
+                  </div>
+                ))}
               </dl>
             ) : null}
             {!statusLoading && (
@@ -1334,12 +2736,12 @@ const App = () => {
         </div>
       )}
 
-      {forgetDialogOpen && (
+      {factoryResetDialogOpen && (
         <div
           className="modal-backdrop"
           onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !forgetting) {
-              setForgetDialogOpen(false);
+            if (event.target === event.currentTarget && !resetting) {
+              setFactoryResetDialogOpen(false);
             }
           }}
         >
@@ -1347,42 +2749,68 @@ const App = () => {
             className="app-modal"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="forget-modal-title"
-            aria-describedby="forget-modal-description"
-            aria-busy={forgetting}
+            aria-labelledby="factory-reset-modal-title"
+            aria-describedby="factory-reset-modal-description"
+            aria-busy={resetting}
           >
             <div
-              className={`modal-icon forget-modal-icon ${forgetResult?.success ? 'success-modal-icon' : ''}`}
+              className={`modal-icon factory-reset-modal-icon ${factoryResetResult?.success ? 'success-modal-icon' : ''}`}
               aria-hidden="true"
             >
-              {forgetting ? (
+              {resetting ? (
                 <LoaderCircle className="upload-spinner" size={22} strokeWidth={1.8} />
+              ) : factoryResetResult?.success ? (
+                <CheckCircle2 size={22} strokeWidth={1.8} />
+              ) : factoryResetResult ? (
+                <CircleAlert size={22} strokeWidth={1.8} />
               ) : (
-                <WifiOff size={22} strokeWidth={1.8} />
+                <RotateCcw size={22} strokeWidth={1.8} />
               )}
             </div>
-            <h2 id="forget-modal-title">
-              {forgetting
-                ? 'Forgetting saved WiFi'
-                : forgetResult?.success
-                  ? 'WiFi forgotten'
-                  : forgetResult
-                    ? 'Unable to forget WiFi'
-                    : 'Forget saved WiFi?'}
+            <h2 id="factory-reset-modal-title">
+              {resetting
+                ? 'Resetting the device'
+                : factoryResetResult?.success
+                  ? 'Factory reset done'
+                  : factoryResetResult
+                    ? 'Unable to factory reset'
+                    : 'Factory reset?'}
             </h2>
-            <p id="forget-modal-description">
-              {forgetResult?.message ??
-                (forgetting
-                  ? 'Removing the saved network from this device.'
-                  : 'The device will remove its saved network and reboot into setup mode.')}
+            <p id="factory-reset-modal-description">
+              {factoryResetResult?.success
+                ? `${factoryResetResult.message} To set it up again, join the ${deviceConfig.accessPointName} WiFi network.`
+                : (factoryResetResult?.message ??
+                  (resetting
+                    ? 'Clearing the device.'
+                    : "The device will forget its WiFi network and laser and clear its screen image, then restart in setup mode. The screen keeps showing the current picture until a new one is sent. The log and this tap's beer library are kept unless you tick them below. Other taps keep their own copies of its beers."))}
             </p>
-            {!forgetting && (
+            {!resetting && !factoryResetResult && (
+              <div className="checkbox-options">
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={clearLog}
+                    onChange={(event) => setClearLog(event.target.checked)}
+                  />
+                  Also clear the log
+                </label>
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={clearBeers}
+                    onChange={(event) => setClearBeers(event.target.checked)}
+                  />
+                  Also clear this tap's beer library
+                </label>
+              </div>
+            )}
+            {!resetting && (
               <div className="modal-actions">
-                {forgetResult ? (
+                {factoryResetResult ? (
                   <button
                     className="modal-button primary-modal-button"
                     type="button"
-                    onClick={() => setForgetDialogOpen(false)}
+                    onClick={() => setFactoryResetDialogOpen(false)}
                   >
                     Close
                   </button>
@@ -1399,9 +2827,9 @@ const App = () => {
                     <button
                       className="modal-button destructive-button"
                       type="button"
-                      onClick={() => void forgetWifi()}
+                      onClick={() => void factoryReset()}
                     >
-                      Forget WiFi
+                      Factory reset
                     </button>
                   </>
                 )}

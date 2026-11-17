@@ -2,24 +2,53 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <ArduinoOTA.h>
 #include <DNSServer.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <LittleFS.h>
 #include <WiFi.h>
+#include <atomic>
 #include <esp_timer.h>
 #include <time.h>
 
 #include "DeviceConfig.h"
+#include "DeviceLog.h"
 #include "ImageManager.h"
+#include "LaserScanner.h"
+#include "LibraryManager.h"
+#include "Settings.h"
+#include "SetupHelpManager.h"
+#include "Storage.h"
+#include "StripManager.h"
 
 static AsyncWebServer server(80);
 
 static DNSServer dnsServer;
 
+// With saved WiFi, retry every 30s forever. After 5 minutes without WiFi, also
+// open the setup access point so the network can be changed.
+static const unsigned long wifiRetryInterval = 30000;
+static const unsigned long fallbackAccessPointDelay = 5UL * 60 * 1000;
+
 static String ssid;
 static String password;
+static bool hasSavedWifi = false;
+static bool wifiConnected = false;
+static bool networkServicesStarted = false;
+static unsigned long lastWifiAttemptAt = 0;
+static unsigned long wifiOfflineSince = 0;
+static uint32_t wifiAttempts = 0;
+// Why the last WiFi attempt or connection failed, and how many failures there
+// have been. Set from the WiFi event task.
+static volatile uint8_t lastWifiFailureReason = 0;
+static volatile uint32_t wifiFailureCount = 0;
+// A connection attempt is given this long before Bluetooth scanning resumes.
+static const unsigned long wifiAttemptDuration = 15000;
 static unsigned long restartAt = 0;
+// After a network chosen on the setup page is saved, the tap restarts this much
+// later on its own. The page asks every 500ms, so it sees "Saved" first.
+static const unsigned long restartAfterSavingWifi = 3000;
 
 enum class ConnectionState
 {
@@ -33,60 +62,34 @@ static ConnectionState connectionState = ConnectionState::Idle;
 static String pendingSsid;
 static String pendingPassword;
 static unsigned long connectionStartedAt = 0;
+// Failures before the test started belong to earlier attempts, such as retries
+// of a saved network that has gone, so they don't count against the test.
+static uint32_t failuresBeforeTest = 0;
+static String connectionFailureMessage;
 
-static bool loadCredentials()
+// While a web app update rewrites the filesystem the pages are on, they can't
+// be read: opening one then crashed the tap. Set from the loop, read by web
+// requests.
+static std::atomic<bool> webAppUpdating{false};
+
+// Each page is one gzipped file with its script and styles inside (see
+// app/web/single-file-page.ts): every file a browser downloads at once costs
+// 12-20 KB of memory, so a page load is a single download.
+static void sendPage(AsyncWebServerRequest* request, const char* path)
 {
-    if (!LittleFS.exists("/wifi.json"))
+    if (webAppUpdating)
     {
-        Serial.println("No WiFi credentials found");
-        return false;
+        request->send(503, "text/plain", "The web app is updating. Try again in a minute.");
+        return;
     }
 
-    Serial.println("Opening wifi.json"); // TMP
-    File file = LittleFS.open("/wifi.json", "r");
-    if (!file)
-    {
-        Serial.println("Failed to open wifi.json");
-        return false;
-    }
-
-    JsonDocument doc;
-
-    DeserializationError error =
-        deserializeJson(doc, file);
-
-    file.close();
-
-    if (error)
-    {
-        Serial.println("Invalid wifi.json");
-        return false;
-    }
-
-    ssid = doc["ssid"].as<String>();
-    password = doc["password"].as<String>();
-
-    return !ssid.isEmpty();
-}
-
-static void saveCredentials(
-    const String& newSsid,
-    const String& newPassword
-)
-{
-    JsonDocument doc;
-
-    doc["ssid"] = newSsid;
-    doc["password"] = newPassword;
-
-    File file = LittleFS.open(
-        "/wifi.json",
-        "w"
+    AsyncWebServerResponse* response = request->beginResponse(
+        LittleFS,
+        path,
+        "text/html"
     );
-
-    serializeJson(doc, file);
-
-    file.close();
+    response->addHeader("Content-Encoding", "gzip");
+    request->send(response);
 }
 
 static void handleRoot(AsyncWebServerRequest* request)
@@ -95,19 +98,11 @@ static void handleRoot(AsyncWebServerRequest* request)
 
     if (mode == WIFI_AP || mode == WIFI_AP_STA)
     {
-        request->send(
-            LittleFS,
-            "/connect.html",
-            "text/html"
-        );
+        sendPage(request, "/connect.html.gz");
     }
     else
     {
-        request->send(
-            LittleFS,
-            "/index.html",
-            "text/html"
-        );
+        sendPage(request, "/index.html.gz");
     }
 }
 
@@ -158,9 +153,38 @@ static void handleScan(AsyncWebServerRequest* request)
 
     for (int i = 0; i < count; i++)
     {
+        String networkSsid = WiFi.SSID(i);
+        if (networkSsid.isEmpty())
+        {
+            // A hidden network
+            continue;
+        }
+
+        // Mesh systems and extenders broadcast one network from several access
+        // points, so list each name once, with its strongest signal.
+        bool listed = false;
+        for (JsonObject network : networks)
+        {
+            if (network["ssid"] == networkSsid)
+            {
+                listed = true;
+                if (WiFi.RSSI(i) > network["rssi"].as<int>())
+                {
+                    network["rssi"] = WiFi.RSSI(i);
+                }
+
+                break;
+            }
+        }
+
+        if (listed)
+        {
+            continue;
+        }
+
         JsonObject network = networks.add<JsonObject>();
 
-        network["ssid"] = WiFi.SSID(i);
+        network["ssid"] = networkSsid;
         network["rssi"] = WiFi.RSSI(i);
         network["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
     }
@@ -208,6 +232,9 @@ static void handleConnect(AsyncWebServerRequest* request)
     Serial.printf("Testing WiFi '%s'\n", pendingSsid.c_str());
 
     WiFi.mode(WIFI_AP_STA);
+    // Stops any retry of the saved network first.
+    WiFi.disconnect();
+    failuresBeforeTest = wifiFailureCount;
     WiFi.begin(
         pendingSsid.c_str(),
         pendingPassword.c_str()
@@ -244,18 +271,20 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
             R"({"success":true,"message":"Saved. Rebooting..."})"
         );
 
-        restartAt = millis() + 1000;
         return;
     }
 
     if (connectionState == ConnectionState::Failure)
     {
         connectionState = ConnectionState::Idle;
-        request->send(
-            400,
-            "application/json",
-            R"({"success":false,"message":"Unable to connect. Check the password and try again."})"
-        );
+
+        JsonDocument doc;
+        doc["success"] = false;
+        doc["message"] = connectionFailureMessage;
+        String response;
+        serializeJson(doc, response);
+
+        request->send(400, "application/json", response);
 
         return;
     }
@@ -267,29 +296,50 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
     );
 }
 
-static void handleForgetWifi(AsyncWebServerRequest* request)
+static void handleFactoryReset(AsyncWebServerRequest* request)
 {
-    if (LittleFS.exists("/wifi.json") && !LittleFS.remove("/wifi.json"))
+    bool clearLog = request->arg("clearLog") == "1";
+    bool clearBeers = request->arg("clearLibrary") == "1";
+
+    bool cleared =
+        clearWifiSettings() &&
+        clearLaserChoice() &&
+        clearScreenImage() &&
+        clearStripValues();
+    if (clearLog)
     {
+        cleared = clearDeviceLog() && cleared;
+    }
+    if (clearBeers)
+    {
+        cleared = clearLibrary() && cleared;
+    }
+
+    if (!cleared)
+    {
+        logEvent("factory reset failed");
         request->send(
             500,
             "application/json",
-            R"({"success":false,"message":"Unable to remove saved WiFi"})"
+            R"({"success":false,"message":"Unable to clear everything. Try again, or reboot the device first."})"
         );
 
         return;
     }
 
-    ssid = "";
-    password = "";
+    // With the log cleared, this is the first entry of the new one.
+    logEvent(
+        "factory reset",
+        String(clearLog ? "log cleared" : "log kept") +
+            (clearBeers ? ", beer library cleared" : ", beer library kept")
+    );
 
     request->send(
         200,
         "application/json",
-        R"({"success":true,"message":"Saved WiFi forgotten. Rebooting..."})"
+        R"({"success":true,"message":"Factory reset done. The device is restarting in setup mode."})"
     );
 
-    Serial.println("WiFi credentials removed. Rebooting...");
     restartAt = millis() + 1000;
 }
 
@@ -312,21 +362,40 @@ static void handleReboot(AsyncWebServerRequest* request)
         R"({"success":true,"message":"Device reboot requested."})"
     );
 
-    Serial.println("Device reboot requested");
+    logEvent("reboot requested", "from the web app");
     restartAt = millis() + 1000;
+}
+
+static void handleLog(AsyncWebServerRequest* request)
+{
+    sendDeviceLog(request, String(DeviceConfig::MdnsHostname) + "-log.csv");
+}
+
+// Never cached, because the values change all the time.
+static void sendJson(AsyncWebServerRequest* request, int code, const JsonDocument& doc)
+{
+    String payload;
+    serializeJson(doc, payload);
+
+    AsyncWebServerResponse* response = request->beginResponse(
+        code,
+        "application/json",
+        payload
+    );
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
 }
 
 static void handleStatus(AsyncWebServerRequest* request)
 {
-    String hostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
-
     JsonDocument doc;
-    doc["hostname"] = hostname;
+    doc["hostname"] = DeviceConfig::MdnsHostname;
     doc["ip"] = WiFi.localIP().toString();
     doc["wifi"]["ssid"] = WiFi.SSID();
     doc["wifi"]["rssi"] = WiFi.RSSI();
 
-    File image = LittleFS.open("/image.bin", "r");
+    // Checked first, because opening a missing file logs an error.
+    File image = DataFS.exists("/image.bin") ? DataFS.open("/image.bin", "r") : File();
     if (image)
     {
         doc["image"]["size"] = image.size();
@@ -354,23 +423,176 @@ static void handleStatus(AsyncWebServerRequest* request)
         }
 
         image.close();
+
+        // How the web app drew it, if it did, for it to read (docs/display.md,
+        // How the page drew it)
+        String source = imageSource();
+        if (source.isEmpty())
+        {
+            doc["image"]["source"] = nullptr;
+        }
+        else
+        {
+            doc["image"]["source"] = source;
+        }
     }
     else
     {
         doc["image"]["updated"] = nullptr;
         doc["image"]["size"] = 0;
+        doc["image"]["source"] = nullptr;
     }
 
     doc["uptime"] = static_cast<uint64_t>(esp_timer_get_time()) / 1000000;
+    doc["firmware"] = firmwareId();
+    doc["memory"]["free"] = ESP.getFreeHeap();
+    doc["memory"]["lowest"] = ESP.getMinFreeHeap();
+    addChosenLaser(doc.as<JsonObject>());
+    addLaserStatus(doc["lasers"].to<JsonArray>());
+    addStripStatus(doc["strip"].to<JsonObject>());
+    addLibraryStatus(doc["library"].to<JsonObject>());
 
-    String payload;
-    serializeJson(doc, payload);
+    sendJson(request, 200, doc);
+}
 
-    AsyncWebServerResponse* response = request->beginResponse(
-        200,
-        "application/json",
-        payload
-    );
+// The laser picker asks every few seconds while it's open.
+static void handleLasers(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    addLaserList(doc.to<JsonObject>());
+
+    sendJson(request, 200, doc);
+}
+
+static void handleChooseLaser(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    JsonObject response = doc.to<JsonObject>();
+    String error;
+
+    if (!chooseLaser(request->arg("address"), request->arg("mode"), error))
+    {
+        response["success"] = false;
+        response["message"] = error;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // The strip's redraw rules show the new choice (StripManager), waiting for a
+    // new laser's first reading so the strip isn't drawn empty. A test was set up
+    // for the old choice, so it ends.
+    endTestForLaserChoice();
+
+    response["success"] = true;
+    addChosenLaser(response);
+    sendJson(request, 200, doc);
+}
+
+static void handleStripTest(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    JsonObject response = doc.to<JsonObject>();
+    String error;
+    SetupHelp::Screen setupHelp;
+
+    if (!parseSetupHelpScreen(request->arg("setupHelp"), setupHelp))
+    {
+        response["success"] = false;
+        response["message"] = "The setup help must be join or ready.";
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // A laser picked in the web app's preview and not sent yet, or the tap's own
+    TestLaser laser;
+    if (!readTestLaser(request->arg("laser"), request->arg("mode"), laser, error))
+    {
+        response["success"] = false;
+        response["message"] = error;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // No laser has no strip to test, so the setup help shows alone.
+    if (laser.noLaser)
+    {
+        if (setupHelp == SetupHelp::Screen::None)
+        {
+            response["success"] = false;
+            response["message"] = "With no laser, there's no strip to test. Choose a setup help screen to show.";
+            sendJson(request, 400, doc);
+
+            return;
+        }
+
+        showSetupHelpTest(setupHelp);
+        response["success"] = true;
+        response["message"] = "Showing the setup help for 5 minutes.";
+        sendJson(request, 200, doc);
+
+        return;
+    }
+
+    if (!showTestValues(
+        request->arg("percent"),
+        request->arg("litres"),
+        request->arg("temperature"),
+        request->arg("battery"),
+        request->arg("modeWarning"),
+        request->arg("noSignal"),
+        request->arg("noReading"),
+        laser,
+        setupHelp,
+        error
+    ))
+    {
+        response["success"] = false;
+        response["message"] = error;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    response["success"] = true;
+    response["message"] = setupHelp == SetupHelp::Screen::None
+        ? "Showing the test values for 5 minutes."
+        : "Showing the setup help and test values for 5 minutes.";
+    sendJson(request, 200, doc);
+}
+
+static void handleStrip(AsyncWebServerRequest* request)
+{
+    JsonDocument doc;
+    addStripStatus(doc.to<JsonObject>());
+    sendJson(request, 200, doc);
+}
+
+static void handleStripLive(AsyncWebServerRequest* request)
+{
+    showLiveValues();
+
+    JsonDocument doc;
+    doc["success"] = true;
+    doc["message"] = "Showing the laser's values.";
+    sendJson(request, 200, doc);
+}
+
+// The stored image, so the web app's preview can show what the screen shows
+// before anything new is composed. Streamed from the file, 404 when there's none.
+static void handleImage(AsyncWebServerRequest* request)
+{
+    // Checked first, because opening a missing file logs an error.
+    if (!DataFS.exists("/image.bin"))
+    {
+        request->send(404, "text/plain", "No image");
+        return;
+    }
+
+    AsyncWebServerResponse* response =
+        request->beginResponse(DataFS, "/image.bin", "application/octet-stream");
     response->addHeader("Cache-Control", "no-store");
     request->send(response);
 }
@@ -410,11 +632,50 @@ static void handleImageUpload(
     );
 }
 
+// The web app sends the laser chosen in its preview with the picture, as laser
+// and mode in the address (as POST /laser takes them), so the screen redraws
+// once for both (docs/display.md, A picture and its laser together), and
+// source, how it drew the picture, if it did (finishImageUpload).
 static void handleImageUploadFinished(AsyncWebServerRequest* request)
 {
     ImageUploadState* state = static_cast<ImageUploadState*>(request->_tempObject);
-    ImageUploadResult result = finishImageUpload(state);
     request->_tempObject = nullptr;
+
+    bool withLaser = request->hasArg("laser");
+    String laser = request->arg("laser");
+    String mode = request->arg("mode");
+    String source = request->arg("source");
+    bool laserChanges = false;
+    String laserError;
+
+    JsonDocument doc;
+    JsonObject response = doc.to<JsonObject>();
+
+    if (source.length() > MaxImageSourceLength)
+    {
+        cancelImageUpload(state, "its source was too long");
+        response["success"] = false;
+        response["message"] = "How the picture was drawn is too long to keep with it.";
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // Checked before the picture is saved, so neither is.
+    if (withLaser && !checkLaserChoice(laser, mode, laserChanges, laserError))
+    {
+        cancelImageUpload(state, "the laser sent with it was turned down");
+        response["success"] = false;
+        response["message"] = laserError;
+        sendJson(request, 400, doc);
+
+        return;
+    }
+
+    // A new laser's redraw rules (StripManager) then show the picture with it:
+    // once its first reading arrives, so the strip isn't drawn empty, or straight
+    // away for no laser.
+    ImageUploadResult result = finishImageUpload(state, !laserChanges, source);
 
     Serial.printf(
         "Image upload %s: %s\n",
@@ -422,27 +683,43 @@ static void handleImageUploadFinished(AsyncWebServerRequest* request)
         result.message
     );
 
-    JsonDocument doc;
-    doc["success"] = result.success;
-    doc["message"] = result.message;
-    String response;
-    serializeJson(doc, response);
+    response["success"] = result.success;
+    response["message"] = result.message;
 
     bool clientError =
         result.error == ImageUploadError::InvalidContentType ||
         result.error == ImageUploadError::InvalidSize ||
         result.error == ImageUploadError::OutOfOrder;
+    int status = result.success ? 200 : clientError ? 400 : 500;
 
-    request->send(
-        result.success ? 200 : clientError ? 400 : 500,
-        "application/json",
-        response
-    );
+    if (result.success && laserChanges)
+    {
+        if (chooseLaser(laser, mode, laserError))
+        {
+            // A test was set up for the old choice.
+            endTestForLaserChoice();
+        }
+        else
+        {
+            // The picture shows with the laser it had.
+            requestImageUpdate("upload");
+            response["success"] = false;
+            response["message"] = "The picture was saved, but the laser wasn't. " + laserError;
+            status = 500;
+        }
+    }
+
+    if (withLaser)
+    {
+        addChosenLaser(response);
+    }
+
+    sendJson(request, status, doc);
 }
 
-static void startAccessPoint()
+static void startAccessPoint(const char* reason)
 {
-    Serial.println("Starting setup AP");
+    logEvent("setup access point opened", reason);
 
     WiFi.mode(WIFI_AP_STA);
 
@@ -459,14 +736,278 @@ static void startAccessPoint()
 
     Serial.print("Setup IP: ");
     Serial.println(WiFi.softAPIP());
+}
 
-    startWebServer();
+static bool accessPointOpen()
+{
+    wifi_mode_t mode = WiFi.getMode();
+
+    return mode == WIFI_AP || mode == WIFI_AP_STA;
+}
+
+// Phones and laptops on the setup access point, logged as they join and leave.
+static uint8_t accessPointDevices = 0;
+
+static void logAccessPointDevices()
+{
+    if (!accessPointOpen())
+    {
+        return;
+    }
+
+    uint8_t devices = WiFi.softAPgetStationNum();
+    if (devices == accessPointDevices)
+    {
+        return;
+    }
+
+    logEvent(
+        devices > accessPointDevices ? "setup access point joined" : "setup access point left",
+        String(devices) + (devices == 1 ? " device" : " devices") + " connected"
+    );
+    accessPointDevices = devices;
+}
+
+static void stopAccessPoint()
+{
+    logEvent("setup access point closed", "WiFi connected");
+
+    accessPointDevices = 0;
+    dnsServer.stop();
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+}
+
+static void beginSavedWifi()
+{
+    Serial.printf("Connecting to %s...\n", ssid.c_str());
+
+    wifiAttempts++;
+    WiFi.begin(
+        ssid.c_str(),
+        password.c_str()
+    );
+
+    lastWifiAttemptAt = millis();
+}
+
+static const char* otaErrorText(ota_error_t error)
+{
+    switch (error)
+    {
+        case OTA_AUTH_ERROR:
+            return "wrong password";
+        case OTA_BEGIN_ERROR:
+            return "couldn't start, the update may be too big";
+        case OTA_CONNECT_ERROR:
+            return "couldn't connect back to the uploader";
+        case OTA_RECEIVE_ERROR:
+            return "the upload stopped part way";
+        case OTA_END_ERROR:
+            return "the upload didn't check out";
+        default:
+            return "unknown";
+    }
+}
+
+static void startOverTheAirUpdates()
+{
+    ArduinoOTA.setHostname(DeviceConfig::MdnsHostname);
+    ArduinoOTA.setPasswordHash(DeviceConfig::OtaPasswordHash);
+    // Filesystem uploads go to the web app partition, never the data partition.
+    ArduinoOTA.setPartitionLabel("spiffs");
+    // mDNS is already running for the web app.
+    ArduinoOTA.setMdnsEnabled(false);
+
+    ArduinoOTA.onStart(
+        []()
+        {
+            bool webApp = ArduinoOTA.getCommand() == U_SPIFFS;
+
+            logEvent("update started", webApp ? "web app" : "firmware");
+            flushDeviceLog();
+            pauseLaserScanner(ScanPause::Update);
+
+            if (webApp)
+            {
+                webAppUpdating = true;
+                // Lets a page that was already being sent finish before its
+                // file goes.
+                delay(500);
+                LittleFS.end();
+            }
+        }
+    );
+
+    // The device restarts after a successful update, and the boot entry shows
+    // the new firmware's ID.
+    ArduinoOTA.onEnd(
+        []()
+        {
+            logEvent("update finished");
+            flushDeviceLog();
+        }
+    );
+
+    ArduinoOTA.onError(
+        [](ota_error_t error)
+        {
+            logEvent("update failed", otaErrorText(error));
+            resumeLaserScanner(ScanPause::Update);
+
+            if (ArduinoOTA.getCommand() == U_SPIFFS)
+            {
+                LittleFS.begin();
+                webAppUpdating = false;
+            }
+        }
+    );
+
+    ArduinoOTA.begin();
+}
+
+static void startNetworkServices()
+{
+    configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+    if (!MDNS.begin(DeviceConfig::MdnsHostname))
+    {
+        logEvent("mDNS failed to start");
+    }
+    else
+    {
+        Serial.println("mDNS started");
+        Serial.printf("Visit: http://%s.local\n", DeviceConfig::MdnsHostname);
+    }
+
+    startOverTheAirUpdates();
+}
+
+static String wifiFailureReasonName()
+{
+    return WiFi.disconnectReasonName(
+        static_cast<wifi_err_reason_t>(lastWifiFailureReason)
+    );
+}
+
+// What the setup page shows when a network chosen there fails to connect.
+static String testFailureMessage(bool failureReported)
+{
+    if (!failureReported)
+    {
+        return "Unable to connect to " + pendingSsid + " in time. Try again.";
+    }
+
+    switch (lastWifiFailureReason)
+    {
+        case WIFI_REASON_NO_AP_FOUND:
+            return "Couldn't find " + pendingSsid +
+                ". It must be a 2.4 GHz network in range. Rescan and try again.";
+        case WIFI_REASON_AUTH_FAIL:
+        case WIFI_REASON_AUTH_EXPIRE:
+        case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
+        case WIFI_REASON_HANDSHAKE_TIMEOUT:
+            return "Unable to connect to " + pendingSsid + ". Check the password and try again.";
+        default:
+            return "Unable to connect to " + pendingSsid + " (" + wifiFailureReasonName() + "). Try again.";
+    }
+}
+
+static void onWifiConnected()
+{
+    wifiConnected = true;
+
+    String details =
+        ssid + ", IP " + WiFi.localIP().toString() +
+        ", signal " + String(WiFi.RSSI()) + " dBm" +
+        ", attempt " + String(wifiAttempts);
+
+    if (wifiAttempts > 1 && lastWifiFailureReason != 0)
+    {
+        details += ", last failure " + wifiFailureReasonName();
+    }
+
+    logEvent("wifi connected", details);
+
+    wifiAttempts = 0;
+    lastWifiFailureReason = 0;
+
+    if (accessPointOpen())
+    {
+        stopAccessPoint();
+    }
+
+    if (!networkServicesStarted)
+    {
+        startNetworkServices();
+        networkServicesStarted = true;
+    }
+}
+
+static void onWifiLost()
+{
+    wifiConnected = false;
+    wifiOfflineSince = millis();
+
+    logEvent("wifi lost", wifiFailureReasonName());
+}
+
+static void processSavedWifi()
+{
+    // A network chosen on the setup page is being tested, or has been saved and
+    // the tap is about to restart with it; leave it alone. The access point stays
+    // open meanwhile, so the page can still hear that it worked.
+    if (
+        !hasSavedWifi ||
+        connectionState == ConnectionState::Connecting ||
+        connectionState == ConnectionState::Success
+    )
+    {
+        return;
+    }
+
+    bool connected = WiFi.status() == WL_CONNECTED;
+
+    if (connected && !wifiConnected)
+    {
+        onWifiConnected();
+    }
+    else if (!connected && wifiConnected)
+    {
+        onWifiLost();
+    }
+
+    if (connected)
+    {
+        return;
+    }
+
+    unsigned long now = millis();
+
+    if (!accessPointOpen() && now - wifiOfflineSince >= fallbackAccessPointDelay)
+    {
+        startAccessPoint("no WiFi for 5 minutes");
+    }
+
+    // Searching for the router disturbs the access point, so don't retry while
+    // a phone is connected to it.
+    if (accessPointOpen() && WiFi.softAPgetStationNum() > 0)
+    {
+        return;
+    }
+
+    if (now - lastWifiAttemptAt >= wifiRetryInterval)
+    {
+        WiFi.disconnect();
+        beginSavedWifi();
+    }
 }
 
 void processWifiManager()
 {
     if (restartAt != 0 && static_cast<long>(millis() - restartAt) >= 0)
     {
+        flushDeviceLog();
         ESP.restart();
     }
 
@@ -476,100 +1017,124 @@ void processWifiManager()
 
         if (status == WL_CONNECTED)
         {
-            Serial.println("WiFi test successful");
-            saveCredentials(pendingSsid, pendingPassword);
-            connectionState = ConnectionState::Success;
+            if (saveWifiSettings(pendingSsid, pendingPassword))
+            {
+                logEventNow("wifi saved", pendingSsid);
+                connectionState = ConnectionState::Success;
+                // Not left to the page asking, as its phone may have gone.
+                restartAt = millis() + restartAfterSavingWifi;
+            }
+            else
+            {
+                logEvent("wifi save failed", pendingSsid);
+                WiFi.disconnect(false, true);
+                connectionFailureMessage = "Connected, but unable to save the network. Try again.";
+                connectionState = ConnectionState::Failure;
+            }
         }
         else if (
-            status == WL_CONNECT_FAILED ||
-            status == WL_NO_SSID_AVAIL ||
+            wifiFailureCount != failuresBeforeTest ||
             millis() - connectionStartedAt >= 20000
         )
         {
-            Serial.println("WiFi test failed");
+            bool failureReported = wifiFailureCount != failuresBeforeTest;
+
+            logEvent(
+                "wifi test failed",
+                pendingSsid + ", " + (failureReported ? wifiFailureReasonName() : String("timed out"))
+            );
             WiFi.disconnect(false, true);
+            connectionFailureMessage = testFailureMessage(failureReported);
             connectionState = ConnectionState::Failure;
         }
     }
 
-    wifi_mode_t mode = WiFi.getMode();
+    processSavedWifi();
 
-    if (mode == WIFI_AP || mode == WIFI_AP_STA)
+    // Bluetooth scanning takes half the radio's time, which can make WiFi miss
+    // the router while connecting, so it pauses meanwhile.
+    bool wifiConnecting =
+        connectionState == ConnectionState::Connecting ||
+        (hasSavedWifi && !wifiConnected && millis() - lastWifiAttemptAt < wifiAttemptDuration);
+
+    if (wifiConnecting)
+    {
+        pauseLaserScanner(ScanPause::WifiConnect);
+    }
+    else
+    {
+        resumeLaserScanner(ScanPause::WifiConnect);
+    }
+
+    // Does nothing until WiFi has first connected.
+    ArduinoOTA.handle();
+
+    if (accessPointOpen())
     {
         dnsServer.processNextRequest();
+        logAccessPointDevices();
     }
 }
 
-bool connectWifi()
+void startWifi()
 {
-    if (!loadCredentials())
+    // Retries are timed here rather than by the WiFi library, and the network
+    // is saved in our own settings rather than the library's.
+    WiFi.persistent(false);
+    WiFi.setAutoReconnect(false);
+
+    // With several access points for one network (a mesh system or extenders),
+    // check every channel and join the strongest, not the first found.
+    WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+    WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+
+    WiFi.onEvent(
+        [](arduino_event_id_t, arduino_event_info_t info)
+        {
+            uint8_t reason = info.wifi_sta_disconnected.reason;
+
+            // The disconnect before each retry or test reports leaving; keep the
+            // real reason.
+            if (reason != WIFI_REASON_ASSOC_LEAVE)
+            {
+                lastWifiFailureReason = reason;
+                wifiFailureCount++;
+            }
+        },
+        ARDUINO_EVENT_WIFI_STA_DISCONNECTED
+    );
+
+    hasSavedWifi = loadWifiSettings(ssid, password);
+
+    if (!hasSavedWifi)
     {
-        Serial.println("No WiFi configured");
+        startAccessPoint("no WiFi saved");
 
-        startAccessPoint();
-
-        return false;
+        return;
     }
 
     WiFi.mode(WIFI_STA);
-    dnsServer.stop();
+    wifiOfflineSince = millis();
+    beginSavedWifi();
+}
 
-    Serial.print("Connecting to ");
-    Serial.print(ssid);
-    Serial.println("...");
+bool wifiIsConnected()
+{
+    return wifiConnected;
+}
 
-    WiFi.begin(
-        ssid.c_str(),
-        password.c_str()
-    );
+bool setupAccessPointIsOpen()
+{
+    return accessPointOpen();
+}
 
-    for (int i = 0; i < 30; i++)
-    {
-        if (WiFi.status() == WL_CONNECTED)
-        {
-            Serial.println();
-            Serial.println("Connected to WiFi");
-            Serial.print("IP address: ");
-            Serial.println(WiFi.localIP());
-
-            configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-
-            String mdnsHostname = String(DeviceConfig::Hostname) + "-" + DeviceConfig::DeviceId;
-
-            if (!MDNS.begin(mdnsHostname.c_str()))
-            {
-                Serial.println("Failed to start mDNS");
-            }
-            else
-            {
-                Serial.println("mDNS started");
-                Serial.printf("Visit: http://%s.local\n", mdnsHostname.c_str());
-            }
-
-            return true;
-        }
-
-        Serial.print(".");
-
-        delay(500);
-    }
-
-    Serial.println();
-    Serial.println("Connection failed");
-
-    startAccessPoint();
-
-    return false;
+String wifiIpAddress()
+{
+    return WiFi.localIP().toString();
 }
 
 void startWebServer()
 {
-    server.serveStatic(
-        "/assets/",
-        LittleFS,
-        "/assets/"
-    ).setTryGzipFirst(false);
-
     server.on(
         "/",
         HTTP_GET,
@@ -595,9 +1160,21 @@ void startWebServer()
     );
 
     server.on(
-        "/wifi",
-        HTTP_DELETE,
-        handleForgetWifi
+        "/factory-reset",
+        HTTP_POST,
+        handleFactoryReset
+    );
+
+    server.on(
+        "/log",
+        HTTP_GET,
+        handleLog
+    );
+
+    server.on(
+        "/image",
+        HTTP_GET,
+        handleImage
     );
 
     server.on(
@@ -625,6 +1202,40 @@ void startWebServer()
         HTTP_GET,
         handleStatus
     );
+
+    server.on(
+        "/lasers",
+        HTTP_GET,
+        handleLasers
+    );
+
+    server.on(
+        "/laser",
+        HTTP_POST,
+        handleChooseLaser
+    );
+
+    server.on(
+        "/strip",
+        HTTP_GET,
+        handleStrip
+    );
+
+    server.on(
+        "/strip/test",
+        HTTP_POST,
+        handleStripTest
+    );
+
+    server.on(
+        "/strip/live",
+        HTTP_POST,
+        handleStripLive
+    );
+
+    addLibraryRoutes(server);
+
+    addSetupHelpRoutes(server);
 
     server.onNotFound(
         [](AsyncWebServerRequest *request)

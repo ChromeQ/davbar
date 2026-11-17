@@ -1,9 +1,15 @@
+// A tap the tap switcher links to.
+export type TapLink = {
+  deviceName: string;
+  deviceId: string;
+  url: string;
+};
+
 export type DeviceConfig = {
   brandName: string;
   deviceName: string;
   deviceId: string;
   hostname: string;
-  accessPointPassword: string;
   accessPointName: string;
   uploadHost: string;
   uploadUrl: string;
@@ -11,6 +17,8 @@ export type DeviceConfig = {
   outputFileName: string;
   appTitle: string;
   connectTitle: string;
+  // Every tap with a profile next to this one, this tap included.
+  taps: TapLink[];
 };
 
 declare const __DEVICE_CONFIG__: DeviceConfig;

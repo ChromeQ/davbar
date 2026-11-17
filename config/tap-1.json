@@ -3,5 +3,9 @@
   "deviceName": "Tap 1",
   "deviceId": "tap1",
   "hostname": "davbar",
-  "accessPointPassword": "davbar123"
+  "fit": {
+    "shiftX": 0,
+    "shiftY": -1,
+    "bottomSlant": 0
+  }
 }

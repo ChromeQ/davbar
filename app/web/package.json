@@ -7,32 +7,38 @@
   "type": "module",
   "author": "ChromeQ",
   "scripts": {
-    "build": "tsc && vite build",
+    "build": "tsc && vite build --mode app && vite build --mode connect",
     "dev": "vite",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "prepreview": "pnpm run build",
     "preview": "vite preview",
-    "test": "echo \"Error: no test specified\" && exit 0",
+    "test": "vitest run",
     "outdated": "pnpm outdated -r --filter \"$npm_package_name*\" || true"
   },
   "dependencies": {
     "@chromeq/davbar-spectra6": "workspace:*",
-    "lucide-react": "1.26.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "lucide-react": "1.71.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@eslint/css": "catalog:",
     "@eslint/js": "catalog:",
     "@types/node": "catalog:",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@typescript/native": "catalog:typescript",
-    "@vitejs/plugin-react": "6.0.4",
+    "@vitejs/plugin-react": "6.3.0",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
+    "eslint-plugin-prettier": "catalog:",
+    "eslint-plugin-react-hooks": "7.1.1",
     "globals": "catalog:",
+    "prettier": "catalog:",
+    "typescript": "catalog:typescript",
     "typescript-eslint": "catalog:",
-    "vite": "8.1.5"
+    "vite": "8.3.7",
+    "vitest": "catalog:"
   }
 }
