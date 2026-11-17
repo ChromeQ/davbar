@@ -258,6 +258,22 @@ static void testBatteryIgnoresSagsWithinTheHour()
     TEST_ASSERT_EQUAL_UINT8(85, tracker.values(4000).batteryPercent);
 }
 
+// A steady keg sends the same reading for hours. The tap passes every one on, so
+// they keep the battery's hour full and a sag two hours later still doesn't show.
+static void testSteadyReadingsKeepTheBatterysHour()
+{
+    showFirstReading(84, 800);
+
+    for (int32_t now = 30; now <= 7200; now += 30)
+    {
+        tracker.addReading(now, reading(distanceFor(84), 800));
+    }
+
+    tracker.addReading(7230, reading(distanceFor(84), 780));
+    TEST_ASSERT_NULL(reasonAt(7230));
+    TEST_ASSERT_EQUAL_UINT8(80, tracker.values(7230).batteryPercent);
+}
+
 static void testBatteryCanRiseInTheFirstHour()
 {
     // The first reading came during a sag.
@@ -465,6 +481,7 @@ int main()
     RUN_TEST(testRefillShowsOnceSettled);
     RUN_TEST(testLitresWithinThePercentageWaitForTheNextRedraw);
     RUN_TEST(testBatteryIgnoresSagsWithinTheHour);
+    RUN_TEST(testSteadyReadingsKeepTheBatterysHour);
     RUN_TEST(testBatteryCanRiseInTheFirstHour);
     RUN_TEST(testSmallBatteryRiseAfterTheFirstHourNeverShows);
     RUN_TEST(testNewBatteriesShowStraightAway);

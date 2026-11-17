@@ -46,6 +46,9 @@ static volatile uint32_t wifiFailureCount = 0;
 // A connection attempt is given this long before Bluetooth scanning resumes.
 static const unsigned long wifiAttemptDuration = 15000;
 static unsigned long restartAt = 0;
+// After a network chosen on the setup page is saved, the tap restarts this much
+// later on its own. The page asks every 500ms, so it sees "Saved" first.
+static const unsigned long restartAfterSavingWifi = 3000;
 
 enum class ConnectionState
 {
@@ -268,7 +271,6 @@ static void handleConnectStatus(AsyncWebServerRequest* request)
             R"({"success":true,"message":"Saved. Rebooting..."})"
         );
 
-        restartAt = millis() + 1000;
         return;
     }
 
@@ -952,8 +954,14 @@ static void onWifiLost()
 
 static void processSavedWifi()
 {
-    // A network chosen on the setup page is being tested; leave it alone.
-    if (!hasSavedWifi || connectionState == ConnectionState::Connecting)
+    // A network chosen on the setup page is being tested, or has been saved and
+    // the tap is about to restart with it; leave it alone. The access point stays
+    // open meanwhile, so the page can still hear that it worked.
+    if (
+        !hasSavedWifi ||
+        connectionState == ConnectionState::Connecting ||
+        connectionState == ConnectionState::Success
+    )
     {
         return;
     }
@@ -1013,6 +1021,8 @@ void processWifiManager()
             {
                 logEventNow("wifi saved", pendingSsid);
                 connectionState = ConnectionState::Success;
+                // Not left to the page asking, as its phone may have gone.
+                restartAt = millis() + restartAfterSavingWifi;
             }
             else
             {

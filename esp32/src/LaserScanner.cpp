@@ -30,7 +30,7 @@ struct LaserState
     // The latest broadcast with a distance. Empty broadcasts don't replace it.
     bool hasReading;
     RaptLaser::Reading reading;
-    // Counts new readings, so the strip can tell when there's another.
+    // Counts readings, so the strip can tell when there's another.
     uint32_t readingCount;
     int8_t rssi;
     unsigned long lastHeardAt;
@@ -175,12 +175,18 @@ class ScanCallbacks : public NimBLEScanCallbacks
             laser->rssi = rssi;
             laser->lastHeardAt = now;
 
-            if (reading.hasDistance && (!laser->hasReading || !sameReading(reading, laser->reading)))
+            // Every reading goes to the strip, even one the same as the last, as
+            // the battery's hour fills from them. Only a change is logged.
+            if (reading.hasDistance)
             {
+                if (!laser->hasReading || !sameReading(reading, laser->reading))
+                {
+                    laser->readingChanged = true;
+                }
+
                 laser->hasReading = true;
                 laser->reading = reading;
                 laser->readingCount++;
-                laser->readingChanged = true;
             }
         }
 

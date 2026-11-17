@@ -1,6 +1,6 @@
 # Keg level display plan
 
-Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 10 (wrap up): the docs are written and the overnight run passed; next the branch review, archiving this plan and the merge. Last updated 2026-11-17.
+Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 10 (wrap up): the docs are written, the overnight run passed and the first branch review's fixes are on the taps; next a second review, archiving this plan and the merge. Last updated 2026-11-17.
 
 ## Goal
 
@@ -756,8 +756,16 @@ Each step ends with something visible to check.
    rules, setup help, no laser and the fit) and `docs/web-app.md` (Compose, the
    Library, the keg states and developer mode), linked from the READMEs, which now
    cover the `fit` profile key and the routes, and calling the main page's button
-   "Upload to display". Code comments point to the docs, not this plan. Then, after a
-   review of the whole branch, move this plan to
+   "Upload to display". Code comments point to the docs, not this plan. The first
+   review of the whole branch (2026-11-17) found three things. Two were real and are
+   fixed: every laser reading now reaches the strip, not just changed ones, so a
+   steady keg keeps the battery's hour full; and a tap restarts by itself 3s after
+   saving a network from the setup page, rather than when the phone asks, which it
+   couldn't once the access point had closed (tap 1's log showed it four times on
+   9-10 Nov). Still to check on a real tap: the next change of network through its
+   access point. The third, the preview keeping the old picture after an upload,
+   can't happen, as Close is the only way out of the upload's dialog and reloads the
+   page. Then, after a second review of the whole branch, move this plan to
    `docs/plans/2026-11-keg-level.md` with a line at the top saying it is done and
    when it was merged. After that the archived plan is never edited; fixes go in the
    docs. Ideas still marked Later stay listed there, and each gets its own new plan

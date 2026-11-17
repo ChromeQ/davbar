@@ -85,7 +85,7 @@ struct ChosenLaser
     // hasn't been heard since the tap started.
     unsigned long lastHeardAt;
     // The latest broadcast with a distance, and how many readings there have
-    // been, which goes up with each new one.
+    // been, which goes up with each one, even one the same as the last.
     bool hasReading;
     RaptLaser::Reading reading;
     uint32_t readingCount;

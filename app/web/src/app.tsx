@@ -2213,6 +2213,10 @@ const App = () => {
                         Make room…
                       </button>
                     )}
+                    {/* The only way out once an upload succeeds (Escape, the
+                        backdrop and pasting don't close it). Reloading starts the
+                        page again from the tap, so the preview's "On the tap" is
+                        the new picture. */}
                     <button
                       className="modal-button primary-modal-button"
                       type="button"
