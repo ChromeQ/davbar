@@ -766,12 +766,27 @@ Each step ends with something visible to check.
    couldn't happen, as the upload dialog's Close reloaded the page. Close now just
    closes it, as Escape and clicking outside it do: the page keeps the uploaded
    picture as the tap's, and labels a composed picture "On the tap" once it's
-   uploaded.
+   uploaded. Found while checking the Wi-Fi fix on tap 3 (2026-11-17), with laser 3
+   not heard: the "Waiting for laser 3" strip had no mode icon, so changing the mode
+   while waiting showed nowhere, yet the tap still redrew for it. The mode icon now
+   goes in front of the words, or the mode warning in its place. And the upload's
+   message now says a new mode for the same laser redraws straight away, and that
+   an Eco laser's first reading can take up to an hour. Also, straight after Upload
+   to display the preview went back to the old mode for up to 15s: the page asked
+   the tap at once, before the tap had worked out its new strip (every 500ms). The
+   page now keeps showing the laser sent until the tap's answers have it, and asks
+   again a second later.
 
    Left to do:
-   - Check the Wi-Fi fix on a real tap, at home: a tap that changes network through
-     its access point restarts by itself. Claude gives the steps.
-   - Upload the web app to the three taps (the upload dialog's Close), at home.
+   - Check the Wi-Fi fix on a real tap: done 2026-11-17 on tap 3. The router's
+     2.4 GHz band couldn't be turned off alone, as the extenders broadcast
+     ChromeQ_2.4 too, so tap 3 was factory reset and set up on the phone's
+     hotspot (which had to be switched to 2.4 GHz). With the hotspot then off, it
+     opened its access point after 5 minutes. ChromeQ_2.4 was saved from the
+     phone at 09:03:46Z, and tap 3 restarted by itself 7s later, with no "wifi
+     connected" or "setup access point closed" in between.
+   - Upload the web app to the three taps (the upload dialog's Close): done
+     2026-11-17.
    - A second review of the whole branch: done 2026-11-17, recommending the merge
      once the Wi-Fi check above passes, with no other findings.
    - Move this plan to `docs/plans/2026-11-keg-level.md` with a line at the top

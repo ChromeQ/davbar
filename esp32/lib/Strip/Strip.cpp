@@ -119,6 +119,12 @@ namespace Strip
             drawIcon(canvas, StripGlyphs::noSignalStrike, x, y, Red);
         }
 
+        // The mode chosen for this tap: a brain for Smart, a leaf for Eco.
+        const Icon& modeIcon(Mode mode)
+        {
+            return mode == Mode::Eco ? StripGlyphs::leaf : StripGlyphs::brain;
+        }
+
         // Like a road sign: yellow inside, with a black outline and "!".
         void drawModeWarning(const Canvas& canvas, int x, int y)
         {
@@ -148,8 +154,7 @@ namespace Strip
             }
             x += BatteryWidth + NubWidth + GroupGap;
 
-            const Icon& mode = values.mode == Mode::Eco ? StripGlyphs::leaf : StripGlyphs::brain;
-            drawIcon(canvas, mode, x, iconY, Black);
+            drawIcon(canvas, modeIcon(values.mode), x, iconY, Black);
             x += IconSize + GroupGap;
 
             if (values.modeWarning)
@@ -159,8 +164,10 @@ namespace Strip
         }
 
         // In place of the top row while there's no level, or nothing's been heard
-        // from the laser: what the tap's waiting for, in words, with the no signal
-        // icon or the mode warning in front, centred together.
+        // from the laser: what the tap's waiting for, in words, with one icon in
+        // front, centred together. It's the no signal icon, or the mode warning,
+        // which may be why there's no reading, or otherwise the mode icon, so a
+        // change of mode shows while waiting.
         void drawMessage(const Canvas& canvas, const Values& values)
         {
             const Font& font = StripGlyphs::messageFont;
@@ -180,27 +187,26 @@ namespace Strip
                 snprintf(text, sizeof(text), "%s", words);
             }
 
-            // No signal hides the mode warning, as the laser's mode isn't known.
-            bool warning = values.modeWarning && !values.noSignal;
-            bool icon = values.noSignal || warning;
             int textWidth = (Draw::textAdvance(font, text) + 15) / 16;
-            int width = (icon ? IconSize + GroupGap : 0) + textWidth;
+            int width = IconSize + GroupGap + textWidth;
             int x = Width / 2 - width / 2;
             int iconY = capTop + font.capHeight / 2 - IconSize / 2;
 
+            // No signal hides the mode warning, as the laser's mode isn't known.
             if (values.noSignal)
             {
                 drawNoSignal(canvas, x, iconY);
             }
-            else if (warning)
+            else if (values.modeWarning)
             {
                 drawModeWarning(canvas, x, iconY);
             }
-
-            if (icon)
+            else
             {
-                x += IconSize + GroupGap;
+                drawIcon(canvas, modeIcon(values.mode), x, iconY, Black);
             }
+
+            x += IconSize + GroupGap;
 
             drawText(canvas, font, text, x, capTop + font.capHeight, Align::Left, plain(Black));
         }

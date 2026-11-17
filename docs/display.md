@@ -46,8 +46,9 @@ tables made by `pnpm strip:glyphs` (see the [app README](../app/README.md)).
 
 - **No laser chosen yet** (a new or factory reset tap): the strip says "No laser".
 - **Waiting for laser 1:** a laser is chosen but has no level yet, after a minute's
-  wait for its first reading. The top row says so (36px), and the bar shows a shrug,
-  `¯\_(ツ)_/¯`. A mode warning, which may be why, goes in front. A laser not in
+  wait for its first reading. The top row says so (36px), with the mode icon in
+  front, so a change of mode shows, and the bar shows a shrug, `¯\_(ツ)_/¯`. A mode
+  warning, which may be why, goes in front in the icon's place. A laser not in
   `config/lasers.json` drops the number.
 - **Can't hear laser 1:** with Smart chosen, nothing heard for 10 minutes. The laser
   broadcasts constantly in Smart, so that's a real problem (or the RAPT app is
@@ -124,9 +125,10 @@ Nothing reaches the screen until Upload to display. A laser picked in the web ap
 goes into the preview first, and Upload to display sends the picture with its laser
 in one request (`POST /image?laser=…&mode=…`), checked before the picture is saved,
 so neither is saved if the laser is turned down. The tap then leaves the redraw to
-the laser's rules, so the screen changes once: when the new laser's first reading
-arrives (within a minute), or straight away for no laser. Without a new picture, the
-laser goes on its own (`POST /laser`).
+the laser's rules, so the screen changes once: for a new laser, when its first
+reading arrives, or after a minute saying it's waiting for it (an Eco laser's first
+reading can take up to an hour); straight away for a new mode of the same laser, or
+for no laser. Without a new picture, the laser goes on its own (`POST /laser`).
 
 `GET /strip` includes the laser chosen, so a choice made from another page shows in
 the web app within 15s.

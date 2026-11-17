@@ -221,8 +221,9 @@ static void assertShrugInTheBar()
     TEST_ASSERT_INT_WITHIN(1, shrug.top - BarInsideY, BarInsideY + BarInsideHeight - 1 - shrug.bottom);
 }
 
-// "Waiting for laser 1" across the row, in place of the values, centred to
-// within a few pixels, as each end's letter has its own space beside it.
+// "Waiting for laser 1", with the mode icon in front, across the row, in place
+// of the values, centred to within a few pixels, as each end's letter or icon has
+// its own space beside it.
 static void testWaitingForTheFirstReading()
 {
     drawAndSave("waiting", noReading());
@@ -253,7 +254,49 @@ static void testWaitingForALaserWithNoNumber()
     assertShrugInTheBar();
 }
 
-// The mode warning, which may be why there's no reading yet, goes in front.
+// The mode icon goes in front, so a change of mode shows while waiting: Smart's
+// brain and Eco's leaf are the only difference, at the row's left end.
+static void testWaitingShowsTheMode()
+{
+    static uint8_t smart[Strip::Size];
+    Strip::draw(strip, noReading());
+    memcpy(smart, strip, sizeof(smart));
+
+    Strip::Values values = noReading();
+    values.mode = Strip::Mode::Eco;
+    drawAndSave("waiting-eco", values);
+
+    Ink changed = {Strip::Width, Strip::Height, -1, -1};
+    for (int y = 0; y < Strip::Height; y++)
+    {
+        for (int x = 0; x < Strip::Width; x++)
+        {
+            uint8_t byte = smart[y * Strip::RowBytes + x / 2];
+            uint8_t before = x % 2 == 0 ? byte >> 4 : byte & 0x0F;
+            if (before != pixel(x, y))
+            {
+                changed.left = x < changed.left ? x : changed.left;
+                changed.right = x > changed.right ? x : changed.right;
+                changed.top = y < changed.top ? y : changed.top;
+                changed.bottom = y > changed.bottom ? y : changed.bottom;
+            }
+        }
+    }
+
+    // Within one 32-pixel icon, in front of the words and above the bar
+    Ink row = inkIn(0, 0, Strip::Width, BarTop);
+    TEST_ASSERT_GREATER_OR_EQUAL(0, changed.right);
+    TEST_ASSERT_LESS_THAN(32, changed.right - changed.left + 1);
+    TEST_ASSERT_LESS_THAN(row.left + 32, changed.right);
+    TEST_ASSERT_LESS_THAN(BarTop, changed.bottom);
+    TEST_ASSERT_EQUAL_HEX(
+        bit(Strip::White) | bit(Strip::Black),
+        coloursIn(0, 0, Strip::Width, Strip::Height)
+    );
+}
+
+// The mode warning, which may be why there's no reading yet, goes in front in
+// place of the mode icon.
 static void testWaitingShowsTheModeWarning()
 {
     Strip::Values values = noReading();
@@ -460,6 +503,9 @@ static void testMatchesTheWebAppsPreview()
 
     Strip::Values waiting = noReading();
 
+    Strip::Values waitingEco = waiting;
+    waitingEco.mode = Strip::Mode::Eco;
+
     Strip::Values noNumber = waiting;
     noNumber.laserNumber = 0;
 
@@ -479,8 +525,9 @@ static void testMatchesTheWebAppsPreview()
         {"full and cold", fullAndCold, 0xCF0FA36F},
         {"test values", test, 0xBB2FB6BB},
         {"no laser", noLaser, 0x5C3E9A7C},
-        {"waiting", waiting, 0x8211F0EC},
-        {"waiting, no number", noNumber, 0xF41AF8AA},
+        {"waiting", waiting, 0x250B2F4F},
+        {"waiting, eco", waitingEco, 0x618F110F},
+        {"waiting, no number", noNumber, 0xF825C7CA},
         {"waiting, mode warning", waitingWarning, 0x982153F0},
         {"never heard", neverHeard, 0xA8E6A1A7},
     };
@@ -514,6 +561,7 @@ int main()
     RUN_TEST(testTestValuesHaveARedBorder);
     RUN_TEST(testWaitingForTheFirstReading);
     RUN_TEST(testWaitingForALaserWithNoNumber);
+    RUN_TEST(testWaitingShowsTheMode);
     RUN_TEST(testWaitingShowsTheModeWarning);
     RUN_TEST(testCantHearALaserNeverHeard);
     RUN_TEST(testCantHearALaserKeepsTheLevel);

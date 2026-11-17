@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   pickedStripValues,
   pickedTapLaser,
+  pendingSentPick,
   pickQuery,
+  SENT_PICK_MS,
   sentLaserMessage,
   tapHasPick,
   type LaserPick,
@@ -93,6 +95,31 @@ describe('a laser picked in the preview', () => {
       'With no laser, the picture fills the whole screen.'
     );
   });
+
+  it('says an Eco laser can take an hour, and a new mode redraws now', () => {
+    const eco = { ...laser2, mode: 'eco' as const };
+
+    expect(sentLaserMessage(pickedTapLaser(eco))).toBe(
+      "In Eco, laser 2's first reading can take up to an hour, so after a minute the screen says it's waiting for it."
+    );
+    // The same laser before, in the other mode
+    expect(sentLaserMessage(pickedTapLaser(eco), pickedTapLaser(laser2))).toBe(
+      'The screen redraws now to show Eco.'
+    );
+    expect(sentLaserMessage(pickedTapLaser(laser2), pickedTapLaser(eco))).toBe(
+      'The screen redraws now to show Smart.'
+    );
+    // Another laser, or none, before
+    expect(
+      sentLaserMessage(
+        pickedTapLaser(laser2),
+        pickedTapLaser({ ...laser2, address: 'E5:4C:66:F9:E1:33' })
+      )
+    ).toMatch(/^The screen updates once laser 2's/);
+    expect(sentLaserMessage(pickedTapLaser(laser2), pickedTapLaser(noLaser))).toMatch(
+      /^The screen updates once laser 2's/
+    );
+  });
 });
 
 describe("the tap's laser in its answers", () => {
@@ -105,5 +132,40 @@ describe("the tap's laser in its answers", () => {
     ).toEqual({ laser: { number: 1, address: 'E5:4C:66:F9:E1:33', mode: 'eco' }, noLaser: false });
     expect(readTapLaser({ noLaser: true, laser: null })).toEqual({ laser: null, noLaser: true });
     expect(readTapLaser({ success: true })).toBeNull();
+  });
+});
+
+describe('a laser just sent', () => {
+  const sent = { pick: laser2, at: 1000 };
+  const values = pickedStripValues(laser2)!;
+  const strip = (receivedAt: number, changes: Partial<typeof values> = {}) => ({
+    receivedAt,
+    values: { ...values, ...changes },
+  });
+
+  it('shows until the tap answers with its values', () => {
+    expect(pendingSentPick(sent, null)).toBe(laser2);
+    // An answer from before sending, with the old mode
+    expect(pendingSentPick(sent, strip(900, { mode: 'eco' }))).toBe(laser2);
+    // Straight after, the tap's values can still be the old ones
+    expect(pendingSentPick(sent, strip(1100, { mode: 'eco' }))).toBe(laser2);
+    expect(pendingSentPick(sent, strip(1100, { laserNumber: 1 }))).toBe(laser2);
+    // Then they have it
+    expect(pendingSentPick(sent, strip(2100))).toBeNull();
+  });
+
+  it("stops if the tap's answers never have it", () => {
+    expect(pendingSentPick(sent, strip(1000 + SENT_PICK_MS, { mode: 'eco' }))).toBeNull();
+  });
+
+  it('has the tap with no laser once its values have none', () => {
+    const none = { pick: noLaser, at: 1000 };
+
+    expect(pendingSentPick(none, strip(1100))).toBe(noLaser);
+    expect(pendingSentPick(none, strip(2100, { laserChosen: false }))).toBeNull();
+  });
+
+  it('is nothing when nothing was sent', () => {
+    expect(pendingSentPick(null, strip(2100))).toBeNull();
   });
 });

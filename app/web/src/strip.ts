@@ -298,6 +298,9 @@ const drawNoSignal = (canvas: Canvas, x: number, y: number) => {
   drawIcon(canvas, noSignalStrike, x, y, RED);
 };
 
+// The mode chosen for this tap: a brain for Smart, a leaf for Eco.
+const modeIcon = (mode: StripValues['mode']) => (mode === 'eco' ? leaf : brain);
+
 // Like a road sign: yellow inside, with a black outline and "!".
 const drawModeWarning = (canvas: Canvas, x: number, y: number) => {
   drawIcon(canvas, warningFill, x, y, YELLOW);
@@ -326,7 +329,7 @@ const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
   }
   x += BATTERY_WIDTH + NUB_WIDTH + GROUP_GAP;
 
-  drawIcon(canvas, values.mode === 'eco' ? leaf : brain, x, iconY, BLACK);
+  drawIcon(canvas, modeIcon(values.mode), x, iconY, BLACK);
   x += ICON_SIZE + GROUP_GAP;
 
   if (values.modeWarning) {
@@ -335,8 +338,9 @@ const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
 };
 
 // In place of the top row while there's no level, or nothing's been heard from
-// the laser: what the tap's waiting for, in words, with the no signal icon or the
-// mode warning in front, centred together.
+// the laser: what the tap's waiting for, in words, with one icon in front, centred
+// together. It's the no signal icon, or the mode warning, which may be why there's
+// no reading, or otherwise the mode icon, so a change of mode shows while waiting.
 const drawMessage = (canvas: Canvas, values: StripValues) => {
   // An odd spare pixel goes above, as round letters reach a pixel past the cap
   // height.
@@ -344,23 +348,21 @@ const drawMessage = (canvas: Canvas, values: StripValues) => {
   const words = values.noSignal ? "Can't hear laser" : 'Waiting for laser';
   // A laser not in config/lasers.json has no number.
   const text = values.laserNumber > 0 ? `${words} ${values.laserNumber}` : words;
-  // No signal hides the mode warning, as the laser's mode isn't known.
-  const showWarning = values.modeWarning && !values.noSignal;
-  const icon = values.noSignal || showWarning;
   const textWidth = divide(textAdvance(messageFont, text) + 15, 16);
-  const width = (icon ? ICON_SIZE + GROUP_GAP : 0) + textWidth;
+  const width = ICON_SIZE + GROUP_GAP + textWidth;
   let x = divide(STRIP_WIDTH, 2) - divide(width, 2);
   const iconY = capTop + divide(messageFont.capHeight, 2) - divide(ICON_SIZE, 2);
 
+  // No signal hides the mode warning, as the laser's mode isn't known.
   if (values.noSignal) {
     drawNoSignal(canvas, x, iconY);
-  } else if (showWarning) {
+  } else if (values.modeWarning) {
     drawModeWarning(canvas, x, iconY);
+  } else {
+    drawIcon(canvas, modeIcon(values.mode), x, iconY, BLACK);
   }
 
-  if (icon) {
-    x += ICON_SIZE + GROUP_GAP;
-  }
+  x += ICON_SIZE + GROUP_GAP;
 
   drawText(canvas, messageFont, text, x, capTop + messageFont.capHeight, 'left', plain(BLACK));
 };

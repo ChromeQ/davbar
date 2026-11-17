@@ -80,6 +80,7 @@ import {
   type LaserItem,
 } from './lasers';
 import {
+  pendingSentPick,
   pickedStripValues,
   pickedTapLaser,
   pickQuery,
@@ -212,10 +213,10 @@ const librarySaveNote = (save: SaveResult | null) => {
 };
 // What Upload to display says it sent.
 const sentMessage = (
-  sent: { picture: boolean; laser: TapLaser | null } | null,
+  sent: { picture: boolean; laser: TapLaser | null; before: TapLaser | null } | null,
   save: SaveResult | null
 ) => {
-  const laser = sent?.laser ? ` ${sentLaserMessage(sent.laser)}` : '';
+  const laser = sent?.laser ? ` ${sentLaserMessage(sent.laser, sent.before)}` : '';
 
   return sent?.picture === false
     ? `The laser was sent.${laser}`
@@ -485,8 +486,13 @@ const App = () => {
   const [typedLine, setTypedLine] = useState<string | null>(null);
   // What happened to the library copy of the last beer sent.
   const [librarySave, setLibrarySave] = useState<SaveResult | null>(null);
-  // What the last Upload to display sent: a picture, the laser, or both.
-  const [sent, setSent] = useState<{ picture: boolean; laser: TapLaser | null } | null>(null);
+  // What the last Upload to display sent: a picture, the laser, or both, and the
+  // tap's laser before it.
+  const [sent, setSent] = useState<{
+    picture: boolean;
+    laser: TapLaser | null;
+    before: TapLaser | null;
+  } | null>(null);
   // A beer sent that this tap's full library turned away, kept while there's a
   // chance to make room for it.
   const [unsavedBeer, setUnsavedBeer] = useState<{ picture: Blob; thumbnail: Blob } | null>(null);
@@ -505,14 +511,18 @@ const App = () => {
   // A picture and its laser together). null once sent, or when the tap already has it.
   const [pickedLaser, setPickedLaser] = useState<LaserPick | null>(null);
   const pick = pickedLaser && !(tapLaser && tapHasPick(pickedLaser, tapLaser)) ? pickedLaser : null;
+  // A laser just sent, which the preview keeps showing until the tap's strip has it
+  const [sentPick, setSentPick] = useState<{ pick: LaserPick; at: number } | null>(null);
+  const pendingPick = pendingSentPick(sentPick, strip);
   // The preview shows the pick, or what the tap has.
   const shownLaser = pick ? pickedTapLaser(pick) : tapLaser;
   const chosenLaser = shownLaser?.laser;
   // No laser on purpose: the picture is the whole screen (docs/display.md, No
   // laser on purpose).
   const noLaser = shownLaser?.noLaser ?? false;
-  // The strip the tap will draw for the pick
-  const pickedStrip = pick ? pickedStripValues(pick) : null;
+  // The strip the tap will draw for the pick, or for a laser just sent
+  const previewPick = pick ?? pendingPick;
+  const pickedStrip = previewPick ? pickedStripValues(previewPick) : null;
   const [developerMode, setDeveloperMode] = useState(loadDeveloperMode);
   const [showFrame, setShowFrame] = useState(loadShowFrame);
   const [testInputs, setTestInputs] = useState<TestInputs>(DEFAULT_TEST_INPUTS);
@@ -529,7 +539,11 @@ const App = () => {
   const testEnd = testEndsAt(strip, testRequest);
   // In developer mode the preview shows the test values; otherwise what the tap
   // will show: the picked laser's strip, or the tap's.
-  const stripValues = developerMode ? test.strip : pick ? pickedStrip : (strip?.values ?? null);
+  const stripValues = developerMode
+    ? test.strip
+    : previewPick
+      ? pickedStrip
+      : (strip?.values ?? null);
   // The image the tap has stored, or null if it has none or couldn't send it.
   const [tapImage, setTapImage] = useState<Uint8Array | null>(null);
   // Developer mode's setup help, as the tap draws it, for the screen chosen.
@@ -1406,15 +1420,21 @@ const App = () => {
         setKnownTapLaser({ laser: sentLaser, at: Date.now() });
         setPickedLaser(null);
 
+        if (pick) {
+          setSentPick({ pick, at: Date.now() });
+        }
+
         // The tap ends any test when its laser changes, so the countdown goes too.
         if (testEnd !== null) {
           setTestRequest({ kind: 'live', at: Date.now() });
         }
       }
 
-      // The strip changes with the laser, so the preview asks straight away.
+      // The strip changes with the laser, so the preview asks straight away, and
+      // again a second later, by when the tap has worked out its new values.
       refreshStrip();
-      setSent({ picture: picture !== null, laser: sentLaser });
+      window.setTimeout(refreshStrip, 1000);
+      setSent({ picture: picture !== null, laser: sentLaser, before: tapLaser ?? null });
 
       // Image mode's pictures also go in this tap's library, to send again later,
       // apart from the keg states.

@@ -59,8 +59,9 @@ const cases: Array<[string, StripValues, number]> = [
   ],
   ['test values', { ...fullKeg, test: true }, 0xbb2fb6bb],
   ['no laser', nothingYet, 0x5c3e9a7c],
-  ['waiting', waiting, 0x8211f0ec],
-  ['waiting, no number', { ...waiting, laserNumber: 0 }, 0xf41af8aa],
+  ['waiting', waiting, 0x250b2f4f],
+  ['waiting, eco', { ...waiting, mode: 'eco' }, 0x618f110f],
+  ['waiting, no number', { ...waiting, laserNumber: 0 }, 0xf825c7ca],
   ['waiting, mode warning', { ...waiting, modeWarning: true }, 0x982153f0],
   ['never heard', { ...waiting, modeWarning: true, noSignal: true }, 0xa8e6a1a7],
 ];
