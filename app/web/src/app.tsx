@@ -113,7 +113,13 @@ import {
 import { drawStrip, HIDDEN_X, HIDDEN_Y, STRIP_SIZE } from './strip';
 import { showLiveValues, showSetupHelpTest, showTestValues, useStripState } from './strip-values';
 import { sourceText, TEXT_FONTS, type PictureSource } from './picture-source';
-import { fetchTapImage, fetchTapImageInfo, tapPictureBlob, type TapImageInfo } from './tap-image';
+import {
+  fetchTapImage,
+  fetchTapImageInfo,
+  isOnTheTap,
+  tapPictureBlob,
+  type TapImageInfo,
+} from './tap-image';
 import { TapSwitcher } from './tap-switcher';
 import {
   DEFAULT_TEST_INPUTS,
@@ -563,6 +569,11 @@ const App = () => {
   // Until something new is composed, the preview shows what the screen shows. The
   // setup help, chosen in developer mode, shows in place of either.
   const previewImage = setupHelpShown?.bytes ?? binary ?? tapImage;
+  // A composed picture that's already on the tap, such as one just uploaded
+  const composedOnTap = useMemo(
+    () => binary !== null && isOnTheTap(binary, tapImage),
+    [binary, tapImage]
+  );
   const showingHelpPreview = Boolean(setupHelpShown?.bytes);
   const canPan = mode === 'image' && image !== null && overflows(image, zoom);
   // The part of the square the case's window shows, for zooming an image down
@@ -703,6 +714,7 @@ const App = () => {
       ) {
         setPendingReset(null);
         setUploadError(null);
+        setUploadState((state) => (state === 'success' ? 'idle' : state));
         setSettingsOpen(false);
         setStatusDialogOpen(false);
         setRefreshDialogOpen(false);
@@ -1379,6 +1391,8 @@ const App = () => {
           throw new Error(result.message || `Upload failed with status ${response.status}.`);
         }
 
+        // The tap keeps the bytes as sent, so they're now the picture on the tap.
+        setTapImage(uploadBytes);
         sentLaser = withLaser ? readTapLaser(result as unknown as Record<string, unknown>) : null;
       }
 
@@ -2042,11 +2056,13 @@ const App = () => {
                 <Frame aria-hidden="true" size={15} strokeWidth={1.8} />
               </button>
             </div>
-            <span className={`preview-state ${binary ? 'ready' : ''}`}>
+            <span className={`preview-state ${binary && !composedOnTap ? 'ready' : ''}`}>
               {setupHelpShown?.bytes
                 ? 'Setup help'
                 : binary
-                  ? 'Ready'
+                  ? composedOnTap
+                    ? 'On the tap'
+                    : 'Ready'
                   : tapImage
                     ? 'On the tap'
                     : 'Waiting'}
@@ -2156,6 +2172,7 @@ const App = () => {
             if (event.target === event.currentTarget && !isUploading) {
               setPendingReset(null);
               setUploadError(null);
+              setUploadState((state) => (state === 'success' ? 'idle' : state));
             }
           }}
         >
@@ -2213,15 +2230,11 @@ const App = () => {
                         Make room…
                       </button>
                     )}
-                    {/* The only way out once an upload succeeds (Escape, the
-                        backdrop and pasting don't close it). Reloading starts the
-                        page again from the tap, so the preview's "On the tap" is
-                        the new picture. */}
                     <button
                       className="modal-button primary-modal-button"
                       type="button"
                       autoFocus
-                      onClick={() => window.location.reload()}
+                      onClick={() => setUploadState('idle')}
                     >
                       Close
                     </button>

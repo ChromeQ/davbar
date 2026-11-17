@@ -33,6 +33,13 @@ export const fetchTapImage = async (): Promise<Uint8Array | null> => {
   return bytes;
 };
 
+// Whether a composed picture is the one on the tap, byte for byte, such as one
+// just uploaded.
+export const isOnTheTap = (composed: Uint8Array, tapImage: Uint8Array | null): boolean =>
+  tapImage !== null &&
+  composed.length === tapImage.length &&
+  composed.every((byte, index) => byte === tapImage[index]);
+
 // About the tap's picture, from GET /status: when it was uploaded, or null if the
 // tap's clock wasn't set then or it has none, and how the page drew it, if it did.
 export type TapImageInfo = { uploadedAt: string | null; source: PictureSource | null };

@@ -58,7 +58,8 @@ otherwise it's the tap's six-colour copy.
 The preview shows the whole 400 x 600 screen: the picture in the tap's six colours,
 dithered as the tap will show them, and a copy of the strip with the tap's live
 readings. Until something new is composed, it shows the picture on the tap (`GET
-/image`, labelled "On the tap"); Reset image goes back to it.
+/image`, labelled "On the tap"); Reset image goes back to it. A composed picture is
+labelled "Ready", and "On the tap" once it's uploaded.
 
 Red and yellow stripes show what the case's frame hides, see-through, with the
 picture under them blurred, and a line along the window's edge. The button beside the

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { BAND_BYTES, IMAGE_BYTES, IMAGE_SIZE, WHOLE_SCREEN_BYTES } from './screen';
-import { fetchTapImage, fetchTapImageInfo, tapSquarePixels } from './tap-image';
+import { fetchTapImage, fetchTapImageInfo, isOnTheTap, tapSquarePixels } from './tap-image';
 
 describe("the tap's image", () => {
   beforeEach(() => {
@@ -101,5 +101,21 @@ describe("the tap's picture in Compose", () => {
     expect((await fetchTapImageInfo()).source).toBeNull();
     vi.stubGlobal('fetch', status({ size: 80000, updated: null }));
     expect((await fetchTapImageInfo()).source).toBeNull();
+  });
+});
+
+describe('a composed picture', () => {
+  const composed = new Uint8Array(IMAGE_BYTES).fill(0x12);
+
+  it('is on the tap when the bytes are the same', () => {
+    expect(isOnTheTap(composed, new Uint8Array(composed))).toBe(true);
+  });
+
+  it("isn't when a byte differs, it's the other size or the tap has none", () => {
+    const changed = new Uint8Array(composed);
+    changed[IMAGE_BYTES - 1] = 0x13;
+    expect(isOnTheTap(composed, changed)).toBe(false);
+    expect(isOnTheTap(composed, new Uint8Array(WHOLE_SCREEN_BYTES).fill(0x12))).toBe(false);
+    expect(isOnTheTap(composed, null)).toBe(false);
   });
 });
