@@ -772,7 +772,8 @@ Each step ends with something visible to check.
    - Check the Wi-Fi fix on a real tap, at home: a tap that changes network through
      its access point restarts by itself. Claude gives the steps.
    - Upload the web app to the three taps (the upload dialog's Close), at home.
-   - A second review of the whole branch.
+   - A second review of the whole branch: done 2026-11-17, recommending the merge
+     once the Wi-Fi check above passes, with no other findings.
    - Move this plan to `docs/plans/2026-11-keg-level.md` with a line at the top
      saying it is done and when it was merged, then merge. After that the archived
      plan is never edited; fixes go in the docs. Ideas still marked Later stay
