@@ -7,6 +7,7 @@ DavBar Keg Display is a system for showing each beer's picture, and how full its
 - [The display](docs/display.md): the screen, the keg strip and when it redraws
 - [The web app](docs/web-app.md): composing pictures, the beer library and the keg states
 - [The RAPT Laser Level Sensor](docs/rapt-laser-sensor.md): its broadcasts, and how a distance becomes litres
+- [Past plans](docs/plans/): how each feature was planned and built, and the ideas left for later
 
 ## How the device works
 

@@ -1,6 +1,8 @@
 # Keg level display plan
 
-Status: steps 0 to 9 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 10 (wrap up): the docs are written, the overnight run passed and the first branch review's findings are dealt with; step 10 lists what's left. Last updated 2026-11-17.
+Done: merged into master on 2026-11-17, through pull request #1 (branch `keg-level`). This plan is archived and never edited again. Fixes go in the docs (`docs/`), and each idea marked Later gets its own new plan file when picked up.
+
+Status: steps 0 to 10 done, and all three taps run them, with the litres calibrated on a real keg (2026-11-16). Step 11 (RAPT cloud upload) and the open questions and later ideas below are left for later. Last updated 2026-11-17.
 
 ## Goal
 
@@ -777,7 +779,7 @@ Each step ends with something visible to check.
    page now keeps showing the laser sent until the tap's answers have it, and asks
    again a second later.
 
-   Left to do:
+   The last steps, all done:
    - Check the Wi-Fi fix on a real tap: done 2026-11-17 on tap 3. The router's
      2.4 GHz band couldn't be turned off alone, as the extenders broadcast
      ChromeQ_2.4 too, so tap 3 was factory reset and set up on the phone's
@@ -790,9 +792,10 @@ Each step ends with something visible to check.
    - A second review of the whole branch: done 2026-11-17, recommending the merge
      once the Wi-Fi check above passes, with no other findings.
    - Move this plan to `docs/plans/2026-11-keg-level.md` with a line at the top
-     saying it is done and when it was merged, then merge. After that the archived
-     plan is never edited; fixes go in the docs. Ideas still marked Later stay
-     listed there, and each gets its own new plan file when picked up.
+     saying it is done and when it was merged, then merge: done 2026-11-17, through
+     pull request #1. After that the archived plan is never edited; fixes go in the
+     docs. Ideas still marked Later stay listed there, and each gets its own new
+     plan file when picked up.
 11. **Later:** RAPT cloud upload.
 
 ## Open questions and later ideas
