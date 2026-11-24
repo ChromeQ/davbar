@@ -90,6 +90,8 @@ const NUB_WIDTH = BATTERY_BORDER + 1;
 const NUB_HEIGHT = 10;
 const ICON_SIZE = 32;
 const GROUP_GAP = 10;
+const COMPACT_GAP = 4;
+const WARNING_GAP = 2;
 
 // Around test values, just inside what the frame hides, and the content keeps
 // MARGIN from what it hides, so the border never touches it.
@@ -309,28 +311,39 @@ const drawModeWarning = (canvas: Canvas, x: number, y: number) => {
 
 // The laser dots, battery and mode icon, with the mode warning when needed,
 // centred on the screen so the icons line up across the taps.
-const drawGroup = (canvas: Canvas, values: StripValues, midY: number) => {
-  const width =
+const drawGroup = (
+  canvas: Canvas,
+  values: StripValues,
+  midY: number,
+  left: number,
+  right: number
+) => {
+  const iconWidth =
     DOT_RADIUS * 2 +
-    GROUP_GAP +
     BATTERY_WIDTH +
     NUB_WIDTH +
-    GROUP_GAP +
     ICON_SIZE +
-    (values.modeWarning ? GROUP_GAP + ICON_SIZE : 0);
+    (values.modeWarning ? WARNING_GAP + ICON_SIZE : 0);
+  const normalWidth = iconWidth + GROUP_GAP * 2;
+  const normalX = divide(STRIP_WIDTH, 2) - divide(normalWidth, 2);
+  const gap =
+    left + COMPACT_GAP > normalX || normalX + normalWidth + COMPACT_GAP > right
+      ? COMPACT_GAP
+      : GROUP_GAP;
+  const width = iconWidth + gap * 2;
   let x = divide(STRIP_WIDTH, 2) - divide(width, 2);
   const iconY = midY - divide(ICON_SIZE, 2);
 
   drawDots(canvas, x, midY, Math.min(values.laserNumber, MAX_DOTS));
-  x += DOT_RADIUS * 2 + GROUP_GAP;
+  x += DOT_RADIUS * 2 + gap;
 
   if (values.batteryPercent !== null) {
     drawBattery(canvas, x, midY - divide(BATTERY_HEIGHT, 2), values.batteryPercent);
   }
-  x += BATTERY_WIDTH + NUB_WIDTH + GROUP_GAP;
+  x += BATTERY_WIDTH + NUB_WIDTH + gap;
 
   drawIcon(canvas, modeIcon(values.mode), x, iconY, BLACK);
-  x += ICON_SIZE + GROUP_GAP;
+  x += ICON_SIZE + WARNING_GAP;
 
   if (values.modeWarning) {
     drawModeWarning(canvas, x, iconY);
@@ -375,17 +388,21 @@ const drawTopRow = (canvas: Canvas, values: StripValues) => {
 
   const capTop = divide(BAR_Y - rowFont.capHeight + 1, 2);
   const baseline = capTop + rowFont.capHeight;
+  const percentText = `${values.percent}%`;
+  const left = LEFT + divide(textAdvance(rowFont, percentText) + 15, 16);
+  let right = RIGHT;
 
-  drawText(canvas, rowFont, `${values.percent}%`, LEFT, baseline, 'left', plain(BLACK));
+  drawText(canvas, rowFont, percentText, LEFT, baseline, 'left', plain(BLACK));
 
   if (values.temperatureTenths !== null) {
     const tenths = Math.abs(values.temperatureTenths);
     const sign = values.temperatureTenths < 0 ? '-' : '';
     const text = `${sign}${divide(tenths, 10)}.${tenths % 10}°`;
+    right -= divide(textAdvance(rowFont, text) + 15, 16);
     drawText(canvas, rowFont, text, RIGHT, baseline, 'right', plain(BLACK));
   }
 
-  drawGroup(canvas, values, capTop + divide(rowFont.capHeight, 2));
+  drawGroup(canvas, values, capTop + divide(rowFont.capHeight, 2), left, right);
 };
 
 // Green from 50%, orange from 25% and red below, with the litres centred. With
