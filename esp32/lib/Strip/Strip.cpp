@@ -35,6 +35,8 @@ namespace Strip
         constexpr int NubHeight = 10;
         constexpr int IconSize = 32;
         constexpr int GroupGap = 10;
+        constexpr int CompactGap = 4;
+        constexpr int WarningGap = 2;
 
         // Test values get TestBorder (Strip.h) just inside what the frame hides,
         // and the content keeps Margin from what it hides, so the border never
@@ -134,28 +136,34 @@ namespace Strip
 
         // The laser dots, battery and mode icon, with the mode warning when
         // needed, centred on the screen so the icons line up across the taps.
-        void drawGroup(const Canvas& canvas, const Values& values, int midY)
+        void drawGroup(const Canvas& canvas, const Values& values, int midY, int left, int right)
         {
-            int width =
-                DotRadius * 2 + GroupGap +
-                BatteryWidth + NubWidth + GroupGap +
+            int iconWidth =
+                DotRadius * 2 +
+                BatteryWidth + NubWidth +
                 IconSize +
-                (values.modeWarning ? GroupGap + IconSize : 0);
+                (values.modeWarning ? WarningGap + IconSize : 0);
+            int normalWidth = iconWidth + GroupGap * 2;
+            int normalX = Width / 2 - normalWidth / 2;
+            int gap = left + CompactGap > normalX || normalX + normalWidth + CompactGap > right
+                ? CompactGap
+                : GroupGap;
+            int width = iconWidth + gap * 2;
             int x = Width / 2 - width / 2;
             int iconY = midY - IconSize / 2;
 
             int dots = values.laserNumber > MaxDots ? MaxDots : values.laserNumber;
             drawDots(canvas, x, midY, dots);
-            x += DotRadius * 2 + GroupGap;
+            x += DotRadius * 2 + gap;
 
             if (values.hasBattery)
             {
                 drawBattery(canvas, x, midY - BatteryHeight / 2, values.batteryPercent);
             }
-            x += BatteryWidth + NubWidth + GroupGap;
+            x += BatteryWidth + NubWidth + gap;
 
             drawIcon(canvas, modeIcon(values.mode), x, iconY, Black);
-            x += IconSize + GroupGap;
+            x += IconSize + WarningGap;
 
             if (values.modeWarning)
             {
@@ -227,6 +235,8 @@ namespace Strip
             char text[12];
 
             snprintf(text, sizeof(text), "%d%%", values.percent);
+            int left = Left + (Draw::textAdvance(font, text) + 15) / 16;
+            int right = Right;
             drawText(canvas, font, text, Left, baseline, Align::Left, plain(Black));
 
             if (values.hasTemperature)
@@ -240,10 +250,11 @@ namespace Strip
                     tenths / 10,
                     tenths % 10
                 );
+                right -= (Draw::textAdvance(font, text) + 15) / 16;
                 drawText(canvas, font, text, Right, baseline, Align::Right, plain(Black));
             }
 
-            drawGroup(canvas, values, capTop + font.capHeight / 2);
+            drawGroup(canvas, values, capTop + font.capHeight / 2, left, right);
         }
 
         // Green from 50%, orange from 25% and red below, with the litres centred.

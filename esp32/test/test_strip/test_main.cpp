@@ -149,6 +149,65 @@ static void testLowBatteryIsRedWithItsPercentage()
     TEST_ASSERT_FALSE(colours & bit(Strip::Green));
 }
 
+static void testModeWarningCompactsOnlyWhenNeeded()
+{
+    struct Case
+    {
+        uint8_t percent;
+        int16_t temperatureTenths;
+        bool hasTemperature;
+        bool compact;
+    };
+
+    const Case cases[] = {
+        {62, 40, true, false},
+        {62, 0, false, false},
+        {62, -15, true, false},
+        {100, 40, true, true},
+        {62, 205, true, true},
+    };
+
+    Strip::Values values = fullKeg();
+    values.laserNumber = 1;
+    values.mode = Strip::Mode::Eco;
+    values.modeWarning = true;
+    for (const Case& entry : cases)
+    {
+        values.percent = entry.percent;
+        values.temperatureTenths = entry.temperatureTenths;
+        values.hasTemperature = entry.hasTemperature;
+        Strip::draw(strip, values);
+        TEST_ASSERT_EQUAL_INT(entry.compact, coloursIn(127, 0, 4, BarTop) == bit(Strip::White));
+    }
+}
+
+static void testModeWarningKeepsClearOfBothValues()
+{
+    Strip::Values values = fullKeg();
+    values.temperatureTenths = 205;
+    values.modeWarning = true;
+
+    const Strip::Mode modes[] = {Strip::Mode::Smart, Strip::Mode::Eco};
+    const uint8_t percentages[] = {11, 100};
+    const uint8_t laserNumbers[] = {1, 3};
+    for (Strip::Mode mode : modes)
+    {
+        values.mode = mode;
+        for (uint8_t percent : percentages)
+        {
+            values.percent = percent;
+            values.litresTenths = percent == 100 ? 190 : 22;
+            for (uint8_t laserNumber : laserNumbers)
+            {
+                values.laserNumber = laserNumber;
+                Strip::draw(strip, values);
+                TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(127, 0, 4, BarTop));
+                TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(268, 0, 7, BarTop));
+            }
+        }
+    }
+}
+
 static void testNoSignalHidesTheModeWarning()
 {
     Strip::Values values = fullKeg();
@@ -520,7 +579,7 @@ static void testMatchesTheWebAppsPreview()
         {"orange", orange, 0xB36A43A7},
         {"red", red, 0x1AB38D76},
         {"low battery", lowBattery, 0x275E7510},
-        {"mode warning", modeWarning, 0x9BC375DF},
+        {"mode warning", modeWarning, 0x0AC96A65},
         {"no signal", noSignal, 0x49224344},
         {"full and cold", fullAndCold, 0xCF0FA36F},
         {"test values", test, 0xBB2FB6BB},
@@ -555,6 +614,8 @@ int main()
     RUN_TEST(testOrangeIsTwoRedToOneYellow);
     RUN_TEST(testRedBarLeavesTheLitresOnWhite);
     RUN_TEST(testLowBatteryIsRedWithItsPercentage);
+    RUN_TEST(testModeWarningCompactsOnlyWhenNeeded);
+    RUN_TEST(testModeWarningKeepsClearOfBothValues);
     RUN_TEST(testNoSignalHidesTheModeWarning);
     RUN_TEST(testNoLaserShowsOnlyText);
     RUN_TEST(testTopRowIsCentredAboveTheBar);
