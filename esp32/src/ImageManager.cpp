@@ -232,6 +232,8 @@ ImageUploadResult finishImageUpload(ImageUploadState* state, bool redraw, const 
         saveImageSource(source);
     }
 
+    setStripImageSource(source);
+
     logEventNow("image uploaded", wholeScreen ? "400 x 600" : "400 x 400");
 
     if (redraw)

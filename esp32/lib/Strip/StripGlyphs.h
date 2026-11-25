@@ -64,6 +64,7 @@ namespace StripGlyphs
     extern const Icon leaf; // Eco (Ultra Low Power) mode
     extern const Icon warning; // the laser is in the other mode
     extern const Icon warningFill; // the inside of the warning sign, drawn yellow under it
+    extern const Icon levelWarning; // the sensor disagrees with a known-empty keg, drawn blue
     extern const Icon noSignal; // nothing heard from the laser: the Bluetooth symbol, drawn blue
     extern const Icon noSignalStrike; // the line through the Bluetooth symbol, drawn red over it
     extern const Icon shrug; // no level yet: ¯\_(ツ)_/¯, centred in the bar

@@ -539,7 +539,7 @@ const App = () => {
   const testEnd = testEndsAt(strip, testRequest);
   // In developer mode the preview shows the test values; otherwise what the tap
   // will show: the picked laser's strip, or the tap's.
-  const stripValues = developerMode
+  const liveStripValues = developerMode
     ? test.strip
     : previewPick
       ? pickedStrip
@@ -625,6 +625,14 @@ const App = () => {
             date: kegPick.date.toISOString(),
           }
         : null;
+  const previewKnownEmpty = !developerMode && composedSource?.kind === 'keg';
+  const stripValues = useMemo(
+    () =>
+      previewKnownEmpty && liveStripValues
+        ? { ...liveStripValues, knownEmpty: true, percent: 0, litresTenths: 0 }
+        : liveStripValues,
+    [previewKnownEmpty, liveStripValues]
+  );
   // A background fills any gaps around the image, and on a tap with no laser,
   // the bands above and below it. The keg states draw their own.
   const showBackground =

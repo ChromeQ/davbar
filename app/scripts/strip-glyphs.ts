@@ -144,6 +144,15 @@ const iconSpecs: IconSpec[] = [
     fill: true,
   },
   {
+    name: 'levelWarning',
+    use: 'the sensor disagrees with a known-empty keg, drawn blue',
+    paths: [
+      'M12 22a7 7 0 0 0 7-7c0-4-7-13-7-13S5 11 5 15a7 7 0 0 0 7 7Z',
+      'M12 11v4',
+      'M12 18h.01',
+    ],
+  },
+  {
     // Lucide's bluetooth-off, in two colours: the Bluetooth symbol, then the strike.
     name: 'noSignal',
     use: 'nothing heard from the laser: the Bluetooth symbol, drawn blue',

@@ -465,6 +465,95 @@ static void testChangingModeRedrawsStraightAway()
     TEST_ASSERT_EQUAL_UINT8(84, tracker.values(100).percent);
 }
 
+static void testKnownEmptyOverridesTheSensor()
+{
+    showFirstReading(100);
+    tracker.setKnownEmpty(20, true);
+    TEST_ASSERT_EQUAL_STRING("known empty", reasonAt(20));
+    Values values = tracker.values(20);
+    TEST_ASSERT_TRUE(values.knownEmpty);
+    TEST_ASSERT_TRUE(values.hasLevel);
+    TEST_ASSERT_EQUAL_UINT8(0, values.percent);
+    TEST_ASSERT_EQUAL_UINT16(0, values.litresTenths);
+    TEST_ASSERT_FALSE(values.levelWarning);
+    tracker.shown(20, values);
+    TEST_ASSERT_NULL(reasonAt(79));
+    TEST_ASSERT_EQUAL_STRING("level warning", reasonAt(80));
+    TEST_ASSERT_TRUE(tracker.values(80).levelWarning);
+}
+
+static void testKnownEmptyWarningUsesRefillThreshold()
+{
+    chooseLaser1(0);
+    tracker.setKnownEmpty(0, true);
+    tracker.addReading(10, reading(distanceFor(9)));
+    tracker.shown(10, tracker.values(10));
+    TEST_ASSERT_FALSE(tracker.values(100).levelWarning);
+    tracker.addReading(110, reading(distanceFor(10)));
+    TEST_ASSERT_FALSE(tracker.values(169).levelWarning);
+    TEST_ASSERT_TRUE(tracker.values(170).levelWarning);
+    tracker.shown(170, tracker.values(170));
+    tracker.addReading(180, reading(distanceFor(9)));
+    TEST_ASSERT_EQUAL_STRING("level warning cleared", reasonAt(180));
+}
+
+static void testLeavingKnownEmptyStartsFromTheMeasuredLevel()
+{
+    showFirstReading(100);
+    tracker.setKnownEmpty(20, true);
+    tracker.shown(20, tracker.values(20));
+    tracker.addReading(30, reading(distanceFor(5)));
+    tracker.setKnownEmpty(31, false);
+    TEST_ASSERT_EQUAL_STRING("measured level", reasonAt(31));
+    TEST_ASSERT_EQUAL_UINT8(5, tracker.values(31).percent);
+    TEST_ASSERT_FALSE(tracker.values(31).levelWarning);
+}
+
+static void testKnownEmptyWarningSettlesFromRawReadings()
+{
+    showFirstReading(0);
+    tracker.setKnownEmpty(20, true);
+    tracker.shown(20, tracker.values(20));
+    tracker.addReading(30, reading(distanceFor(100)));
+    tracker.addReading(60, reading(distanceFor(50)));
+    TEST_ASSERT_FALSE(tracker.values(119).levelWarning);
+    TEST_ASSERT_TRUE(tracker.values(120).levelWarning);
+    TEST_ASSERT_EQUAL_UINT8(0, tracker.values(120).percent);
+    tracker.shown(120, tracker.values(120));
+    tracker.addReading(130, reading(distanceFor(80)));
+    TEST_ASSERT_TRUE(tracker.values(130).levelWarning);
+    TEST_ASSERT_NULL(reasonAt(130));
+    tracker.addReading(140, reading(distanceFor(0)));
+    TEST_ASSERT_EQUAL_STRING("level warning cleared", reasonAt(140));
+}
+
+static void testKnownEmptyDoesNotInventAMeasurementWhenCleared()
+{
+    chooseLaser1(0);
+    tracker.setKnownEmpty(0, true);
+    tracker.shown(0, tracker.values(0));
+    tracker.setKnownEmpty(10, false);
+    TEST_ASSERT_FALSE(tracker.values(10).hasLevel);
+    TEST_ASSERT_FALSE(tracker.values(10).levelWarning);
+}
+
+static void testKnownEmptyWithoutAReadingAndAfterRestart()
+{
+    chooseLaser1(0);
+    tracker.setKnownEmpty(0, true);
+    TEST_ASSERT_TRUE(tracker.values(0).hasLevel);
+    TEST_ASSERT_EQUAL_UINT16(0, tracker.values(0).litresTenths);
+    tracker.addReading(10, reading(distanceFor(100)));
+    Values saved = tracker.values(70);
+    TEST_ASSERT_TRUE(saved.levelWarning);
+    tracker = Tracker();
+    chooseLaser1(0);
+    tracker.setKnownEmpty(0, true);
+    tracker.restore(0, saved);
+    TEST_ASSERT_EQUAL_UINT16(0, tracker.values(0).litresTenths);
+    TEST_ASSERT_TRUE(tracker.values(0).levelWarning);
+}
+
 int main()
 {
     UNITY_BEGIN();
@@ -498,5 +587,11 @@ int main()
     RUN_TEST(testRestoreKeepsTheModeWarning);
     RUN_TEST(testChoosingAnotherLaserStartsAfresh);
     RUN_TEST(testChangingModeRedrawsStraightAway);
+    RUN_TEST(testKnownEmptyOverridesTheSensor);
+    RUN_TEST(testKnownEmptyWarningUsesRefillThreshold);
+    RUN_TEST(testLeavingKnownEmptyStartsFromTheMeasuredLevel);
+    RUN_TEST(testKnownEmptyWithoutAReadingAndAfterRestart);
+    RUN_TEST(testKnownEmptyWarningSettlesFromRawReadings);
+    RUN_TEST(testKnownEmptyDoesNotInventAMeasurementWhenCleared);
     return UNITY_END();
 }

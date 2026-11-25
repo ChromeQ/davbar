@@ -542,6 +542,8 @@ static void handleStripTest(AsyncWebServerRequest* request)
         request->arg("temperature"),
         request->arg("battery"),
         request->arg("modeWarning"),
+        request->arg("knownEmpty"),
+        request->arg("levelWarning"),
         request->arg("noSignal"),
         request->arg("noReading"),
         laser,

@@ -14,7 +14,7 @@
 // silent for hours, so the tap can't wait to hear it before drawing.
 static const char* savedPath = "/strip.bin";
 // Change it whenever Strip::Values changes, so an old file is ignored.
-static const uint8_t savedVersion = 2;
+static const uint8_t savedVersion = 3;
 
 struct SavedStrip
 {
@@ -68,6 +68,18 @@ static Strip::Values requestedValues = {};
 static SetupHelp::Screen requestedHelp = SetupHelp::Screen::None;
 static bool requestedStrip = false;
 static Strip::Values publishedValues = {};
+static bool imageKnownEmpty = false;
+
+void setStripImageSource(const String& source)
+{
+    JsonDocument document;
+    bool empty = !deserializeJson(document, source) &&
+        document["kind"] == "keg" &&
+        (document["state"] == "empty" || document["state"] == "ready");
+    portENTER_CRITICAL(&sharedLock);
+    imageKnownEmpty = empty;
+    portEXIT_CRITICAL(&sharedLock);
+}
 
 // Whole seconds since the tap started, which never wrap around like millis().
 static int32_t uptimeSeconds()
@@ -80,6 +92,10 @@ static void poll()
 {
     ChosenLaser laser = getChosenLaser();
     int32_t now = uptimeSeconds();
+    portENTER_CRITICAL(&sharedLock);
+    bool empty = imageKnownEmpty;
+    portEXIT_CRITICAL(&sharedLock);
+    tracker.setKnownEmpty(now, empty);
     bool newLaser =
         !polled ||
         laser.chosen != lastChosen ||
@@ -177,6 +193,7 @@ static void save(const Strip::Values& values)
 
 void startStripManager()
 {
+    setStripImageSource(imageSource());
     poll();
     lastPollAt = millis();
     lastNoLaser = noLaserOnPurpose();
@@ -374,6 +391,10 @@ String stripDescription(const Strip::Values& values)
     {
         text += ", no signal";
     }
+    else if (values.levelWarning)
+    {
+        text += ", level warning";
+    }
     else if (values.modeWarning)
     {
         text += ", mode warning";
@@ -389,6 +410,7 @@ String stripDescription(const Strip::Values& values)
 
 bool clearStripValues()
 {
+    setStripImageSource(String());
     hasSaved = false;
     return removeDataFile(savedPath);
 }
@@ -449,6 +471,8 @@ bool showTestValues(
     const String& temperature,
     const String& battery,
     const String& modeWarning,
+    const String& knownEmpty,
+    const String& levelWarning,
     const String& noSignal,
     const String& noReading,
     const TestLaser& laser,
@@ -467,9 +491,11 @@ bool showTestValues(
     values.laserNumber = laser.number;
     values.mode = laser.eco ? Strip::Mode::Eco : Strip::Mode::Smart;
     values.modeWarning = modeWarning == "true";
+    values.knownEmpty = knownEmpty == "true";
+    values.levelWarning = values.knownEmpty && levelWarning == "true";
     values.noSignal = noSignal == "true";
 
-    if (noReading == "true")
+    if (noReading == "true" && !values.knownEmpty)
     {
         requestTestValues(values, setupHelp);
         return true;
@@ -511,8 +537,8 @@ bool showTestValues(
     }
 
     values.hasLevel = true;
-    values.percent = percentValue;
-    values.litresTenths = litresTenths;
+    values.percent = values.knownEmpty ? 0 : percentValue;
+    values.litresTenths = values.knownEmpty ? 0 : litresTenths;
     values.hasTemperature = true;
     values.temperatureTenths = temperatureTenths;
     values.hasBattery = true;
@@ -594,6 +620,8 @@ void addStripStatus(JsonObject strip)
         shown["batteryPercent"] = nullptr;
     }
     shown["modeWarning"] = values.modeWarning;
+    shown["knownEmpty"] = values.knownEmpty;
+    shown["levelWarning"] = values.levelWarning;
     shown["noSignal"] = values.noSignal;
     shown["test"] = values.test;
 

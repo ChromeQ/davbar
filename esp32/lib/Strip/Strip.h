@@ -61,6 +61,8 @@ namespace Strip
         bool hasLevel;
         uint8_t percent;
         uint16_t litresTenths;
+        bool knownEmpty;
+        bool levelWarning;
         bool hasTemperature;
         int16_t temperatureTenths;
         bool hasBattery;

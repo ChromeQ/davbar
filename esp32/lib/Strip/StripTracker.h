@@ -39,6 +39,8 @@ namespace Strip
         // The laser this tap shows. Call it often; a different laser starts afresh.
         void choose(int32_t now, bool chosen, const uint8_t address[6], uint8_t number, Mode mode);
 
+        void setKnownEmpty(int32_t now, bool empty);
+
         // What the screen showed before the tap restarted, for the same laser.
         void restore(int32_t now, const Values& values);
 
@@ -77,6 +79,7 @@ namespace Strip
         // The choice
         bool initialised = false;
         bool chosen = false;
+        bool knownEmpty = false;
         uint8_t address[6] = {};
         uint8_t number = 0;
         Mode mode = Mode::Smart;

@@ -15,6 +15,8 @@ export type TestInputs = {
   temperature: string;
   battery: string;
   modeWarning: boolean;
+  knownEmpty: boolean;
+  levelWarning: boolean;
   noSignal: boolean;
   // No level yet: the strip says it's waiting for the laser, or can't hear it
   // with noSignal, and the numbers above aren't used.
@@ -29,6 +31,8 @@ export const DEFAULT_TEST_INPUTS: TestInputs = {
   temperature: '4.0',
   battery: '100',
   modeWarning: false,
+  knownEmpty: false,
+  levelWarning: false,
   noSignal: false,
   noReading: false,
   setupHelp: null,
@@ -117,7 +121,7 @@ export const readTestInputs = (
   inputs: TestInputs,
   tap: TapStrip
 ): { strip: StripValues; errors: string[] } => {
-  if (inputs.noReading) {
+  if (inputs.noReading && !inputs.knownEmpty) {
     return {
       strip: {
         laserChosen: true,
@@ -128,6 +132,8 @@ export const readTestInputs = (
         temperatureTenths: null,
         batteryPercent: null,
         modeWarning: inputs.modeWarning,
+        knownEmpty: false,
+        levelWarning: false,
         noSignal: inputs.noSignal,
         test: true,
       },
@@ -135,8 +141,8 @@ export const readTestInputs = (
     };
   }
 
-  const percent = parseWhole(inputs.percent, 0, 100);
-  const litresTenths = parseTenths(inputs.litres, 0, 19);
+  const percent = inputs.knownEmpty ? 0 : parseWhole(inputs.percent, 0, 100);
+  const litresTenths = inputs.knownEmpty ? 0 : parseTenths(inputs.litres, 0, 19);
   const temperatureTenths = parseTenths(inputs.temperature, -20, 50);
   const batteryPercent = parseWhole(inputs.battery, 0, 100);
   const errors = [
@@ -156,6 +162,8 @@ export const readTestInputs = (
       temperatureTenths,
       batteryPercent,
       modeWarning: inputs.modeWarning,
+      knownEmpty: inputs.knownEmpty,
+      levelWarning: inputs.knownEmpty && inputs.levelWarning,
       noSignal: inputs.noSignal,
       test: true,
     },
@@ -185,6 +193,12 @@ export const testForm = (
 ): URLSearchParams | null => {
   const { percent, litresTenths, temperatureTenths, batteryPercent } = strip;
   const withSetupHelp = (form: URLSearchParams) => {
+    if (strip.knownEmpty) {
+      form.set('knownEmpty', 'true');
+    }
+    if (strip.levelWarning) {
+      form.set('levelWarning', 'true');
+    }
     if (setupHelp) {
       form.set('setupHelp', setupHelp);
     }

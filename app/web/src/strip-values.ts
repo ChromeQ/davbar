@@ -32,6 +32,8 @@ export const isStripValues = (value: unknown): value is StripValues =>
   (value.mode === 'smart' || value.mode === 'eco') &&
   isNumberOrNull(value.percent) &&
   isNumberOrNull(value.litresTenths) &&
+  (value.knownEmpty === undefined || typeof value.knownEmpty === 'boolean') &&
+  (value.levelWarning === undefined || typeof value.levelWarning === 'boolean') &&
   isNumberOrNull(value.temperatureTenths) &&
   isNumberOrNull(value.batteryPercent) &&
   typeof value.modeWarning === 'boolean' &&
