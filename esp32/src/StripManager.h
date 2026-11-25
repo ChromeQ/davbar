@@ -13,6 +13,8 @@
 // before a restart, so the screen doesn't change until something does.
 void startStripManager();
 
+void setStripImageSource(const String& source);
+
 // Follows the chosen laser's readings and asks for a redraw when the strip
 // should change, by the redraw rules in docs/display.md. Call from loop().
 void processStripManager();
@@ -33,8 +35,8 @@ bool clearStripValues();
 // For the web app's "Show on device": shows these values instead of the
 // laser's, with a red border, for 5 minutes or until showLiveValues(). Each is
 // a form field: percent (0-100), temperature (°C, -20 to 50), battery (0-100),
-// and optionally litres (0-19; otherwise worked out from percent), modeWarning
-// and noSignal ("true"). noReading ("true") takes no numbers, and shows the strip
+// and optionally litres (0-19; otherwise worked out from percent), modeWarning,
+// knownEmpty, levelWarning and noSignal ("true"). noReading ("true") takes no numbers, and shows the strip
 // with no level, waiting for the laser, or not hearing it with noSignal. The
 // strip has laser's dots and mode icon (readTestLaser), which may not be the
 // tap's own. setupHelp, unless None, shows that setup help screen in
@@ -47,6 +49,8 @@ bool showTestValues(
     const String& temperature,
     const String& battery,
     const String& modeWarning,
+    const String& knownEmpty,
+    const String& levelWarning,
     const String& noSignal,
     const String& noReading,
     const TestLaser& laser,

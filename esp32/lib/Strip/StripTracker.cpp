@@ -58,6 +58,18 @@ namespace Strip
         mode = laserMode;
     }
 
+    void Tracker::setKnownEmpty(int32_t now, bool empty)
+    {
+        if (knownEmpty != empty)
+        {
+            knownEmpty = empty;
+            levelSince = now;
+            lowestPercent = levelPercent;
+            highestPercent = levelPercent;
+            lowestLitresTenths = levelLitresTenths;
+        }
+    }
+
     void Tracker::restore(int32_t now, const Values& values)
     {
         hasShown = true;
@@ -88,7 +100,9 @@ namespace Strip
             uint8_t lowest = hasLevel && lowestPercent < level.percent ? lowestPercent : level.percent;
             uint8_t highest = hasLevel && highestPercent > level.percent ? highestPercent : level.percent;
 
-            if (!hasLevel || highest - lowest > 1)
+            bool warningBoundary = knownEmpty && hasLevel &&
+                (levelPercent >= RefillPoints) != (level.percent >= RefillPoints);
+            if (!hasLevel || highest - lowest > 1 || warningBoundary)
             {
                 // Moved, so it starts settling again from this reading.
                 levelSince = now;
@@ -197,6 +211,7 @@ namespace Strip
 
         next.laserNumber = number;
         next.mode = mode;
+        next.knownEmpty = knownEmpty;
 
         // What the screen shows, if it's this laser's: each value starts from it.
         const Values* shown = hasShown && shownForThisLaser ? &shownValues : nullptr;
@@ -204,7 +219,16 @@ namespace Strip
         // The level only goes down, straight away, or up by a refill once it has
         // settled, showing the lowest reading since. The first level shows
         // straight away.
-        if (shown && shown->hasLevel)
+        if (knownEmpty)
+        {
+            next.hasLevel = true;
+            next.levelWarning = hasLevel
+                ? levelPercent >= RefillPoints &&
+                    ((shown && shown->knownEmpty && shown->levelWarning) ||
+                     (now - levelSince >= SettleSeconds && lowestPercent >= RefillPoints))
+                : shown && shown->knownEmpty && shown->levelWarning;
+        }
+        else if (shown && shown->hasLevel && !shown->knownEmpty)
         {
             next.hasLevel = true;
             next.percent = shown->percent;
@@ -316,6 +340,16 @@ namespace Strip
             return "mode chosen";
         }
 
+        if (next.knownEmpty != shown.knownEmpty)
+        {
+            return next.knownEmpty ? "known empty" : "measured level";
+        }
+
+        if (next.levelWarning != shown.levelWarning)
+        {
+            return next.levelWarning ? "level warning" : "level warning cleared";
+        }
+
         if (next.hasLevel != shown.hasLevel)
         {
             return "first reading";
@@ -329,6 +363,7 @@ namespace Strip
         // A rise in the last minute may be a refill about to show, so the
         // battery and temperature wait for it, to redraw once with all three.
         bool levelSettling =
+            !knownEmpty &&
             hasLevel &&
             now - levelSince < SettleSeconds &&
             levelPercent != shown.percent;

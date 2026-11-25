@@ -33,6 +33,10 @@ With no laser on purpose, the whole screen is the picture (see
   mode icon once the laser has been in the other mode for over an hour. Session and
   Live Stream never count. Double-tapping the laser's Bluetooth button switches
   between Smart and Ultra Low Power.
+- **Level warning:** a blue droplet with "!" when the laser disagrees with a keg
+  marked empty or cleaned. It replaces the mode warning in the same slot, without
+  widening the group. It means the measurement is suspect, not that liquid or foam
+  is definitely present.
 - **The bar,** with a black outline: green from 100% to 50%, orange from 49% to 25%
   and red at 24% and below. The screen has no orange, so orange is a fixed pattern of
   2 red pixels to 1 yellow. The litres (`16.5L`, 64px) are centred in the bar, white
@@ -44,6 +48,15 @@ tables made by `pnpm strip:glyphs` (see the [app README](../app/README.md)).
 
 ### Special states
 
+- **Keg empty (kicked) or Keg ready (cleaned):** uploading either keg-state picture
+  marks the keg as known empty. The strip shows `0%`, `0.0L` and an empty bar,
+  regardless of the sensor, including after a restart or before its first reading.
+  Readings continue in the background. A measured level of 10% or more (the same
+  10-point threshold as a refill, about 1.9 L) shows the level warning after staying
+  within 1 point for a minute; crossing below 10% clears it immediately. With no
+  signal, the crossed-out Bluetooth icon takes the warning slot instead, while the
+  known-zero numbers stay visible. Uploading a normal picture clears the override
+  and starts from the latest measured level, or waits if none has been heard.
 - **No laser chosen yet** (a new or factory reset tap): the strip says "No laser".
 - **Waiting for laser 1:** a laser is chosen but has no level yet, after a minute's
   wait for its first reading. The top row says so (36px), with the mode icon in

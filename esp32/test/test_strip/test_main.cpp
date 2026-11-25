@@ -208,6 +208,40 @@ static void testModeWarningKeepsClearOfBothValues()
     }
 }
 
+static void testLevelWarningReplacesTheModeWarning()
+{
+    Strip::Values values = fullKeg();
+    values.knownEmpty = true;
+    values.percent = 0;
+    values.litresTenths = 0;
+    values.levelWarning = true;
+    values.modeWarning = true;
+    drawAndSave("level-warning", values);
+    unsigned row = coloursIn(0, 0, Strip::Width, BarTop);
+    TEST_ASSERT_TRUE(row & bit(Strip::Blue));
+    TEST_ASSERT_FALSE(row & bit(Strip::Yellow));
+    TEST_ASSERT_EQUAL_HEX(bit(Strip::White), coloursIn(268, 0, 7, BarTop));
+    TEST_ASSERT_FALSE(coloursIn(BarInsideX, BarInsideY, BarInsideWidth, BarInsideHeight) & bit(Strip::Green));
+
+    values.levelWarning = false;
+    Strip::draw(strip, values);
+    TEST_ASSERT_TRUE(coloursIn(0, 0, Strip::Width, BarTop) & bit(Strip::Yellow));
+}
+
+static void testKnownEmptyKeepsZeroWhenTheSignalIsLost()
+{
+    Strip::Values values = fullKeg();
+    values.knownEmpty = true;
+    values.percent = 0;
+    values.litresTenths = 0;
+    values.noSignal = true;
+    values.levelWarning = true;
+    drawAndSave("known-empty-no-signal", values);
+    TEST_ASSERT_TRUE(coloursIn(BarLeft, 0, 80, BarTop) & bit(Strip::Black));
+    TEST_ASSERT_TRUE(coloursIn(0, 0, Strip::Width, BarTop) & bit(Strip::Red));
+    TEST_ASSERT_FALSE(coloursIn(BarInsideX, BarInsideY, BarInsideWidth, BarInsideHeight) & bit(Strip::Green));
+}
+
 static void testNoSignalHidesTheModeWarning()
 {
     Strip::Values values = fullKeg();
@@ -574,6 +608,23 @@ static void testMatchesTheWebAppsPreview()
     Strip::Values neverHeard = waitingWarning;
     neverHeard.noSignal = true;
 
+    Strip::Values knownEmpty = full;
+    knownEmpty.knownEmpty = true;
+    knownEmpty.percent = 0;
+    knownEmpty.litresTenths = 0;
+
+    Strip::Values levelWarning = knownEmpty;
+    levelWarning.levelWarning = true;
+
+    Strip::Values bothWarnings = levelWarning;
+    bothWarnings.modeWarning = true;
+
+    Strip::Values emptyNoSignal = levelWarning;
+    emptyNoSignal.noSignal = true;
+
+    Strip::Values emptyWarm = levelWarning;
+    emptyWarm.temperatureTenths = 205;
+
     const Case cases[] = {
         {"full keg", full, 0xA256B4E6},
         {"orange", orange, 0xB36A43A7},
@@ -589,6 +640,11 @@ static void testMatchesTheWebAppsPreview()
         {"waiting, no number", noNumber, 0xF825C7CA},
         {"waiting, mode warning", waitingWarning, 0x982153F0},
         {"never heard", neverHeard, 0xA8E6A1A7},
+        {"known empty", knownEmpty, 0xB8022B48},
+        {"level warning", levelWarning, 0x873BDB5D},
+        {"both warnings", bothWarnings, 0x873BDB5D},
+        {"empty no signal", emptyNoSignal, 0xF9622C09},
+        {"empty warm", emptyWarm, 0xB22A940D},
     };
 
     // All printed first (pio test -v shows them), then checked.
@@ -617,6 +673,8 @@ int main()
     RUN_TEST(testModeWarningCompactsOnlyWhenNeeded);
     RUN_TEST(testModeWarningKeepsClearOfBothValues);
     RUN_TEST(testNoSignalHidesTheModeWarning);
+    RUN_TEST(testLevelWarningReplacesTheModeWarning);
+    RUN_TEST(testKnownEmptyKeepsZeroWhenTheSignalIsLost);
     RUN_TEST(testNoLaserShowsOnlyText);
     RUN_TEST(testTopRowIsCentredAboveTheBar);
     RUN_TEST(testTestValuesHaveARedBorder);

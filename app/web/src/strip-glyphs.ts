@@ -581,6 +581,13 @@ export const warningFill: StripIcon = {
   bits: 'AAAAAAAAAAAAAAAAAAAAAAADwAAAA8AAAAfgAAAP8AAAD/AAAB/4AAAf+AAAP/wAAD/8AAB//gAA//8AAP//AAH//4AB//+AA///wAP//8AH///gD///8A////Af///4H///+B////gf///4D///8AAAAAAAAAAAAAAAAAAAAAA=',
 };
 
+// the sensor disagrees with a known-empty keg, drawn blue.
+export const levelWarning: StripIcon = {
+  width: 32,
+  height: 32,
+  bits: 'AAAAAAABgAAAA8AAAAPAAAAH4AAAD/AAAA5wAAAcOAAAPDwAADgcAABwDgAA8A8AAOAHAAHBg4ABwYOAAYGBgAOBgcADgYHAAwGAwAcBgOAHAYDgBwAA4AMAAMADgYHAA4GBwAHAA4AA4AcAAPgfAAA//AAAH/gAAAPAAAAAAAA=',
+};
+
 // nothing heard from the laser: the Bluetooth symbol, drawn blue.
 export const noSignal: StripIcon = {
   width: 32,

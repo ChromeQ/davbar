@@ -46,6 +46,8 @@ describe('reading the test values', () => {
       batteryPercent: 9,
       modeWarning: true,
       noSignal: false,
+      knownEmpty: false,
+      levelWarning: false,
       test: true,
     });
   });
@@ -128,6 +130,22 @@ describe('reading the test values', () => {
 });
 
 describe('the form for the tap', () => {
+  it('sends a known-empty strip and its disagreement warning without changing the typed level', () => {
+    const inputs = { ...DEFAULT_TEST_INPUTS, knownEmpty: true, levelWarning: true };
+    const { strip, errors } = readTestInputs(inputs, tap);
+    expect(errors).toEqual([]);
+    expect(strip).toMatchObject({
+      percent: 0,
+      litresTenths: 0,
+      knownEmpty: true,
+      levelWarning: true,
+    });
+    expect(inputs.percent).toBe('75');
+    expect(testForm(strip)?.get('knownEmpty')).toBe('true');
+    expect(testForm(strip)?.get('levelWarning')).toBe('true');
+    expect(read({ levelWarning: true }).strip.levelWarning).toBe(false);
+  });
+
   it('sends tenths as a decimal, and the icons as true or false', () => {
     const form = testForm(read({ temperature: '-2', noSignal: true }).strip);
 

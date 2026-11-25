@@ -142,7 +142,7 @@ namespace Strip
                 DotRadius * 2 +
                 BatteryWidth + NubWidth +
                 IconSize +
-                (values.modeWarning ? WarningGap + IconSize : 0);
+                (values.modeWarning || values.levelWarning || values.noSignal ? WarningGap + IconSize : 0);
             int normalWidth = iconWidth + GroupGap * 2;
             int normalX = Width / 2 - normalWidth / 2;
             int gap = left + CompactGap > normalX || normalX + normalWidth + CompactGap > right
@@ -165,7 +165,15 @@ namespace Strip
             drawIcon(canvas, modeIcon(values.mode), x, iconY, Black);
             x += IconSize + WarningGap;
 
-            if (values.modeWarning)
+            if (values.noSignal)
+            {
+                drawNoSignal(canvas, x, iconY);
+            }
+            else if (values.levelWarning)
+            {
+                drawIcon(canvas, StripGlyphs::levelWarning, x, iconY, Blue);
+            }
+            else if (values.modeWarning)
             {
                 drawModeWarning(canvas, x, iconY);
             }
@@ -221,7 +229,7 @@ namespace Strip
 
         void drawTopRow(const Canvas& canvas, const Values& values)
         {
-            if (!values.hasLevel || values.noSignal)
+            if (!values.hasLevel || (values.noSignal && !values.knownEmpty))
             {
                 drawMessage(canvas, values);
                 return;
@@ -318,6 +326,8 @@ namespace Strip
             a.hasLevel == b.hasLevel &&
             a.percent == b.percent &&
             a.litresTenths == b.litresTenths &&
+            a.knownEmpty == b.knownEmpty &&
+            a.levelWarning == b.levelWarning &&
             a.hasTemperature == b.hasTemperature &&
             a.temperatureTenths == b.temperatureTenths &&
             a.hasBattery == b.hasBattery &&

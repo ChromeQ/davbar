@@ -132,7 +132,7 @@ export const TestValuesPanel = ({
                       step={1}
                       aria-labelledby="test-percent-label"
                       value={Number.isFinite(percent) ? Math.min(Math.max(percent, 0), 100) : 0}
-                      disabled={inputs.noReading}
+                      disabled={inputs.noReading || inputs.knownEmpty}
                       onChange={(event) => onInputsChange(withPercent(inputs, event.target.value))}
                     />
                     <input
@@ -142,7 +142,7 @@ export const TestValuesPanel = ({
                       step={1}
                       aria-labelledby="test-percent-label"
                       value={inputs.percent}
-                      disabled={inputs.noReading}
+                      disabled={inputs.noReading || inputs.knownEmpty}
                       onChange={(event) => onInputsChange(withPercent(inputs, event.target.value))}
                     />
                   </div>
@@ -155,7 +155,7 @@ export const TestValuesPanel = ({
                     max={19}
                     step={0.1}
                     value={inputs.litres}
-                    disabled={inputs.noReading}
+                    disabled={inputs.noReading || inputs.knownEmpty}
                     onChange={(event) => onInputsChange(withLitres(inputs, event.target.value))}
                   />
                 </label>
@@ -188,6 +188,29 @@ export const TestValuesPanel = ({
                 <label className="checkbox-option">
                   <input
                     type="checkbox"
+                    checked={inputs.knownEmpty}
+                    onChange={(event) =>
+                      change({
+                        knownEmpty: event.target.checked,
+                        noReading: false,
+                        levelWarning: false,
+                      })
+                    }
+                  />
+                  Known empty
+                </label>
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
+                    checked={inputs.levelWarning}
+                    disabled={!inputs.knownEmpty}
+                    onChange={(event) => change({ levelWarning: event.target.checked })}
+                  />
+                  Level warning
+                </label>
+                <label className="checkbox-option">
+                  <input
+                    type="checkbox"
                     checked={inputs.modeWarning}
                     onChange={(event) => change({ modeWarning: event.target.checked })}
                   />
@@ -205,6 +228,7 @@ export const TestValuesPanel = ({
                   <input
                     type="checkbox"
                     checked={inputs.noReading}
+                    disabled={inputs.knownEmpty}
                     onChange={(event) => change({ noReading: event.target.checked })}
                   />
                   No reading

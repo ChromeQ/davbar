@@ -37,6 +37,8 @@ const nothingYet: StripValues = {
 };
 
 const waiting: StripValues = { ...nothingYet, laserChosen: true, laserNumber: 1 };
+const knownEmpty: StripValues = { ...fullKeg, knownEmpty: true, percent: 0, litresTenths: 0 };
+const levelWarning: StripValues = { ...knownEmpty, levelWarning: true };
 
 const cases: Array<[string, StripValues, number]> = [
   ['full keg', fullKeg, 0xa256b4e6],
@@ -64,9 +66,38 @@ const cases: Array<[string, StripValues, number]> = [
   ['waiting, no number', { ...waiting, laserNumber: 0 }, 0xf825c7ca],
   ['waiting, mode warning', { ...waiting, modeWarning: true }, 0x982153f0],
   ['never heard', { ...waiting, modeWarning: true, noSignal: true }, 0xa8e6a1a7],
+  ['known empty', knownEmpty, 0xb8022b48],
+  ['level warning', levelWarning, 0x873bdb5d],
+  ['both warnings', { ...levelWarning, modeWarning: true }, 0x873bdb5d],
+  ['empty no signal', { ...levelWarning, noSignal: true }, 0xf9622c09],
+  ['empty warm', { ...levelWarning, temperatureTenths: 205 }, 0xb22a940d],
 ];
 
 describe('drawStrip', () => {
+  it('uses the same warning slot for the sensor disagreement, ahead of the mode warning', () => {
+    const values: StripValues = {
+      ...fullKeg,
+      knownEmpty: true,
+      percent: 0,
+      litresTenths: 0,
+      levelWarning: true,
+    };
+    expect(drawStrip({ ...values, modeWarning: true })).toEqual(drawStrip(values));
+    expect(drawStrip(values)).not.toEqual(drawStrip({ ...values, levelWarning: false }));
+  });
+
+  it('keeps known-empty numbers visible with the no-signal icon taking priority', () => {
+    const values: StripValues = {
+      ...fullKeg,
+      knownEmpty: true,
+      percent: 0,
+      litresTenths: 0,
+      noSignal: true,
+    };
+    expect(drawStrip({ ...values, levelWarning: true })).toEqual(drawStrip(values));
+    expect(drawStrip(values)).not.toEqual(drawStrip({ ...values, knownEmpty: false }));
+  });
+
   it('fills the strip', () => {
     expect(drawStrip(fullKeg)).toHaveLength(STRIP_SIZE);
   });

@@ -7,6 +7,7 @@ import {
   batteryFont,
   brain,
   leaf,
+  levelWarning,
   messageFont,
   noSignal,
   noSignalStrike,
@@ -49,6 +50,8 @@ export type StripValues = {
   // values, and the bar shows a shrug.
   percent: number | null;
   litresTenths: number | null;
+  knownEmpty?: boolean;
+  levelWarning?: boolean;
   temperatureTenths: number | null;
   batteryPercent: number | null;
   // The laser has been in the other mode for over an hour.
@@ -323,7 +326,7 @@ const drawGroup = (
     BATTERY_WIDTH +
     NUB_WIDTH +
     ICON_SIZE +
-    (values.modeWarning ? WARNING_GAP + ICON_SIZE : 0);
+    (values.modeWarning || values.levelWarning || values.noSignal ? WARNING_GAP + ICON_SIZE : 0);
   const normalWidth = iconWidth + GROUP_GAP * 2;
   const normalX = divide(STRIP_WIDTH, 2) - divide(normalWidth, 2);
   const gap =
@@ -345,7 +348,11 @@ const drawGroup = (
   drawIcon(canvas, modeIcon(values.mode), x, iconY, BLACK);
   x += ICON_SIZE + WARNING_GAP;
 
-  if (values.modeWarning) {
+  if (values.noSignal) {
+    drawNoSignal(canvas, x, iconY);
+  } else if (values.levelWarning) {
+    drawIcon(canvas, levelWarning, x, iconY, BLUE);
+  } else if (values.modeWarning) {
     drawModeWarning(canvas, x, iconY);
   }
 };
@@ -381,7 +388,11 @@ const drawMessage = (canvas: Canvas, values: StripValues) => {
 };
 
 const drawTopRow = (canvas: Canvas, values: StripValues) => {
-  if (values.percent === null || values.litresTenths === null || values.noSignal) {
+  if (
+    values.percent === null ||
+    values.litresTenths === null ||
+    (values.noSignal && !values.knownEmpty)
+  ) {
     drawMessage(canvas, values);
     return;
   }
