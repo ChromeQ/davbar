@@ -240,6 +240,8 @@ type DeviceStatus = {
   };
   uptime: number;
   firmware?: string;
+  gitCommit?: string;
+  gitDirty?: boolean;
   memory?: {
     free: number;
     lowest: number;
@@ -2521,6 +2523,15 @@ const App = () => {
                   <div>
                     <dt>Firmware</dt>
                     <dd>{status.firmware}</dd>
+                  </div>
+                )}
+                {status.gitCommit && (
+                  <div>
+                    <dt>Git commit</dt>
+                    <dd>
+                      {status.gitCommit}
+                      {status.gitDirty && ' (modified)'}
+                    </dd>
                   </div>
                 )}
                 {status.memory && (

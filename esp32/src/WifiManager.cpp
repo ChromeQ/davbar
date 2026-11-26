@@ -445,6 +445,8 @@ static void handleStatus(AsyncWebServerRequest* request)
 
     doc["uptime"] = static_cast<uint64_t>(esp_timer_get_time()) / 1000000;
     doc["firmware"] = firmwareId();
+    doc["gitCommit"] = DeviceConfig::GitCommit;
+    doc["gitDirty"] = DeviceConfig::GitDirty;
     doc["memory"]["free"] = ESP.getFreeHeap();
     doc["memory"]["lowest"] = ESP.getMinFreeHeap();
     addChosenLaser(doc.as<JsonObject>());

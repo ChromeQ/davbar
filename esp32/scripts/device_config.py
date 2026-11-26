@@ -4,9 +4,29 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 
 repository_directory = Path(env["PROJECT_DIR"]).parent
+
+git_commit = "unknown"
+git_dirty = False
+try:
+    git_commit = subprocess.check_output(
+        ["git", "rev-parse", "--short=8", "HEAD"],
+        cwd=repository_directory,
+        text=True,
+        stderr=subprocess.DEVNULL,
+    ).strip()
+    git_dirty = bool(subprocess.check_output(
+        ["git", "status", "--porcelain"],
+        cwd=repository_directory,
+        text=True,
+        stderr=subprocess.DEVNULL,
+    ).strip())
+except (OSError, subprocess.CalledProcessError):
+    git_commit = "unknown"
+    git_dirty = False
 
 
 def read_json(path, description):
@@ -126,6 +146,8 @@ header_path.write_text(
     f'    constexpr char BrandName[] = {json.dumps(config["brandName"])};\n'
     f'    constexpr char DeviceName[] = {json.dumps(config["deviceName"])};\n'
     f'    constexpr char DeviceId[] = {json.dumps(config["deviceId"])};\n'
+    f'    constexpr char GitCommit[] = {json.dumps(git_commit)};\n'
+    f'    constexpr bool GitDirty = {json.dumps(git_dirty)};\n'
     f'    constexpr char Hostname[] = {json.dumps(config["hostname"])};\n'
     f'    constexpr char MdnsHostname[] = {json.dumps(mdns_hostname)};\n'
     f'    constexpr char AccessPointName[] = {json.dumps(access_point_name)};\n'
